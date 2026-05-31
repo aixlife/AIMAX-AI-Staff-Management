@@ -1,0 +1,34 @@
+{
+  "generated_at": "2026-05-18T13:42:03.440Z",
+  "source_report": {
+    "report_id": "AIMAX-RPT-20260518095126-d9a35540",
+    "app_version": "v1.0.7",
+    "os": "Windows",
+    "product": "bundle",
+    "job_kind": "yeri_write",
+    "stage": "content_generation",
+    "model": "gpt-5.4-mini",
+    "provider": "openai",
+    "http_status": 400,
+    "code": "unsupported_value",
+    "type": "invalid_request_error",
+    "request_id_examples": [
+      "req_4a79821c763b4ed999856247d854d416",
+      "req_414530d8e62f440898e455866714925a"
+    ],
+    "provider_reason": "Unsupported value: 'minimal' is not supported with the 'gpt-5.4-mini' model. Supported values are: 'none', 'low', 'medium', 'high', and 'xhigh'.",
+    "usage_total_tokens": 0,
+    "cost_total_won": 0
+  },
+  "required_fix": {
+    "file": "content/ai_text.py",
+    "from": "\"reasoning\": {\"effort\": \"minimal\"}",
+    "to": "\"reasoning\": {\"effort\": \"low\"}",
+    "version_target": "v1.0.8"
+  },
+  "safety": {
+    "paid_generation_should_not_be_run": true,
+    "real_naver_publish_should_not_be_run": true
+  }
+}
+

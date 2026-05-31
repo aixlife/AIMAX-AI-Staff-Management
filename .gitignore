@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual env
+venv/
+env/
+.venv/
+node_modules/
+
+# Build artifacts
+dist/
+build/
+release-artifacts/
+*.build/
+*.dist/
+*.onefile-build/
+*.zip
+*.dmg
+*.exe
+*.pkg
+split_version/dist/
+split_version/build/
+
+# Secrets & session
+.env
+.env.*
+!.env.example
+*.env.enc
+*.passphrase*
+*.pem
+*.p12
+*.pfx
+*.key
+*cookie*.json
+*cookies*.json
+*credential*.json
+*credentials*.json
+*token*.json
+user-secret-master.key
+user-secrets.json
+sessions/
+settings.json
+debug/
+*.log
+handoff/private/
+handoff/*secrets*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.claude/
+
+# Packaging output
+NaverBlogAuto_*.zip
+
+# Downloaded media tool binaries for Windows Songi builds
+oracle/aimax-reports-api/vendor/media-tools/win32/
+
+# Local/generated research and coordination outputs
+council-runs/
+songi-local-runs/
+handoffs/**/source-files/
+handoffs/**/source-tree/
+handoffs/**/*.zip
+handoff/**/source-files/
+handoff/**/source-tree/
+handoff/**/*.zip
+docs/**/source-files/
+docs/**/source-tree/
+docs/**/source-bundle/
+docs/**/*.zip
+_archive/

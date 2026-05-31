@@ -1,0 +1,637 @@
+{
+  "generated_at": "2026-05-28T09:59:17+09:00",
+  "root": "/Users/aixlife/Projects/AIMAX-AI-Staff-Management",
+  "artifacts": [
+    {
+      "path": "dist/upload_installers/aimax-bundle-macos.dmg",
+      "exists": true,
+      "size_bytes": 65495040,
+      "size": "62.5MB",
+      "kind": "file"
+    },
+    {
+      "path": "dist/upload_installers/aimax-bundle-windows.exe",
+      "exists": true,
+      "size_bytes": 136671232,
+      "size": "130.3MB",
+      "kind": "file"
+    },
+    {
+      "path": "dist/AIMAX-macos.dmg",
+      "exists": true,
+      "size_bytes": 65495040,
+      "size": "62.5MB",
+      "kind": "file"
+    },
+    {
+      "path": "dist/AIMAX.app",
+      "exists": true,
+      "size_bytes": 124764160,
+      "size": "119.0MB",
+      "kind": "dir"
+    },
+    {
+      "path": "dist/AIMAX",
+      "exists": true,
+      "size_bytes": 124084224,
+      "size": "118.3MB",
+      "kind": "dir"
+    },
+    {
+      "path": "dist/upload_installers",
+      "exists": true,
+      "size_bytes": 1377337344,
+      "size": "1.3GB",
+      "kind": "dir"
+    },
+    {
+      "path": "split_version/dist",
+      "exists": true,
+      "size_bytes": 1174568960,
+      "size": "1.1GB",
+      "kind": "dir"
+    },
+    {
+      "path": "build",
+      "exists": true,
+      "size_bytes": 61153280,
+      "size": "58.3MB",
+      "kind": "dir"
+    },
+    {
+      "path": "venv",
+      "exists": true,
+      "size_bytes": 275628032,
+      "size": "262.9MB",
+      "kind": "dir"
+    }
+  ],
+  "upload_installers": {
+    "exists": true,
+    "archive_count": 10,
+    "archive_size_bytes": 945172480,
+    "archive_size": "901.4MB",
+    "dry_run_cleanup": {
+      "policy": "keep current upload files and the 10 newest archive directories",
+      "candidate_count": 0,
+      "candidate_size_bytes": 0,
+      "candidate_size": "0B",
+      "candidates": []
+    },
+    "current_files": [
+      {
+        "name": "aimax-bundle-macos.dmg",
+        "path": "dist/upload_installers/aimax-bundle-macos.dmg",
+        "size_bytes": 65495040,
+        "size": "62.5MB"
+      },
+      {
+        "name": "aimax-bundle-windows.exe",
+        "path": "dist/upload_installers/aimax-bundle-windows.exe",
+        "size_bytes": 136671232,
+        "size": "130.3MB"
+      },
+      {
+        "name": "aimax-hyunju-macos.dmg",
+        "path": "dist/upload_installers/aimax-hyunju-macos.dmg",
+        "size_bytes": 64417792,
+        "size": "61.4MB"
+      },
+      {
+        "name": "aimax-hyunju-windows.exe",
+        "path": "dist/upload_installers/aimax-hyunju-windows.exe",
+        "size_bytes": 50581504,
+        "size": "48.2MB"
+      },
+      {
+        "name": "aimax-yeri-macos.dmg",
+        "path": "dist/upload_installers/aimax-yeri-macos.dmg",
+        "size_bytes": 64417792,
+        "size": "61.4MB"
+      },
+      {
+        "name": "aimax-yeri-windows.exe",
+        "path": "dist/upload_installers/aimax-yeri-windows.exe",
+        "size_bytes": 50581504,
+        "size": "48.2MB"
+      }
+    ],
+    "largest_archives": [
+      {
+        "name": "archive-windows-20260528-pre-v130-r3t-installer-launch-visibility",
+        "path": "dist/upload_installers/archive-windows-20260528-pre-v130-r3t-installer-launch-visibility",
+        "size_bytes": 136658944,
+        "modified_at": "2026-05-28T09:38:44+09:00",
+        "size": "130.3MB"
+      },
+      {
+        "name": "archive-windows-20260527-pre-v128-r3p-runner-start-watchdog",
+        "path": "dist/upload_installers/archive-windows-20260527-pre-v128-r3p-runner-start-watchdog",
+        "size_bytes": 136650752,
+        "modified_at": "2026-05-27T23:20:25+09:00",
+        "size": "130.3MB"
+      },
+      {
+        "name": "archive-windows-20260527-pre-v126-r3k-legacy-appdata-self-heal",
+        "path": "dist/upload_installers/archive-windows-20260527-pre-v126-r3k-legacy-appdata-self-heal",
+        "size_bytes": 136646656,
+        "modified_at": "2026-05-27T01:25:15+09:00",
+        "size": "130.3MB"
+      },
+      {
+        "name": "archive-windows-20260526-pre-v124-r3i-runner-liveness-update-fix",
+        "path": "dist/upload_installers/archive-windows-20260526-pre-v124-r3i-runner-liveness-update-fix",
+        "size_bytes": 136642560,
+        "modified_at": "2026-05-26T19:29:52+09:00",
+        "size": "130.3MB"
+      },
+      {
+        "name": "archive-windows-20260527-pre-v125-r3j-local-settings-save-completion-parity",
+        "path": "dist/upload_installers/archive-windows-20260527-pre-v125-r3j-local-settings-save-completion-parity",
+        "size_bytes": 136634368,
+        "modified_at": "2026-05-27T00:27:17+09:00",
+        "size": "130.3MB"
+      },
+      {
+        "name": "archive-macos-20260527-pre-v117-r3m-user-flow-diagnostics",
+        "path": "dist/upload_installers/archive-macos-20260527-pre-v117-r3m-user-flow-diagnostics",
+        "size_bytes": 65495040,
+        "modified_at": "2026-05-27T01:58:41+09:00",
+        "size": "62.5MB"
+      },
+      {
+        "name": "archive-macos-20260527-pre-v116-r3k-legacy-appdata-self-heal",
+        "path": "dist/upload_installers/archive-macos-20260527-pre-v116-r3k-legacy-appdata-self-heal",
+        "size_bytes": 65482752,
+        "modified_at": "2026-05-27T00:44:17+09:00",
+        "size": "62.4MB"
+      },
+      {
+        "name": "archive-macos-20260526-pre-v115-r3i-final-tk-cleanup",
+        "path": "dist/upload_installers/archive-macos-20260526-pre-v115-r3i-final-tk-cleanup",
+        "size_bytes": 65482752,
+        "modified_at": "2026-05-26T20:47:48+09:00",
+        "size": "62.4MB"
+      },
+      {
+        "name": "archive-macos-20260526-pre-v115-r3i-enter-save-hotfix",
+        "path": "dist/upload_installers/archive-macos-20260526-pre-v115-r3i-enter-save-hotfix",
+        "size_bytes": 65478656,
+        "modified_at": "2026-05-26T20:39:47+09:00",
+        "size": "62.4MB"
+      },
+      {
+        "name": "archive-r3p-pre-v128",
+        "path": "dist/upload_installers/archive-r3p-pre-v128",
+        "size_bytes": 0,
+        "modified_at": "2026-05-27T23:20:19+09:00",
+        "size": "0B"
+      }
+    ]
+  },
+  "dist_top": [
+    {
+      "name": "upload_installers",
+      "path": "dist/upload_installers",
+      "kind": "dir",
+      "size_bytes": 1377337344,
+      "size": "1.3GB"
+    },
+    {
+      "name": "AIMAX-macos",
+      "path": "dist/AIMAX-macos",
+      "kind": "dir",
+      "size_bytes": 124772352,
+      "size": "119.0MB"
+    },
+    {
+      "name": "AIMAX.app",
+      "path": "dist/AIMAX.app",
+      "kind": "dir",
+      "size_bytes": 124764160,
+      "size": "119.0MB"
+    },
+    {
+      "name": "AIMAX",
+      "path": "dist/AIMAX",
+      "kind": "dir",
+      "size_bytes": 124084224,
+      "size": "118.3MB"
+    },
+    {
+      "name": "AIMAX-예리씨-소통글쓰기-winos.zip",
+      "path": "dist/AIMAX-예리씨-소통글쓰기-winos.zip",
+      "kind": "file",
+      "size_bytes": 69320704,
+      "size": "66.1MB"
+    },
+    {
+      "name": "AIMAX-현주씨-영업사원-winos.zip",
+      "path": "dist/AIMAX-현주씨-영업사원-winos.zip",
+      "kind": "file",
+      "size_bytes": 69300224,
+      "size": "66.1MB"
+    },
+    {
+      "name": "AIMAX-winos.zip",
+      "path": "dist/AIMAX-winos.zip",
+      "kind": "file",
+      "size_bytes": 69042176,
+      "size": "65.8MB"
+    },
+    {
+      "name": "AIMAX-macos.dmg",
+      "path": "dist/AIMAX-macos.dmg",
+      "kind": "file",
+      "size_bytes": 65495040,
+      "size": "62.5MB"
+    },
+    {
+      "name": "AIMAX-예리씨-소통글쓰기-macos.zip",
+      "path": "dist/AIMAX-예리씨-소통글쓰기-macos.zip",
+      "kind": "file",
+      "size_bytes": 54329344,
+      "size": "51.8MB"
+    },
+    {
+      "name": "AIMAX-현주씨-영업사원-macos.zip",
+      "path": "dist/AIMAX-현주씨-영업사원-macos.zip",
+      "kind": "file",
+      "size_bytes": 54276096,
+      "size": "51.8MB"
+    },
+    {
+      "name": "AIMAX-macos.zip",
+      "path": "dist/AIMAX-macos.zip",
+      "kind": "file",
+      "size_bytes": 53858304,
+      "size": "51.4MB"
+    },
+    {
+      "name": ".DS_Store",
+      "path": "dist/.DS_Store",
+      "kind": "file",
+      "size_bytes": 8192,
+      "size": "8.0KB"
+    }
+  ],
+  "mac_frameworks_top": [
+    {
+      "name": "pandas",
+      "path": "dist/AIMAX.app/Contents/Frameworks/pandas",
+      "kind": "dir",
+      "size_bytes": 17813504,
+      "size": "17.0MB"
+    },
+    {
+      "name": "PIL",
+      "path": "dist/AIMAX.app/Contents/Frameworks/PIL",
+      "kind": "dir",
+      "size_bytes": 11886592,
+      "size": "11.3MB"
+    },
+    {
+      "name": "cryptography",
+      "path": "dist/AIMAX.app/Contents/Frameworks/cryptography",
+      "kind": "dir",
+      "size_bytes": 11194368,
+      "size": "10.7MB"
+    },
+    {
+      "name": "numpy",
+      "path": "dist/AIMAX.app/Contents/Frameworks/numpy",
+      "kind": "dir",
+      "size_bytes": 6868992,
+      "size": "6.6MB"
+    },
+    {
+      "name": "python3__dot__13",
+      "path": "dist/AIMAX.app/Contents/Frameworks/python3__dot__13",
+      "kind": "dir",
+      "size_bytes": 6709248,
+      "size": "6.4MB"
+    },
+    {
+      "name": "Python.framework",
+      "path": "dist/AIMAX.app/Contents/Frameworks/Python.framework",
+      "kind": "dir",
+      "size_bytes": 5025792,
+      "size": "4.8MB"
+    },
+    {
+      "name": "libcrypto.3.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libcrypto.3.dylib",
+      "kind": "file",
+      "size_bytes": 4849664,
+      "size": "4.6MB"
+    },
+    {
+      "name": "pydantic_core",
+      "path": "dist/AIMAX.app/Contents/Frameworks/pydantic_core",
+      "kind": "dir",
+      "size_bytes": 4165632,
+      "size": "4.0MB"
+    },
+    {
+      "name": "selenium",
+      "path": "dist/AIMAX.app/Contents/Frameworks/selenium",
+      "kind": "dir",
+      "size_bytes": 3620864,
+      "size": "3.5MB"
+    },
+    {
+      "name": "libtcl9.0.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libtcl9.0.dylib",
+      "kind": "file",
+      "size_bytes": 1708032,
+      "size": "1.6MB"
+    },
+    {
+      "name": "libtcl9tk9.0.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libtcl9tk9.0.dylib",
+      "kind": "file",
+      "size_bytes": 1667072,
+      "size": "1.6MB"
+    },
+    {
+      "name": "libsqlite3.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libsqlite3.dylib",
+      "kind": "file",
+      "size_bytes": 1273856,
+      "size": "1.2MB"
+    },
+    {
+      "name": "libssl.3.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libssl.3.dylib",
+      "kind": "file",
+      "size_bytes": 884736,
+      "size": "864.0KB"
+    },
+    {
+      "name": "jiter",
+      "path": "dist/AIMAX.app/Contents/Frameworks/jiter",
+      "kind": "dir",
+      "size_bytes": 729088,
+      "size": "712.0KB"
+    },
+    {
+      "name": "yaml",
+      "path": "dist/AIMAX.app/Contents/Frameworks/yaml",
+      "kind": "dir",
+      "size_bytes": 397312,
+      "size": "388.0KB"
+    },
+    {
+      "name": "81d243bd2c585b0f4821__mypyc.cpython-313-darwin.so",
+      "path": "dist/AIMAX.app/Contents/Frameworks/81d243bd2c585b0f4821__mypyc.cpython-313-darwin.so",
+      "kind": "file",
+      "size_bytes": 393216,
+      "size": "384.0KB"
+    },
+    {
+      "name": "_cffi_backend.cpython-313-darwin.so",
+      "path": "dist/AIMAX.app/Contents/Frameworks/_cffi_backend.cpython-313-darwin.so",
+      "kind": "file",
+      "size_bytes": 233472,
+      "size": "228.0KB"
+    },
+    {
+      "name": "libmpdec.4.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libmpdec.4.dylib",
+      "kind": "file",
+      "size_bytes": 188416,
+      "size": "184.0KB"
+    },
+    {
+      "name": "charset_normalizer",
+      "path": "dist/AIMAX.app/Contents/Frameworks/charset_normalizer",
+      "kind": "dir",
+      "size_bytes": 139264,
+      "size": "136.0KB"
+    },
+    {
+      "name": "libtommath.1.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libtommath.1.dylib",
+      "kind": "file",
+      "size_bytes": 131072,
+      "size": "128.0KB"
+    },
+    {
+      "name": "_tkinter.cpython-313-darwin.so",
+      "path": "dist/AIMAX.app/Contents/Frameworks/_tkinter.cpython-313-darwin.so",
+      "kind": "file",
+      "size_bytes": 122880,
+      "size": "120.0KB"
+    },
+    {
+      "name": "websockets",
+      "path": "dist/AIMAX.app/Contents/Frameworks/websockets",
+      "kind": "dir",
+      "size_bytes": 69632,
+      "size": "68.0KB"
+    },
+    {
+      "name": "selenium_stealth-1.0.6.dist-info",
+      "path": "dist/AIMAX.app/Contents/Frameworks/selenium_stealth-1.0.6.dist-info",
+      "kind": "dir",
+      "size_bytes": 0,
+      "size": "0B"
+    },
+    {
+      "name": "libbrotlicommon.1.2.0.dylib",
+      "path": "dist/AIMAX.app/Contents/Frameworks/libbrotlicommon.1.2.0.dylib",
+      "kind": "file",
+      "size_bytes": 0,
+      "size": "0B"
+    },
+    {
+      "name": "selenium_stealth",
+      "path": "dist/AIMAX.app/Contents/Frameworks/selenium_stealth",
+      "kind": "dir",
+      "size_bytes": 0,
+      "size": "0B"
+    }
+  ],
+  "onedir_internal_top": [
+    {
+      "name": "pandas",
+      "path": "dist/AIMAX/_internal/pandas",
+      "kind": "dir",
+      "size_bytes": 17846272,
+      "size": "17.0MB"
+    },
+    {
+      "name": "selenium",
+      "path": "dist/AIMAX/_internal/selenium",
+      "kind": "dir",
+      "size_bytes": 12759040,
+      "size": "12.2MB"
+    },
+    {
+      "name": "PIL",
+      "path": "dist/AIMAX/_internal/PIL",
+      "kind": "dir",
+      "size_bytes": 11886592,
+      "size": "11.3MB"
+    },
+    {
+      "name": "cryptography",
+      "path": "dist/AIMAX/_internal/cryptography",
+      "kind": "dir",
+      "size_bytes": 11194368,
+      "size": "10.7MB"
+    },
+    {
+      "name": "numpy",
+      "path": "dist/AIMAX/_internal/numpy",
+      "kind": "dir",
+      "size_bytes": 6868992,
+      "size": "6.6MB"
+    },
+    {
+      "name": "python3.13",
+      "path": "dist/AIMAX/_internal/python3.13",
+      "kind": "dir",
+      "size_bytes": 6709248,
+      "size": "6.4MB"
+    },
+    {
+      "name": "Python.framework",
+      "path": "dist/AIMAX/_internal/Python.framework",
+      "kind": "dir",
+      "size_bytes": 5021696,
+      "size": "4.8MB"
+    },
+    {
+      "name": "libcrypto.3.dylib",
+      "path": "dist/AIMAX/_internal/libcrypto.3.dylib",
+      "kind": "file",
+      "size_bytes": 4849664,
+      "size": "4.6MB"
+    },
+    {
+      "name": "anthropic",
+      "path": "dist/AIMAX/_internal/anthropic",
+      "kind": "dir",
+      "size_bytes": 4612096,
+      "size": "4.4MB"
+    },
+    {
+      "name": "google",
+      "path": "dist/AIMAX/_internal/google",
+      "kind": "dir",
+      "size_bytes": 4579328,
+      "size": "4.4MB"
+    },
+    {
+      "name": "pydantic_core",
+      "path": "dist/AIMAX/_internal/pydantic_core",
+      "kind": "dir",
+      "size_bytes": 4165632,
+      "size": "4.0MB"
+    },
+    {
+      "name": "_tcl_data",
+      "path": "dist/AIMAX/_internal/_tcl_data",
+      "kind": "dir",
+      "size_bytes": 2674688,
+      "size": "2.6MB"
+    },
+    {
+      "name": "libtcl9.0.dylib",
+      "path": "dist/AIMAX/_internal/libtcl9.0.dylib",
+      "kind": "file",
+      "size_bytes": 1708032,
+      "size": "1.6MB"
+    },
+    {
+      "name": "libtcl9tk9.0.dylib",
+      "path": "dist/AIMAX/_internal/libtcl9tk9.0.dylib",
+      "kind": "file",
+      "size_bytes": 1667072,
+      "size": "1.6MB"
+    },
+    {
+      "name": "base_library.zip",
+      "path": "dist/AIMAX/_internal/base_library.zip",
+      "kind": "file",
+      "size_bytes": 1404928,
+      "size": "1.3MB"
+    },
+    {
+      "name": "libsqlite3.dylib",
+      "path": "dist/AIMAX/_internal/libsqlite3.dylib",
+      "kind": "file",
+      "size_bytes": 1273856,
+      "size": "1.2MB"
+    },
+    {
+      "name": "_tk_data",
+      "path": "dist/AIMAX/_internal/_tk_data",
+      "kind": "dir",
+      "size_bytes": 1110016,
+      "size": "1.1MB"
+    },
+    {
+      "name": "ttkbootstrap",
+      "path": "dist/AIMAX/_internal/ttkbootstrap",
+      "kind": "dir",
+      "size_bytes": 950272,
+      "size": "928.0KB"
+    },
+    {
+      "name": "libssl.3.dylib",
+      "path": "dist/AIMAX/_internal/libssl.3.dylib",
+      "kind": "file",
+      "size_bytes": 884736,
+      "size": "864.0KB"
+    },
+    {
+      "name": "jiter",
+      "path": "dist/AIMAX/_internal/jiter",
+      "kind": "dir",
+      "size_bytes": 729088,
+      "size": "712.0KB"
+    },
+    {
+      "name": "yaml",
+      "path": "dist/AIMAX/_internal/yaml",
+      "kind": "dir",
+      "size_bytes": 397312,
+      "size": "388.0KB"
+    },
+    {
+      "name": "81d243bd2c585b0f4821__mypyc.cpython-313-darwin.so",
+      "path": "dist/AIMAX/_internal/81d243bd2c585b0f4821__mypyc.cpython-313-darwin.so",
+      "kind": "file",
+      "size_bytes": 393216,
+      "size": "384.0KB"
+    },
+    {
+      "name": "tcl9",
+      "path": "dist/AIMAX/_internal/tcl9",
+      "kind": "dir",
+      "size_bytes": 376832,
+      "size": "368.0KB"
+    },
+    {
+      "name": "numpy-2.4.4.dist-info",
+      "path": "dist/AIMAX/_internal/numpy-2.4.4.dist-info",
+      "kind": "dir",
+      "size_bytes": 266240,
+      "size": "260.0KB"
+    },
+    {
+      "name": "certifi",
+      "path": "dist/AIMAX/_internal/certifi",
+      "kind": "dir",
+      "size_bytes": 241664,
+      "size": "236.0KB"
+    }
+  ],
+  "notes": [
+    "This report is read-only and does not delete archives.",
+    "Archive cleanup should keep enough rollback evidence before removing old installer copies.",
+    "Installer optimization changes must pass macOS and Windows installed-runner user-path gates before deployment."
+  ]
+}

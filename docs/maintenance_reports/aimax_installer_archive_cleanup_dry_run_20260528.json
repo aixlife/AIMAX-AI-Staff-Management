@@ -1,0 +1,239 @@
+{
+  "generated_at": "2026-05-28T09:58:49+09:00",
+  "upload_dir": "/Users/aixlife/Projects/AIMAX-AI-Staff-Management/dist/upload_installers",
+  "policy": "keep the 10 newest archive directories",
+  "current_upload_files_protected": true,
+  "archive_count": 32,
+  "keep_count": 10,
+  "candidate_count": 22,
+  "candidate_size_bytes": 2501660672,
+  "candidate_size": "2.3GB",
+  "kept_archives": [
+    {
+      "name": "archive-windows-20260528-pre-v130-r3t-installer-launch-visibility",
+      "path": "dist/upload_installers/archive-windows-20260528-pre-v130-r3t-installer-launch-visibility",
+      "size_bytes": 136658944,
+      "size": "130.3MB",
+      "modified_at": "2026-05-28T09:38:44+09:00"
+    },
+    {
+      "name": "archive-windows-20260527-pre-v128-r3p-runner-start-watchdog",
+      "path": "dist/upload_installers/archive-windows-20260527-pre-v128-r3p-runner-start-watchdog",
+      "size_bytes": 136650752,
+      "size": "130.3MB",
+      "modified_at": "2026-05-27T23:20:25+09:00"
+    },
+    {
+      "name": "archive-r3p-pre-v128",
+      "path": "dist/upload_installers/archive-r3p-pre-v128",
+      "size_bytes": 0,
+      "size": "0B",
+      "modified_at": "2026-05-27T23:20:19+09:00"
+    },
+    {
+      "name": "archive-macos-20260527-pre-v117-r3m-user-flow-diagnostics",
+      "path": "dist/upload_installers/archive-macos-20260527-pre-v117-r3m-user-flow-diagnostics",
+      "size_bytes": 65495040,
+      "size": "62.5MB",
+      "modified_at": "2026-05-27T01:58:41+09:00"
+    },
+    {
+      "name": "archive-windows-20260527-pre-v126-r3k-legacy-appdata-self-heal",
+      "path": "dist/upload_installers/archive-windows-20260527-pre-v126-r3k-legacy-appdata-self-heal",
+      "size_bytes": 136646656,
+      "size": "130.3MB",
+      "modified_at": "2026-05-27T01:25:15+09:00"
+    },
+    {
+      "name": "archive-macos-20260527-pre-v116-r3k-legacy-appdata-self-heal",
+      "path": "dist/upload_installers/archive-macos-20260527-pre-v116-r3k-legacy-appdata-self-heal",
+      "size_bytes": 65482752,
+      "size": "62.4MB",
+      "modified_at": "2026-05-27T00:44:17+09:00"
+    },
+    {
+      "name": "archive-windows-20260527-pre-v125-r3j-local-settings-save-completion-parity",
+      "path": "dist/upload_installers/archive-windows-20260527-pre-v125-r3j-local-settings-save-completion-parity",
+      "size_bytes": 136634368,
+      "size": "130.3MB",
+      "modified_at": "2026-05-27T00:27:17+09:00"
+    },
+    {
+      "name": "archive-macos-20260526-pre-v115-r3i-final-tk-cleanup",
+      "path": "dist/upload_installers/archive-macos-20260526-pre-v115-r3i-final-tk-cleanup",
+      "size_bytes": 65482752,
+      "size": "62.4MB",
+      "modified_at": "2026-05-26T20:47:48+09:00"
+    },
+    {
+      "name": "archive-macos-20260526-pre-v115-r3i-enter-save-hotfix",
+      "path": "dist/upload_installers/archive-macos-20260526-pre-v115-r3i-enter-save-hotfix",
+      "size_bytes": 65478656,
+      "size": "62.4MB",
+      "modified_at": "2026-05-26T20:39:47+09:00"
+    },
+    {
+      "name": "archive-windows-20260526-pre-v124-r3i-runner-liveness-update-fix",
+      "path": "dist/upload_installers/archive-windows-20260526-pre-v124-r3i-runner-liveness-update-fix",
+      "size_bytes": 136642560,
+      "size": "130.3MB",
+      "modified_at": "2026-05-26T19:29:52+09:00"
+    }
+  ],
+  "candidates": [
+    {
+      "name": "archive-macos-20260526-pre-v115-r3i-keychain-hang-hotfix",
+      "path": "dist/upload_installers/archive-macos-20260526-pre-v115-r3i-keychain-hang-hotfix",
+      "size_bytes": 65478656,
+      "size": "62.4MB",
+      "modified_at": "2026-05-26T18:05:16+09:00"
+    },
+    {
+      "name": "archive-windows-20260526-pre-v123-r3h-image-failure-diagnostics",
+      "path": "dist/upload_installers/archive-windows-20260526-pre-v123-r3h-image-failure-diagnostics",
+      "size_bytes": 136679424,
+      "size": "130.3MB",
+      "modified_at": "2026-05-26T14:08:26+09:00"
+    },
+    {
+      "name": "archive-macos-20260526-pre-v114-r3h-image-failure-diagnostics",
+      "path": "dist/upload_installers/archive-macos-20260526-pre-v114-r3h-image-failure-diagnostics",
+      "size_bytes": 65474560,
+      "size": "62.4MB",
+      "modified_at": "2026-05-26T13:25:30+09:00"
+    },
+    {
+      "name": "archive-windows-20260526-pre-v122-r3g-rollout",
+      "path": "dist/upload_installers/archive-windows-20260526-pre-v122-r3g-rollout",
+      "size_bytes": 136675328,
+      "size": "130.3MB",
+      "modified_at": "2026-05-26T02:42:04+09:00"
+    },
+    {
+      "name": "archive-macos-20260526-pre-v113-r3g-rollout",
+      "path": "dist/upload_installers/archive-macos-20260526-pre-v113-r3g-rollout",
+      "size_bytes": 65474560,
+      "size": "62.4MB",
+      "modified_at": "2026-05-26T02:42:04+09:00"
+    },
+    {
+      "name": "archive-windows-20260526-pre-v121-r3f-rollout",
+      "path": "dist/upload_installers/archive-windows-20260526-pre-v121-r3f-rollout",
+      "size_bytes": 136675328,
+      "size": "130.3MB",
+      "modified_at": "2026-05-26T01:58:37+09:00"
+    },
+    {
+      "name": "archive-macos-20260526-pre-v112-r3f-rollout",
+      "path": "dist/upload_installers/archive-macos-20260526-pre-v112-r3f-rollout",
+      "size_bytes": 65474560,
+      "size": "62.4MB",
+      "modified_at": "2026-05-26T01:58:37+09:00"
+    },
+    {
+      "name": "archive-windows-20260525-pre-v118-r3c-artifact-consumer",
+      "path": "dist/upload_installers/archive-windows-20260525-pre-v118-r3c-artifact-consumer",
+      "size_bytes": 136638464,
+      "size": "130.3MB",
+      "modified_at": "2026-05-25T03:59:23+09:00"
+    },
+    {
+      "name": "archive-macos-20260525-pre-v111-r3c-artifact-consumer",
+      "path": "dist/upload_installers/archive-macos-20260525-pre-v111-r3c-artifact-consumer",
+      "size_bytes": 65470464,
+      "size": "62.4MB",
+      "modified_at": "2026-05-25T02:32:55+09:00"
+    },
+    {
+      "name": "archive-windows-20260523-pre-v117-cross-platform-local-settings",
+      "path": "dist/upload_installers/archive-windows-20260523-pre-v117-cross-platform-local-settings",
+      "size_bytes": 136708096,
+      "size": "130.4MB",
+      "modified_at": "2026-05-23T03:29:19+09:00"
+    },
+    {
+      "name": "archive-macos-20260523-pre-v110-local-settings",
+      "path": "dist/upload_installers/archive-macos-20260523-pre-v110-local-settings",
+      "size_bytes": 65458176,
+      "size": "62.4MB",
+      "modified_at": "2026-05-23T02:46:40+09:00"
+    },
+    {
+      "name": "archive-windows-20260522-pre-v116-web-secret-notice",
+      "path": "dist/upload_installers/archive-windows-20260522-pre-v116-web-secret-notice",
+      "size_bytes": 50573312,
+      "size": "48.2MB",
+      "modified_at": "2026-05-22T20:49:09+09:00"
+    },
+    {
+      "name": "archive-macos-20260521-pre-v105-login-ux-fallback",
+      "path": "dist/upload_installers/archive-macos-20260521-pre-v105-login-ux-fallback",
+      "size_bytes": 64425984,
+      "size": "61.4MB",
+      "modified_at": "2026-05-21T01:41:54+09:00"
+    },
+    {
+      "name": "archive-windows-20260519-pre-v108-openai-reasoning-hotfix",
+      "path": "dist/upload_installers/archive-windows-20260519-pre-v108-openai-reasoning-hotfix",
+      "size_bytes": 151736320,
+      "size": "144.7MB",
+      "modified_at": "2026-05-19T11:10:41+09:00"
+    },
+    {
+      "name": "archive-windows-20260518-pre-v107-installer-ai-diagnostics",
+      "path": "dist/upload_installers/archive-windows-20260518-pre-v107-installer-ai-diagnostics",
+      "size_bytes": 151703552,
+      "size": "144.7MB",
+      "modified_at": "2026-05-18T18:29:42+09:00"
+    },
+    {
+      "name": "archive-windows-20260518-pre-v106-unified-guard",
+      "path": "dist/upload_installers/archive-windows-20260518-pre-v106-unified-guard",
+      "size_bytes": 153305088,
+      "size": "146.2MB",
+      "modified_at": "2026-05-18T15:09:45+09:00"
+    },
+    {
+      "name": "archive-macos-20260518-pre-unified-keychain-timeout",
+      "path": "dist/upload_installers/archive-macos-20260518-pre-unified-keychain-timeout",
+      "size_bytes": 65462272,
+      "size": "62.4MB",
+      "modified_at": "2026-05-18T13:16:56+09:00"
+    },
+    {
+      "name": "archive-windows-20260517-pre-v104-import-fix",
+      "path": "dist/upload_installers/archive-windows-20260517-pre-v104-import-fix",
+      "size_bytes": 149471232,
+      "size": "142.5MB",
+      "modified_at": "2026-05-17T12:57:48+09:00"
+    },
+    {
+      "name": "archive-windows-20260514-pre-parity-report-env",
+      "path": "dist/upload_installers/archive-windows-20260514-pre-parity-report-env",
+      "size_bytes": 149450752,
+      "size": "142.5MB",
+      "modified_at": "2026-05-14T15:47:23+09:00"
+    },
+    {
+      "name": "archive-macos-20260507-pre-v102-hotfix",
+      "path": "dist/upload_installers/archive-macos-20260507-pre-v102-hotfix",
+      "size_bytes": 196374528,
+      "size": "187.3MB",
+      "modified_at": "2026-05-07T15:18:41+09:00"
+    },
+    {
+      "name": "archive-windows-20260507-pre-v102-hotfix",
+      "path": "dist/upload_installers/archive-windows-20260507-pre-v102-hotfix",
+      "size_bytes": 149450752,
+      "size": "142.5MB",
+      "modified_at": "2026-05-07T15:00:13+09:00"
+    },
+    {
+      "name": "archive-windows-20260507-pre-user-feedback-hotfix",
+      "path": "dist/upload_installers/archive-windows-20260507-pre-user-feedback-hotfix",
+      "size_bytes": 143499264,
+      "size": "136.9MB",
+      "modified_at": "2026-05-07T13:52:41+09:00"
+    }
+  ]
+}

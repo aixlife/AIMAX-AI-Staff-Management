@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIMAX 비밀번호 설정</title>
+  <style>
+    :root {
+      --bg: #f4f6f3;
+      --panel: #ffffff;
+      --ink: #191d1b;
+      --muted: #66736d;
+      --line: #d9ddd6;
+      --brand: #0f766e;
+      --brand-dark: #0b5f58;
+      --bad: #b3261e;
+      --ok: #147a55;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(480px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 26px;
+      box-shadow: 0 10px 30px rgba(22, 29, 25, .08);
+    }
+    .brand {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 800;
+    }
+    h1 { margin: 0 0 8px; font-size: 26px; line-height: 1.25; }
+    p { margin: 0 0 16px; color: var(--muted); line-height: 1.55; }
+    .stack { display: grid; gap: 14px; }
+    .field { display: grid; gap: 6px; }
+    label { font-size: 13px; color: #344054; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px 12px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+    button {
+      border: 1px solid var(--brand);
+      border-radius: 8px;
+      background: var(--brand);
+      color: #fff;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover { background: var(--brand-dark); }
+    button:disabled { cursor: not-allowed; opacity: .6; }
+    .notice {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      margin: 14px 0;
+      background: #f8faf8;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .notice.bad { border-color: #f1b0aa; background: #fff5f4; color: var(--bad); }
+    .notice.ok { border-color: #a7d9c4; background: #f1fbf6; color: var(--ok); }
+    .hidden { display: none !important; }
+    .small { font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <div class="brand-mark">AI</div>
+      <div>
+        <strong>AIMAX</strong><br>
+        <span class="small">비밀번호 설정</span>
+      </div>
+    </div>
+    <h1>비밀번호를 설정해주세요</h1>
+    <p id="intro">설정 링크를 확인하고 있습니다.</p>
+    <div id="notice" class="notice hidden"></div>
+    <form id="setupForm" class="stack hidden">
+      <div class="field">
+        <label for="newPassword">새 비밀번호</label>
+        <input id="newPassword" type="password" autocomplete="new-password" minlength="10" required>
+      </div>
+      <div class="field">
+        <label for="confirmPassword">새 비밀번호 확인</label>
+        <input id="confirmPassword" type="password" autocomplete="new-password" minlength="10" required>
+      </div>
+      <label class="small">
+        <input id="showPassword" type="checkbox">
+        비밀번호 보기
+      </label>
+      <button id="submitBtn" type="submit">비밀번호 설정</button>
+    </form>
+    <p class="small">비밀번호는 10자 이상, 영문/숫자/기호만 사용할 수 있습니다. 한글 입력 상태와 공백은 사용할 수 없습니다.</p>
+  </main>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const token = new URLSearchParams(location.search).get("token") || "";
+    const notice = $("#notice");
+    const form = $("#setupForm");
+    const intro = $("#intro");
+    const submitBtn = $("#submitBtn");
+
+    function showNotice(message, type = "") {
+      notice.textContent = message;
+      notice.className = `notice ${type}`.trim();
+      notice.classList.remove("hidden");
+    }
+
+    function errorMessage(code) {
+      return {
+        invalid_or_expired_setup_token: "설정 링크가 만료되었거나 이미 사용되었습니다.",
+        password_too_short: "새 비밀번호는 10자 이상이어야 합니다.",
+        password_contains_email: "새 비밀번호에는 이메일 앞부분을 포함할 수 없습니다.",
+        password_has_outer_whitespace: "새 비밀번호 앞뒤에는 공백을 넣을 수 없습니다.",
+        password_requires_ascii: "새 비밀번호는 영문 입력 상태에서 영문/숫자/기호만 입력해주세요.",
+        password_mismatch: "두 비밀번호가 같지 않습니다.",
+      }[code] || "요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.";
+    }
+
+    function passwordInputError(value) {
+      if (value !== value.trim()) return "password_has_outer_whitespace";
+      if (!/^[\x21-\x7E]+$/.test(value)) return "password_requires_ascii";
+      return "";
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: {
+          "content-type": "application/json",
+          ...(options.headers || {}),
+        },
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.ok === false) {
+        throw new Error(data.error || "request_failed");
+      }
+      return data;
+    }
+
+    async function loadToken() {
+      if (!token) {
+        intro.textContent = "설정 링크가 올바르지 않습니다.";
+        showNotice("메일에서 받은 전체 링크를 다시 열어주세요.", "bad");
+        return;
+      }
+      try {
+        const data = await api(`/api/auth/setup-token?token=${encodeURIComponent(token)}`, {
+          method: "GET",
+          headers: {},
+        });
+        intro.textContent = `${data.email} 계정의 ${data.product_label || "AIMAX"} 이용 비밀번호를 설정합니다.`;
+        form.classList.remove("hidden");
+      } catch (error) {
+        intro.textContent = "설정 링크를 사용할 수 없습니다.";
+        showNotice(errorMessage(error.message), "bad");
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      submitBtn.disabled = true;
+      try {
+        const newPassword = $("#newPassword").value;
+        const confirmPassword = $("#confirmPassword").value;
+        if (newPassword !== confirmPassword) {
+          throw new Error("password_mismatch");
+        }
+        const inputError = passwordInputError(newPassword);
+        if (inputError) throw new Error(inputError);
+        await api("/api/auth/setup-password", {
+          method: "POST",
+          body: JSON.stringify({
+            token,
+            new_password: newPassword,
+            confirm_password: confirmPassword,
+          }),
+        });
+        form.classList.add("hidden");
+        $("#newPassword").value = "";
+        $("#confirmPassword").value = "";
+        intro.textContent = "비밀번호 설정이 완료되었습니다.";
+        showNotice("이제 웹앱에서 이메일과 새 비밀번호로 로그인할 수 있습니다.", "ok");
+      } catch (error) {
+        showNotice(errorMessage(error.message), "bad");
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    $("#showPassword").addEventListener("change", (event) => {
+      const type = event.target.checked ? "text" : "password";
+      $("#newPassword").type = type;
+      $("#confirmPassword").type = type;
+    });
+
+    loadToken();
+  </script>
+</body>
+</html>

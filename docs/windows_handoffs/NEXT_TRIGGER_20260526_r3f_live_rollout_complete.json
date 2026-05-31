@@ -1,0 +1,26 @@
+{
+  "verdict": "pass",
+  "phase": "r3f_live_rollout",
+  "next_recommended_action": "mac_start_r3g_empty_image_prompt_guard",
+  "requires_mac_action": true,
+  "requires_windows_action": false,
+  "safe_to_continue_without_user": true,
+  "requires_user_approval": false,
+  "artifacts": [
+    "docs/deployments/oracle-deploy-20260526-r3f-v112-v121-rollout.md",
+    "dist/upload_installers/aimax-bundle-macos.dmg",
+    "dist/upload_installers/aimax-bundle-windows.exe"
+  ],
+  "versions": {
+    "macos": "v1.0.12",
+    "windows": "v1.0.21"
+  },
+  "forbidden_actions_confirmed": {
+    "paid_ai": true,
+    "apify": true,
+    "naver_publish_or_schedule": true,
+    "customer_credentials": true,
+    "shared_secrets": true
+  },
+  "notes": "R3-F live rollout passed. Mac-side Codex should proceed to R3-G empty image prompt guard under the current approval scope. Windows Codex should wait for the next R3-G handoff folder and return WINDOWS_RESULT, diagnostics, artifacts, and NEXT_TRIGGER when done."
+}

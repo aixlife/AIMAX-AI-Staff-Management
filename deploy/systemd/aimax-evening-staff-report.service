@@ -1,0 +1,7 @@
+[Unit]
+Description=AIMAX evening staff progress report
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/.openclaw/workspace-makefamily
+ExecStart=/usr/bin/python3 /home/ubuntu/.openclaw/workspace-makefamily/scripts/aimax_evening_staff_report.py --status-file /home/ubuntu/syncthing-creator-os-vault/reports/aimax/current-status.json --send --json
