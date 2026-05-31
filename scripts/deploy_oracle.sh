@@ -14,12 +14,13 @@ DRY_RUN=0
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/deploy_oracle.sh [web|installers|all] [--dry-run]
+  scripts/deploy_oracle.sh [web|bundle-installers|installers|all] [--dry-run]
 
 Modes:
-  web         Deploy server.js and static web/admin HTML
-  installers  Deploy macOS/Windows installer files only
-  all         Deploy server/static files and all installer files
+  web                Deploy server.js and static web/admin HTML
+  bundle-installers  Deploy unified macOS/Windows bundle installers only
+  installers         Deploy legacy macOS/Windows bundle + individual installer files
+  all                Deploy server/static files and all legacy installer files
 
 Environment overrides:
   AIMAX_DEPLOY_HOST
@@ -32,7 +33,7 @@ USAGE
 
 for arg in "$@"; do
   case "$arg" in
-    web|installers|all)
+    web|bundle-installers|installers|all)
       MODE="$arg"
       ;;
     --dry-run)
@@ -122,11 +123,14 @@ if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
     "avatar placeholder"
 fi
 
-if [[ "$MODE" == "installers" || "$MODE" == "all" ]]; then
+if [[ "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-macos.dmg" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-macos.dmg" "macOS bundle"
+  add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-windows.exe" "Windows bundle"
+fi
+
+if [[ "$MODE" == "installers" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/aimax-yeri-macos.dmg" "$REMOTE_DOWNLOAD_DIR/aimax-yeri-macos.dmg" "macOS yeri"
   add_file "$ROOT_DIR/dist/upload_installers/aimax-hyunju-macos.dmg" "$REMOTE_DOWNLOAD_DIR/aimax-hyunju-macos.dmg" "macOS hyunju"
-  add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-windows.exe" "Windows bundle"
   add_file "$ROOT_DIR/dist/upload_installers/aimax-yeri-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-yeri-windows.exe" "Windows yeri"
   add_file "$ROOT_DIR/dist/upload_installers/aimax-hyunju-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-hyunju-windows.exe" "Windows hyunju"
 fi
