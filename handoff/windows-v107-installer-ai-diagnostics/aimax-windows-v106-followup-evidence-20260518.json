@@ -1,0 +1,104 @@
+{
+  "generated_at": "2026-05-18T07:41:26.615Z",
+  "context": {
+    "windows_deployed_version": "v1.0.6",
+    "platform": "Windows",
+    "product": "bundle",
+    "server_followup_completed": [
+      "Oracle web app error reports now include system.agent.diagnostics",
+      "Oracle web app error reports now include compact system.jobs_recent diagnostics",
+      "Four fresh v1.0.6 reports were updated with user-facing statuses"
+    ]
+  },
+  "fresh_reports": [
+    {
+      "report_id": "AIMAX-RPT-20260518071933-5e3b43e6",
+      "work_context": "업데이트 다운로드",
+      "visible_error": "기존파일을 교체하는동안 오류발생\ndeletefile 실패 :코드5.\n엑세스가 거부되었습니다.",
+      "agent_version": "v1.0.6",
+      "agent_status": "busy",
+      "diagnosis": "installer attempted to replace files while AIMAX/local launcher was still running or locked by Windows",
+      "status_after_triage": "waiting_user"
+    },
+    {
+      "report_id": "AIMAX-RPT-20260518072529-c4524800",
+      "work_context": "블로그 작성",
+      "visible_error": "글 생성 실패: 프리미엄원룸 / content_generation failures for all keywords",
+      "agent_version": "v1.0.6",
+      "job_id": "d8a36ef8-3b9a-45bc-8fed-f8d27f68a705",
+      "job_kind": "yeri_write",
+      "job_result": {
+        "stage": "content_generation",
+        "failed_keyword": "프리미엄원룸",
+        "success": 0,
+        "total": 7,
+        "usage_total_tokens": 0,
+        "cost_total_won": 0,
+        "images_attempted": 0,
+        "images_generated": 0
+      },
+      "diagnosis": "provider/model/API error is hidden because content generation currently collapses provider failure to a generic empty-content failure",
+      "status_after_triage": "reviewing"
+    },
+    {
+      "report_id": "AIMAX-RPT-20260518072833-17cb362a",
+      "work_context": "블로그 글쓰기",
+      "visible_error": "HTTPConnectionPool(host='localhost', port=8669): Read timed out. (read timeout=120)",
+      "agent_version": "v1.0.6",
+      "job_id": "e3dfdc11-d5d6-402c-b4ae-2b9ab5382605",
+      "job_kind": "yeri_write",
+      "job_result": {
+        "stage": "naver_login",
+        "failed_keyword": "",
+        "success": 0,
+        "total": 7,
+        "usage_total_tokens": 0,
+        "cost_total_won": 0,
+        "images_attempted": 0,
+        "images_generated": 0
+      },
+      "diagnosis": "local executor/API on localhost:8669 timed out during Naver login stage",
+      "status_after_triage": "waiting_user"
+    },
+    {
+      "report_id": "AIMAX-RPT-20260518072852-330b6ff3",
+      "work_context": "블로그 글쓰기",
+      "visible_error": "글 생성 실패: 프리미엄원룸 / content_generation failures for all keywords",
+      "agent_version": "v1.0.6",
+      "job_id": "d8a36ef8-3b9a-45bc-8fed-f8d27f68a705",
+      "job_kind": "yeri_write",
+      "job_result": {
+        "stage": "content_generation",
+        "failed_keyword": "프리미엄원룸",
+        "success": 0,
+        "total": 7,
+        "usage_total_tokens": 0,
+        "cost_total_won": 0,
+        "images_attempted": 0,
+        "images_generated": 0
+      },
+      "diagnosis": "same content_generation failure pattern; provider/model/API error detail must be preserved",
+      "status_after_triage": "reviewing"
+    }
+  ],
+  "current_agent_diagnostics_for_user": {
+    "app_mode": "all",
+    "build_flavor": "bundle",
+    "provided_workers": [
+      "hyunju_find",
+      "yeri_write"
+    ],
+    "entitlement_product": "bundle",
+    "entitlement_products": [
+      "bundle",
+      "hyunju",
+      "yeri"
+    ],
+    "bundle_split_mismatch": false,
+    "version": "v1.0.6"
+  },
+  "safety": {
+    "paid_generation_was_not_retried_by_mac_or_server": true,
+    "real_naver_publish_was_not_retried_by_mac_or_server": true
+  }
+}

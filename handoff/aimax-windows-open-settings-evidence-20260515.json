@@ -1,0 +1,87 @@
+{
+  "inspected_at_kst": "2026-05-15",
+  "source": "Oracle /home/ubuntu/aimax-reports/data",
+  "error_reports": {
+    "total": 13,
+    "by_status": {
+      "done": 10,
+      "new": 3
+    },
+    "current_new_reports": [
+      {
+        "report_id": "AIMAX-RPT-20260514083437-5731089e",
+        "stored_at": "2026-05-14T08:34:37.470Z",
+        "product": "bundle",
+        "os": "Windows",
+        "app_version": "v1.0.2",
+        "summary": "User says the program launcher itself is not running / previous response addressed the wrong issue.",
+        "agent_at_report_time": {
+          "connected": true,
+          "platform": "Windows 11 AMD64",
+          "naver_account": "missing",
+          "selected_model_ready": "missing"
+        }
+      },
+      {
+        "report_id": "AIMAX-RPT-20260514095338-480d0ce4",
+        "stored_at": "2026-05-14T09:53:38.096Z",
+        "product": "yeri",
+        "os": "Windows",
+        "app_version": "v1.0.2",
+        "summary": "User says local security setup seemed done in web, but installed program does not run.",
+        "agent_at_report_time": {
+          "connected": true,
+          "platform": "Windows 10 AMD64",
+          "naver_account": "missing",
+          "selected_model_ready": "missing"
+        }
+      },
+      {
+        "report_id": "AIMAX-RPT-20260514100940-3d7cf508",
+        "stored_at": "2026-05-14T10:09:40.093Z",
+        "product": "bundle",
+        "os": "Windows",
+        "app_version": "v1.0.2",
+        "summary": "Hyunju setup says Naver account / neighbor messages needed. User opens settings, only sees API-key style local dialog, then nothing happens after save.",
+        "agent_at_report_time": {
+          "connected": true,
+          "platform": "Windows 11 AMD64",
+          "naver_account": "ready",
+          "selected_model_ready": "ready",
+          "neighbor_messages": "missing"
+        },
+        "mac_oracle_note": "Neighbor messages are web task settings, not local security settings. Web copy should be improved separately."
+      }
+    ]
+  },
+  "open_settings_commands": {
+    "total": 334,
+    "by_status": {
+      "done": 52,
+      "failed": 280,
+      "delivered": 2
+    },
+    "final_message_categories": {
+      "tk_destroyed": 254,
+      "cancelled": 23,
+      "saved": 50,
+      "delivered_only": 2,
+      "tk_tcl_missing_or_unusable": 1,
+      "smoke_or_manual_success_notes": 4
+    },
+    "dominant_failure": "로컬 보안 설정 창을 열 수 없습니다: can't invoke \"tk\" command: application has been destroyed",
+    "packaging_failure_sample": "로컬 보안 설정 창을 열 수 없습니다: Can't find a usable tk.tcl ... This probably means that tk wasn't installed properly."
+  },
+  "recommended_windows_tests": [
+    "Fresh install, click webapp 실행기 연결 five times, verify one AIMAX process and heartbeat within 15 seconds.",
+    "Click 로컬 설정 열기 ten times, alternating save, cancel, and window-close.",
+    "Verify no command ends with application has been destroyed.",
+    "Verify installed Tcl/Tk runtime exists and Tk dialog opens under normal and non-ASCII install paths.",
+    "Verify command status updates are clear when user cancels or when local failure occurs."
+  ],
+  "likely_root_cause_hypotheses": [
+    "Headless Local Agent creates and destroys a new tk.Tk root for each local settings command, which is unstable after the first root is destroyed.",
+    "Windows protocol repeated launches and single-instance behavior may leave a background agent running without visible UI feedback.",
+    "Some Windows installer builds or install paths may not include or locate Tk/Tcl runtime correctly."
+  ]
+}

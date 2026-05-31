@@ -1,0 +1,42 @@
+browser:
+  headless: false
+  proxy: null
+  executable_path: ""   # 비워두면 Chrome/Chromium/Brave/Playwright Chromium 자동 탐지
+  viewport_min: [1280, 720]
+  viewport_max: [1920, 1080]
+
+delays:
+  typing_avg: 0.05
+  typing_std: 0.02
+  action_avg: 1.5
+  action_std: 0.5
+  between_posts: 10
+  between_likes: 2
+  between_comments: 3
+
+publishing:
+  schedule_hour_min: 9
+  schedule_hour_max: 18
+  schedule_days_ahead: 1
+
+engagement:
+  max_likes_per_session: 30
+  max_comments_per_session: 15
+  scroll_count: 3
+  # cbox 로그인 테스트용 내 블로그 글 URL (댓글 허용된 글)
+  # 비워두면 자동으로 내 블로그에서 찾습니다
+  # 예: https://blog.naver.com/내아이디/글번호
+  test_cbox_post_url: ""
+
+# 네이버 에디터/발행 CSS 셀렉터 (네이버 업데이트 시 여기만 수정)
+# 비워두면 기본 내장값 사용
+selectors:
+  title_area: ""           # 제목 입력 영역
+  bold_button: ""          # 볼드 버튼
+  save_button: ""          # 임시저장 버튼
+  publish_button: ""       # 발행 버튼
+  confirm_button: ""       # 발행 확인 버튼
+  schedule_radio: ""       # 예약 발행 라디오
+  date_input: ""           # 날짜 입력
+  hour_select: ""          # 시간 선택
+  minute_select: ""        # 분 선택

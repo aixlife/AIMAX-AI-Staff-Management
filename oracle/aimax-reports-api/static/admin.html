@@ -1,0 +1,2396 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AIMAX Admin</title>
+  <style>
+    :root {
+      --bg: #f4f6f3;
+      --panel: #ffffff;
+      --ink: #191d1b;
+      --muted: #66736d;
+      --line: #d9ddd6;
+      --brand: #0f766e;
+      --brand-dark: #0b5f58;
+      --warn: #9a6500;
+      --bad: #b3261e;
+      --ok: #147a55;
+      --soft: #f8faf8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    .hidden { display: none !important; }
+
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .login-card,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(22, 29, 25, .08);
+    }
+
+    .login-card {
+      width: min(440px, 100%);
+      padding: 26px;
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 28px;
+      display: grid;
+      align-content: start;
+      gap: 18px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { margin-bottom: 4px; font-size: 28px; line-height: 1.25; }
+    h2 { margin-bottom: 14px; font-size: 18px; line-height: 1.35; }
+    h3 { margin-bottom: 8px; font-size: 15px; }
+    p { color: var(--muted); line-height: 1.5; }
+
+    .muted { color: var(--muted); }
+    .small { font-size: 13px; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-7 { grid-column: span 7; }
+    .span-12 { grid-column: span 12; }
+
+    .panel { padding: 20px; min-width: 0; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .kpi {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .kpi strong {
+      display: block;
+      font-size: 24px;
+      line-height: 1.1;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .stack { display: grid; align-content: start; gap: 12px; }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 13px;
+      color: #344054;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #ffffff;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--ink);
+      min-height: 40px;
+      padding: 0 14px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn.primary {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #ffffff;
+    }
+
+    .btn.primary:hover { background: var(--brand-dark); }
+    .btn.active {
+      border-color: var(--brand);
+      color: var(--brand);
+      background: #ecfdf8;
+    }
+    .btn.danger {
+      border-color: #edc6bc;
+      color: var(--bad);
+      background: #fff7f4;
+    }
+    .btn.compact {
+      min-height: 34px;
+      padding: 0 11px;
+      font-size: 13px;
+    }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .admin-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 10px;
+    }
+
+    .admin-tab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      min-height: 40px;
+      padding: 0 14px;
+      font: inherit;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+    }
+
+    .admin-tab:hover {
+      background: #eef4f1;
+      color: var(--ink);
+    }
+
+    .admin-tab.active {
+      background: #ffffff;
+      border-color: var(--line);
+      color: var(--brand);
+      box-shadow: 0 4px 14px rgba(22, 29, 25, .07);
+    }
+
+    .tab-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 22px;
+      height: 22px;
+      margin-left: 6px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: #e9f6ef;
+      color: var(--brand-dark);
+      font-size: 12px;
+    }
+
+    .tab-panel { display: grid; gap: 16px; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ffffff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .pill.ok { background: #e9f6ef; color: var(--ok); border-color: #cbe7d9; }
+    .pill.warn { background: #fff4d8; color: var(--warn); border-color: #ead69b; }
+    .pill.bad { background: #fff0ec; color: var(--bad); border-color: #edc6bc; }
+
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .catalog-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfb;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .catalog-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .catalog-card-title {
+      display: grid;
+      gap: 2px;
+    }
+
+    .catalog-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .notice {
+      border: 1px solid #cbe7d9;
+      background: #e9f6ef;
+      color: #145c45;
+      border-radius: 8px;
+      padding: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .notice.warn {
+      border-color: #ead69b;
+      background: #fff4d8;
+      color: #795000;
+    }
+
+    .prebox {
+      margin: 0;
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f1412;
+      color: #e6f2ed;
+      padding: 14px;
+      white-space: pre-wrap;
+      font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .support-form {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfaf7;
+      padding: 14px;
+    }
+
+    .support-form textarea {
+      min-height: 86px;
+    }
+
+    .support-form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr 160px 160px auto;
+      gap: 10px;
+      align-items: end;
+      margin-bottom: 12px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 980px;
+      border-collapse: collapse;
+      background: #ffffff;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 11px 12px;
+      text-align: left;
+      vertical-align: middle;
+      font-size: 13px;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8faf8;
+      color: #334039;
+      z-index: 1;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .users-table { min-width: 1180px; }
+    .orders-table { min-width: 1120px; }
+    .orders-table .order-select-col { width: 48px; }
+    .orders-table .order-select-col { text-align: center; }
+    .orders-table .order-product-col { width: 150px; }
+    .orders-table .order-status-col { width: 118px; }
+    .orders-table .order-time-col { width: 150px; }
+    .orders-table select {
+      min-width: 126px;
+      padding: 7px 8px;
+    }
+    .orders-table input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--brand);
+    }
+    .reports-table {
+      min-width: 980px;
+      table-layout: fixed;
+    }
+
+    .reports-table .report-copy-col { width: 88px; }
+    .reports-table .report-user-col { width: 180px; }
+    .reports-table .report-status-col { width: 126px; }
+    .reports-table .report-time-col { width: 150px; }
+    .reports-table .report-detail-col { width: 76px; }
+
+    .report-row.done {
+      background: #fafbf9;
+    }
+
+    .report-main {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .report-error-title {
+      font-weight: 800;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .report-error-text {
+      display: -webkit-box;
+      overflow: hidden;
+      color: var(--muted);
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      line-height: 1.45;
+    }
+
+    .report-id-line {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #5f6d66;
+    }
+
+    .checkline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .checkline input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: var(--brand);
+    }
+
+    .action-cell {
+      position: sticky;
+      right: 0;
+      min-width: 230px;
+      background: #ffffff;
+      box-shadow: -8px 0 16px rgba(22, 29, 25, .06);
+      z-index: 2;
+    }
+
+    th.action-cell {
+      background: #f8faf8;
+      z-index: 3;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      background: rgba(15, 20, 18, .34);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+    }
+
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .side-drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      z-index: 21;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      width: min(640px, calc(100vw - 24px));
+      height: 100vh;
+      background: #ffffff;
+      border-left: 1px solid var(--line);
+      box-shadow: -24px 0 48px rgba(15, 20, 18, .18);
+      transform: translateX(105%);
+      transition: transform .2s ease;
+    }
+
+    .side-drawer.open {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      display: grid;
+      gap: 12px;
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfb;
+    }
+
+    .drawer-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .drawer-meta {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .drawer-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .drawer-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 20px;
+    }
+
+    .drawer-body .prebox {
+      max-height: none;
+    }
+
+    body.drawer-open {
+      overflow: hidden;
+    }
+
+    @media (max-width: 920px) {
+      .shell { padding: 18px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .grid, .kpis, .toolbar { grid-template-columns: 1fr; }
+      .span-4, .span-5, .span-7, .span-12 { grid-column: span 1; }
+      .side-drawer { width: 100vw; }
+    }
+  </style>
+</head>
+<body>
+  <main id="loginView" class="login-wrap">
+    <section class="login-card">
+      <h1>AIMAX Admin</h1>
+      <p>운영자 비밀번호로 구매자 계정을 관리합니다.</p>
+      <form id="loginForm" class="stack">
+        <div class="field">
+          <label for="adminPassword">운영자 비밀번호</label>
+          <input id="adminPassword" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn primary" type="submit">로그인</button>
+        <div id="loginError" class="notice warn hidden"></div>
+      </form>
+    </section>
+  </main>
+
+  <main id="adminView" class="shell hidden">
+    <div class="topbar">
+      <div>
+        <h1>AIMAX 운영자 콘솔</h1>
+        <p>구매자 계정과 오류 보고를 관리합니다.</p>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/app" target="_blank" rel="noopener noreferrer">사용자 웹앱</a>
+        <button id="refreshBtn" class="btn" type="button">새로고침</button>
+        <button id="logoutBtn" class="btn" type="button">로그아웃</button>
+      </div>
+    </div>
+
+    <nav class="admin-tabs" aria-label="관리 메뉴">
+      <button class="admin-tab active" type="button" data-admin-tab="buyers">구매자 운영</button>
+      <button class="admin-tab" type="button" data-admin-tab="orders">카페24 주문<span id="orderTabCount" class="tab-count">0</span></button>
+      <button class="admin-tab" type="button" data-admin-tab="reports">오류 보고<span id="reportTabCount" class="tab-count">0</span></button>
+    </nav>
+
+    <div id="buyersTab" class="tab-panel" data-admin-tab-panel="buyers">
+      <section class="kpis">
+        <div class="kpi"><strong id="statTotal">0</strong><span class="small muted">전체 구매자</span></div>
+        <div class="kpi"><strong id="statExecutable">0</strong><span class="small muted">실행 가능</span></div>
+        <div class="kpi"><strong id="statPassword">0</strong><span class="small muted">비밀번호 변경 전</span></div>
+        <div class="kpi"><strong id="statAgents">0</strong><span class="small muted">실행기 연결</span></div>
+        <div class="kpi"><strong id="statActive">0</strong><span class="small muted">활성 계정</span></div>
+        <div class="kpi"><strong id="statExpired">0</strong><span class="small muted">만료 계정</span></div>
+      </section>
+
+      <section class="grid">
+        <form id="provisionForm" class="panel span-5 stack">
+          <div>
+            <h2>구매자 등록</h2>
+            <p class="small">신규 구매자는 자동으로 임시 비밀번호가 발급됩니다.</p>
+          </div>
+          <div class="field">
+            <label for="buyerEmail">이메일</label>
+            <input id="buyerEmail" type="email" autocomplete="off" required>
+          </div>
+          <div class="field">
+            <label for="buyerName">이름</label>
+            <input id="buyerName" autocomplete="off" placeholder="선택">
+          </div>
+          <div class="field">
+            <label for="buyerProduct">구매 상품</label>
+            <select id="buyerProduct" required></select>
+          </div>
+          <div class="field">
+            <label for="buyerExpires">만료일</label>
+            <input id="buyerExpires" type="date">
+          </div>
+          <div class="field">
+            <label for="buyerNote">운영 메모</label>
+            <textarea id="buyerNote" placeholder="선택"></textarea>
+          </div>
+          <label class="row" style="justify-content:flex-start;">
+            <input id="buyerResetPassword" type="checkbox" style="width:auto;">
+            <span>기존 사용자도 임시 비밀번호 재발급</span>
+          </label>
+          <button class="btn primary" type="submit">계정 등록</button>
+        </form>
+
+        <section class="panel span-7 stack">
+          <div>
+            <h2>전달 안내문</h2>
+            <p class="small">계정 생성 후 임시 비밀번호는 이 화면에서 한 번만 복사해 전달합니다.</p>
+          </div>
+          <div id="provisionResult" class="notice warn">아직 생성된 계정이 없습니다.</div>
+          <div class="actions">
+            <button id="copyGuideBtn" class="btn" type="button" disabled>안내문 복사</button>
+            <button id="sendGuideEmailBtn" class="btn primary" type="button" disabled>Gmail로 안내문 보내기</button>
+            <button id="openUserAppBtn" class="btn" type="button">사용자 웹앱 열기</button>
+          </div>
+          <div id="mailResult" class="notice hidden"></div>
+        </section>
+      </section>
+
+      <section class="grid">
+        <form id="bulkForm" class="panel span-5 stack">
+          <div>
+            <h2>여러 구매자 등록</h2>
+            <p class="small">한 줄에 한 명씩 입력합니다. 기본 상품이 같으면 이메일만 붙여넣어도 됩니다.</p>
+          </div>
+          <div class="field">
+            <label for="bulkProduct">기본 구매 상품</label>
+            <select id="bulkProduct" required></select>
+          </div>
+          <div class="field">
+            <label for="bulkExpires">공통 만료일</label>
+            <input id="bulkExpires" type="date">
+          </div>
+          <div class="field">
+            <label for="bulkBuyers">구매자 목록</label>
+            <textarea id="bulkBuyers" placeholder="buyer1@example.com, 홍길동&#10;buyer2@example.com, 김민수&#10;buyer3@example.com, 이예리, yeri"></textarea>
+          </div>
+          <label class="row" style="justify-content:flex-start;">
+            <input id="bulkResetPassword" type="checkbox" style="width:auto;">
+            <span>기존 사용자도 모두 임시 비밀번호 재발급</span>
+          </label>
+          <button class="btn primary" type="submit">여러 계정 등록</button>
+        </form>
+
+        <section class="panel span-7 stack">
+          <div>
+            <h2>대량 전달 안내문</h2>
+            <p class="small">생성된 모든 임시 비밀번호를 한 번에 복사합니다. 실제 전달 전 이메일별 내용을 꼭 확인해주세요.</p>
+          </div>
+          <div id="bulkResult" class="notice warn">아직 대량 생성 결과가 없습니다.</div>
+          <div class="actions">
+            <button id="copyBulkGuideBtn" class="btn" type="button" disabled>전체 안내문 복사</button>
+            <button id="clearBulkBtn" class="btn" type="button">입력 지우기</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div>
+            <h2>직원 권한 일괄 추가</h2>
+            <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 직원 권한만 추가합니다.</p>
+          </div>
+          <div class="actions">
+            <button id="grantSongiAllBtn" class="btn primary" type="button">활성 사용자에게 송이 권한 추가</button>
+          </div>
+        </div>
+        <div id="grantProductResult" class="notice warn">아직 일괄 권한 작업이 없습니다.</div>
+      </section>
+
+      <section class="panel stack">
+        <div class="row">
+          <div>
+            <h2>직원 카탈로그</h2>
+            <p class="small">운영 서버 기준 직원, 실행 방식, 작업 연결 상태입니다.</p>
+          </div>
+          <span id="catalogSummary" class="pill">확인 중</span>
+        </div>
+        <div id="workerCatalogGrid" class="catalog-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div>
+            <h2>구매자 목록</h2>
+            <p class="small">상품 변경은 비밀번호를 초기화하지 않습니다. 재발급 버튼만 임시 비밀번호를 새로 만듭니다.</p>
+          </div>
+          <span id="resultCount" class="pill">0명</span>
+        </div>
+        <div class="toolbar">
+          <div class="field">
+            <label for="searchInput">검색</label>
+            <input id="searchInput" placeholder="이메일 또는 이름">
+          </div>
+          <div class="field">
+            <label for="productFilter">상품</label>
+            <select id="productFilter"></select>
+          </div>
+          <div class="field">
+            <label for="statusFilter">상태</label>
+            <select id="statusFilter">
+              <option value="">전체</option>
+              <option value="must_change_password">비밀번호 변경 전</option>
+              <option value="executable">실행 가능</option>
+              <option value="expired">만료</option>
+              <option value="inactive">비활성</option>
+            </select>
+          </div>
+          <button id="filterBtn" class="btn" type="button">조회</button>
+        </div>
+        <div class="table-wrap">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>구매자</th>
+                <th>상품</th>
+                <th>계정</th>
+                <th>비밀번호</th>
+                <th>실행기</th>
+                <th>최근 로그인</th>
+                <th class="action-cell">관리</th>
+              </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <div id="ordersTab" class="tab-panel hidden" data-admin-tab-panel="orders">
+      <section class="grid">
+        <section class="panel span-12 stack">
+          <div class="row">
+            <div>
+              <h2>카페24 주문 대기열</h2>
+              <p class="small">정상 주문은 자동으로 계정 생성과 안내 메일 발송까지 처리됩니다. 확인 필요/실패 주문만 여기서 정정하거나 재시도합니다.</p>
+            </div>
+            <div class="actions">
+              <button id="refreshCafe24OrdersBtn" class="btn" type="button">갱신</button>
+            </div>
+          </div>
+          <div class="toolbar">
+            <div class="field">
+              <label for="orderStatusFilter">처리 상태</label>
+              <select id="orderStatusFilter">
+                <option value="open">미발송 전체</option>
+                <option value="pending">대기</option>
+                <option value="needs_review">확인 필요</option>
+                <option value="provisioned">계정 생성</option>
+                <option value="sent">발송 완료</option>
+                <option value="all">전체</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="orderExpires">공통 만료일</label>
+              <input id="orderExpires" type="date">
+            </div>
+            <label class="checkline" style="align-self:end; margin:0 0 9px;">
+              <input id="orderResetPassword" type="checkbox">
+              기존 계정도 비번 재발급
+            </label>
+            <div class="actions" style="align-self:end;">
+              <button id="provisionCafe24OrdersBtn" class="btn primary" type="button">선택 계정 생성</button>
+              <button id="sendCafe24GuidesBtn" class="btn primary" type="button" disabled>생성 안내문 발송</button>
+            </div>
+          </div>
+          <div id="cafe24OrderResult" class="notice warn">아직 처리한 주문이 없습니다.</div>
+          <div class="table-wrap">
+            <table class="orders-table">
+              <thead>
+                <tr>
+                  <th class="order-select-col"><input id="selectAllOrders" type="checkbox" aria-label="전체 선택"></th>
+                  <th>구매자</th>
+                  <th>카페24 상품</th>
+                  <th class="order-product-col">AIMAX 상품</th>
+                  <th class="order-status-col">상태</th>
+                  <th class="order-time-col">접수 시각</th>
+                </tr>
+              </thead>
+              <tbody id="cafe24OrdersBody"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="panel span-12 stack">
+          <div class="row">
+            <div>
+              <h2>생성된 안내문</h2>
+              <p class="small">계정 생성 직후 만들어진 안내문입니다. 임시 비밀번호는 저장하지 않으므로 발송 전 내용을 확인해주세요.</p>
+            </div>
+            <button id="copyCafe24GuidesBtn" class="btn" type="button" disabled>전체 안내문 복사</button>
+          </div>
+          <pre id="cafe24GuideResult" class="prebox">아직 생성된 안내문이 없습니다.</pre>
+        </section>
+      </section>
+    </div>
+
+    <div id="reportsTab" class="tab-panel hidden" data-admin-tab-panel="reports">
+      <section class="grid">
+        <section class="panel span-12 stack">
+          <div class="row">
+            <div>
+              <h2>오류 보고</h2>
+              <p class="small">미완료 오류를 개발자에게 전달할 수정 요청서로 복사하고, 처리한 건은 완료로 체크합니다.</p>
+            </div>
+            <div class="actions">
+              <button id="copyOpenReportsBtn" class="btn primary" type="button">미완료 요청서</button>
+              <button id="copyAllReportsBtn" class="btn" type="button">전체 요청서</button>
+              <button id="refreshReportsBtn" class="btn" type="button">갱신</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="reports-table">
+              <thead>
+                <tr>
+                  <th class="report-copy-col">요청서</th>
+                  <th>오류 내용</th>
+                  <th class="report-user-col">구매자</th>
+                  <th class="report-status-col">상태</th>
+                  <th class="report-time-col">접수 시각</th>
+                  <th class="report-detail-col">상세</th>
+                </tr>
+              </thead>
+              <tbody id="reportsBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </div>
+  </main>
+
+  <div id="reportDrawerBackdrop" class="drawer-backdrop"></div>
+  <aside id="reportDrawer" class="side-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="reportDrawerTitle">
+    <div class="drawer-header">
+      <div class="drawer-title-row">
+        <div>
+          <h2 id="reportDrawerTitle">보고 상세</h2>
+          <div id="reportDrawerMeta" class="drawer-meta">오류 보고를 선택해주세요.</div>
+        </div>
+        <button id="closeReportDrawerBtn" class="btn compact" type="button">닫기</button>
+      </div>
+      <div class="drawer-actions">
+        <button id="copyReportDetailBtn" class="btn primary" type="button" disabled>요청서 복사</button>
+        <button id="toggleReportDoneBtn" class="btn" type="button" disabled>완료 처리</button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <form id="reportSupportForm" class="support-form stack hidden">
+        <div class="field">
+          <label for="reportSupportStatus">사용자에게 보이는 상태</label>
+          <select id="reportSupportStatus">
+            <option value="new">접수됨</option>
+            <option value="reviewing">확인 중</option>
+            <option value="working">조치 중</option>
+            <option value="waiting_user">사용자 확인 필요</option>
+            <option value="done">완료</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="reportSupportMessage">사용자 안내문</label>
+          <textarea id="reportSupportMessage" maxlength="500"></textarea>
+        </div>
+        <div class="field">
+          <label for="reportSupportNext">다음 안내 기준</label>
+          <input id="reportSupportNext" maxlength="500">
+        </div>
+        <div class="support-form-actions">
+          <button id="saveReportSupportBtn" class="btn primary" type="submit">사용자 안내 저장</button>
+        </div>
+      </form>
+      <div id="reportDetail" class="notice warn">오류 보고를 선택해주세요.</div>
+    </div>
+  </aside>
+
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+    const state = {
+      products: [],
+      users: [],
+      stats: {},
+      lastGuide: "",
+      lastGuideEmail: null,
+      lastBulkGuide: "",
+      cafe24Orders: [],
+      cafe24Stats: {},
+      lastCafe24Guides: [],
+      reports: [],
+      workers: [],
+      jobKinds: [],
+      selectedReport: null,
+      selectedReportDetail: null,
+      activeTab: "buyers",
+    };
+
+    const statusLabels = {
+      invalid_admin_credentials: "운영자 비밀번호가 맞지 않습니다.",
+      admin_auth_not_configured: "서버에 관리자 인증 값이 설정되어 있지 않습니다.",
+      unauthorized: "관리자 로그인이 필요합니다.",
+      invalid_email: "이메일 형식을 확인해주세요.",
+      invalid_product: "상품을 선택해주세요.",
+      invalid_scope: "권한 적용 범위를 확인해주세요.",
+      invalid_batch: "구매자 목록에 수정이 필요한 줄이 있습니다.",
+      empty_batch: "구매자 목록을 입력해주세요.",
+      batch_too_large: "한 번에 최대 100명까지 등록할 수 있습니다.",
+      duplicate_email: "같은 이메일이 목록에 두 번 들어갔습니다.",
+      password_too_short: "임시 비밀번호는 10자 이상이어야 합니다.",
+      password_contains_email: "비밀번호에 이메일 일부를 포함할 수 없습니다.",
+      mail_not_configured: "메일 발송 설정이 아직 연결되지 않았습니다.",
+      mail_send_failed: "메일 발송에 실패했습니다.",
+      empty_mail_body: "보낼 안내문이 없습니다.",
+      user_not_found_or_inactive: "활성 구매자를 찾을 수 없습니다.",
+      user_not_found: "구매자를 찾을 수 없습니다.",
+      cafe24_webhook_not_configured: "카페24 주문 수신용 비밀키가 서버에 설정되지 않았습니다.",
+      invalid_cafe24_secret: "카페24 주문 수신 인증값이 맞지 않습니다.",
+      empty_selection: "처리할 주문을 선택해주세요.",
+      invalid_order_selection: "선택한 주문 중 수정이 필요한 항목이 있습니다.",
+      order_not_found: "카페24 주문을 찾을 수 없습니다.",
+      order_already_done: "이미 발송 완료된 주문입니다.",
+      invalid_order: "주문 정보를 확인해주세요.",
+      ambiguous_product: "상품을 자동으로 판단하지 못했습니다.",
+      unknown_product: "상품을 자동으로 판단하지 못했습니다.",
+      invalid_order_status: "주문 상태 값을 확인해주세요.",
+      invalid_order_for_auto_process: "자동 처리할 수 없는 주문입니다. 이메일과 상품을 확인해주세요.",
+      auto_process_failed: "자동 처리에 실패했습니다.",
+      report_not_found: "오류 보고를 찾을 수 없습니다.",
+      invalid_report_status: "오류 보고 상태 값을 확인해주세요.",
+      report_update_failed: "오류 보고 상태 변경에 실패했습니다.",
+      copy_failed: "클립보드 복사에 실패했습니다.",
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function formatTime(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "-";
+      return date.toLocaleString("ko-KR", { hour12: false });
+    }
+
+    function labelForProduct(product) {
+      return state.products.find((item) => item.product === product)?.label || product || "-";
+    }
+
+    function apiError(error) {
+      const base = statusLabels[error?.body?.error] || error?.body?.error || error.message || "요청에 실패했습니다.";
+      if (Array.isArray(error?.body?.errors) && error.body.errors.length) {
+        const details = error.body.errors
+          .slice(0, 8)
+          .map((item) => `${Number(item.index) + 1}번째: ${item.email || item.order_id || "-"} ${statusLabels[item.error] || item.error}`)
+          .join("\n");
+        return `${base}\n\n${details}`;
+      }
+      return base;
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        credentials: "same-origin",
+        headers: { "content-type": "application/json", ...(options.headers || {}) },
+        ...options,
+      });
+      const body = await response.json().catch(() => ({ ok: false, error: "invalid_json" }));
+      if (!response.ok || body.ok === false) {
+        const error = new Error(body.error || `http_${response.status}`);
+        error.body = body;
+        throw error;
+      }
+      return body;
+    }
+
+    function showLogin() {
+      $("#loginView").classList.remove("hidden");
+      $("#adminView").classList.add("hidden");
+    }
+
+    function showAdmin() {
+      $("#loginView").classList.add("hidden");
+      $("#adminView").classList.remove("hidden");
+    }
+
+    function setAdminTab(tab, options = {}) {
+      const nextTab = ["buyers", "orders", "reports"].includes(tab) ? tab : "buyers";
+      state.activeTab = nextTab;
+      $$("[data-admin-tab]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.adminTab === nextTab);
+      });
+      $$("[data-admin-tab-panel]").forEach((panel) => {
+        panel.classList.toggle("hidden", panel.dataset.adminTabPanel !== nextTab);
+      });
+      if (options.updateHash !== false) {
+        const nextHash = nextTab === "reports" ? "#reports" : nextTab === "orders" ? "#orders" : "#buyers";
+        if (window.location.hash !== nextHash) history.replaceState(null, "", nextHash);
+      }
+      if (nextTab === "reports" && options.refresh !== false) {
+        loadReports().catch((error) => alert(apiError(error)));
+      } else if (nextTab === "orders" && options.refresh !== false) {
+        loadCafe24Orders().catch((error) => alert(apiError(error)));
+        closeReportDrawer();
+      } else if (nextTab !== "reports") {
+        closeReportDrawer();
+      }
+    }
+
+    function renderProductOptions() {
+      const options = state.products.map((item) => `<option value="${escapeHtml(item.product)}">${escapeHtml(item.label)}</option>`).join("");
+      $("#buyerProduct").innerHTML = options;
+      $("#bulkProduct").innerHTML = options;
+      $("#productFilter").innerHTML = `<option value="">전체</option>${options}`;
+    }
+
+    function renderStats() {
+      const stats = state.stats || {};
+      $("#statTotal").textContent = stats.total || 0;
+      $("#statExecutable").textContent = stats.executable || 0;
+      $("#statPassword").textContent = stats.must_change_password || 0;
+      $("#statAgents").textContent = stats.connected_agents || 0;
+      $("#statActive").textContent = stats.active || 0;
+      $("#statExpired").textContent = stats.expired || 0;
+    }
+
+    function jobKindForWorker(worker) {
+      return state.jobKinds.find((item) => item.kind === worker.job_kind) || null;
+    }
+
+    function workerStatusPill(worker) {
+      if (worker.status === "available") return `<span class="pill ok">사용 가능</span>`;
+      if (worker.status === "beta") return `<span class="pill warn">베타</span>`;
+      if (worker.status === "needs_setup") return `<span class="pill warn">설정 필요</span>`;
+      return `<span class="pill">확인</span>`;
+    }
+
+    function executionPill(value) {
+      if (value === "local_agent") return `<span class="pill warn">로컬 실행기</span>`;
+      if (value === "web_module") return `<span class="pill ok">웹 실행</span>`;
+      if (value === "planned") return `<span class="pill">준비 중</span>`;
+      return `<span class="pill">${escapeHtml(value || "미지정")}</span>`;
+    }
+
+    function renderWorkerCatalog() {
+      const workers = state.workers || [];
+      const jobKinds = state.jobKinds || [];
+      const localCount = workers.filter((worker) => worker.execution === "local_agent").length;
+      const webCount = workers.filter((worker) => worker.execution === "web_module").length;
+      $("#catalogSummary").textContent = `${workers.length}명 · 작업 ${jobKinds.length}개 · 로컬 ${localCount} · 웹 ${webCount}`;
+      $("#workerCatalogGrid").innerHTML = workers.length ? workers.map((worker) => {
+        const jobKind = jobKindForWorker(worker);
+        const apiMode = jobKind?.api_mode || "-";
+        const queue = jobKind ? (jobKind.queue === false ? "큐 아님" : "큐 사용") : "작업 없음";
+        return `
+          <article class="catalog-card">
+            <div class="catalog-card-head">
+              <div class="catalog-card-title">
+                <strong>${escapeHtml(worker.name || worker.label || worker.staff_code || worker.code)}</strong>
+                <span class="small muted">${escapeHtml(worker.role || worker.code || "-")}</span>
+              </div>
+              ${workerStatusPill(worker)}
+            </div>
+            <div class="catalog-pills">
+              ${executionPill(worker.execution || worker.type)}
+              <span class="pill">${escapeHtml(worker.product || "-")}</span>
+              <span class="pill">${escapeHtml(apiMode)}</span>
+              <span class="pill ${jobKind?.queue === false ? "ok" : ""}">${escapeHtml(queue)}</span>
+            </div>
+            <div class="small muted">${escapeHtml(worker.job_kind || "연결된 작업 없음")}</div>
+          </article>
+        `;
+      }).join("") : `<div class="notice warn">직원 카탈로그를 불러오지 못했습니다.</div>`;
+    }
+
+    function productPill(user) {
+      const visible = displayProducts(user);
+      const labels = (visible.length ? visible : [user.product]).filter(Boolean).map(labelForProduct).filter(Boolean);
+      const cls = user.can_execute ? "ok" : "warn";
+      return `<span class="pill ${cls}">${escapeHtml(labels.join(" + ") || "-")}</span>`;
+    }
+
+    function accountPill(user) {
+      if (isExpired(user)) return `<span class="pill bad">만료</span>`;
+      if (user.status !== "active") return `<span class="pill bad">비활성</span>`;
+      if (!user.can_execute) return `<span class="pill warn">제한</span>`;
+      return `<span class="pill ok">실행 가능</span>`;
+    }
+
+    function isExpired(user) {
+      if (user.entitlements?.status === "expired" || user.entitlement_status === "expired") return true;
+      if (!user.expires_at) return false;
+      const expires = Date.parse(user.expires_at);
+      return Number.isFinite(expires) && expires <= Date.now();
+    }
+
+    function passwordPill(user) {
+      return user.must_change_password
+        ? `<span class="pill warn">변경 전</span>`
+        : `<span class="pill ok">변경 완료</span>`;
+    }
+
+    function userProducts(user) {
+      const products = new Set(user.entitlements?.products || []);
+      if (user.product) products.add(user.product);
+      if (products.has("blog_team")) {
+        products.add("yeri");
+        products.add("hyunju");
+      }
+      if (products.has("bundle")) {
+        products.add("yeri");
+        products.add("hyunju");
+        products.add("songi");
+        products.add("blog_team");
+      }
+      return products;
+    }
+
+    function displayProducts(user) {
+      const products = userProducts(user);
+      if (products.has("bundle")) return ["bundle"];
+      const visible = [];
+      if (products.has("blog_team")) {
+        visible.push("blog_team");
+      } else {
+        if (products.has("yeri")) visible.push("yeri");
+        if (products.has("hyunju")) visible.push("hyunju");
+      }
+      if (products.has("songi")) visible.push("songi");
+      return visible;
+    }
+
+    function agentWorkerMismatchLabels(user) {
+      const products = userProducts(user);
+      const workers = user.agent?.readiness?.workers || {};
+      const labels = [];
+      if ((products.has("bundle") || products.has("yeri")) && workers.yeri_write === "unavailable") labels.push("예리 미제공");
+      if ((products.has("bundle") || products.has("hyunju")) && workers.hyunju_find === "unavailable") labels.push("현주 미제공");
+      return labels;
+    }
+
+    function agentPill(user) {
+      const mismatchLabels = agentWorkerMismatchLabels(user);
+      const mismatch = mismatchLabels.length
+        ? `<div class="small muted">${escapeHtml(mismatchLabels.join(", "))}</div>`
+        : "";
+      return user.agent?.connected
+        ? `<span class="pill ${mismatchLabels.length ? "warn" : "ok"}">연결됨</span><div class="small muted">${escapeHtml(user.agent.device_label || "")}</div>${mismatch}`
+        : `<span class="pill warn">미연결</span>`;
+    }
+
+    function renderUsers() {
+      $("#resultCount").textContent = `${state.users.length}명`;
+      $("#usersBody").innerHTML = state.users.length ? state.users.map((user) => `
+        <tr>
+          <td>
+            <strong>${escapeHtml(user.email)}</strong>
+            <div class="small muted">${escapeHtml(user.name || "-")}</div>
+          </td>
+          <td>
+            ${productPill(user)}
+            ${user.yunmi_access ? `<span class="pill ok">윤미 허용</span>` : ""}
+            <div class="small muted">${escapeHtml(user.expires_at ? `만료 ${user.expires_at}` : "만료 없음")}</div>
+          </td>
+          <td>${accountPill(user)}</td>
+          <td>${passwordPill(user)}</td>
+          <td>${agentPill(user)}</td>
+          <td>
+            <div>${escapeHtml(formatTime(user.last_login_at))}</div>
+            <div class="small muted">수정 ${escapeHtml(formatTime(user.updated_at))}</div>
+          </td>
+          <td class="action-cell">
+            <div class="actions">
+              ${state.products.map((item) => `
+                <button class="btn ${userProducts(user).has(item.product) ? "active" : ""}" type="button" data-action="product" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(item.product)}">${escapeHtml(item.label)}</button>
+              `).join("")}
+              <button class="btn" type="button" data-action="reset" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(user.product || "bundle")}">비번 재발급</button>
+              <button class="btn" type="button" data-action="expire" data-email="${escapeHtml(user.email)}">만료</button>
+              <button class="btn danger" type="button" data-action="delete" data-email="${escapeHtml(user.email)}">삭제</button>
+            </div>
+          </td>
+        </tr>
+      `).join("") : `
+        <tr><td colspan="7" class="muted">조회된 구매자가 없습니다.</td></tr>
+      `;
+
+      $$("[data-action='product']").forEach((button) => {
+        button.addEventListener("click", () => updateUserProduct(button.dataset.email, button.dataset.product, button));
+      });
+      $$("[data-action='reset']").forEach((button) => {
+        button.addEventListener("click", () => resetUserPassword(button.dataset.email, button.dataset.product));
+      });
+      $$("[data-action='expire']").forEach((button) => {
+        button.addEventListener("click", () => expireUser(button.dataset.email));
+      });
+      $$("[data-action='delete']").forEach((button) => {
+        button.addEventListener("click", () => deleteUser(button.dataset.email));
+      });
+    }
+
+    function orderStatusPill(order) {
+      const status = String(order?.status || "pending");
+      if (status === "pending") return `<span class="pill warn">대기</span>`;
+      if (status === "needs_review") return `<span class="pill bad">확인 필요</span>`;
+      if (status === "provisioned") return `<span class="pill ok">계정 생성</span>`;
+      if (status === "sent") return `<span class="pill ok">발송 완료</span>`;
+      if (status === "ignored") return `<span class="pill">제외</span>`;
+      if (status === "failed") return `<span class="pill bad">실패</span>`;
+      return `<span class="pill">${escapeHtml(status || "-")}</span>`;
+    }
+
+    function orderProductOptions(selectedProduct) {
+      const empty = `<option value="">선택</option>`;
+      const options = state.products.map((item) => `
+        <option value="${escapeHtml(item.product)}" ${selectedProduct === item.product ? "selected" : ""}>${escapeHtml(item.label)}</option>
+      `).join("");
+      return `${empty}${options}`;
+    }
+
+    function selectedCafe24OrderIds() {
+      return $$("[data-order-select]:checked").map((checkbox) => checkbox.dataset.orderSelect).filter(Boolean);
+    }
+
+    function cafe24ProductOverrides(ids) {
+      const products = new Map($$("[data-order-product]").map((select) => [select.dataset.orderProduct, select.value]));
+      return Object.fromEntries(ids.map((id) => [id, products.get(id) || ""]));
+    }
+
+    function cafe24OrderAmount(order) {
+      const amount = Number(order.amount || 0);
+      return amount ? `${amount.toLocaleString("ko-KR")}원` : "-";
+    }
+
+    function cafe24AutoStageText(stage) {
+      const value = String(stage || "");
+      if (value === "locked") return "자동 처리 시작";
+      if (value === "provisioning") return "계정 생성/권한 부여";
+      if (value === "setup_link") return "설정 링크 생성";
+      if (value === "mail_sending") return "안내 메일 발송";
+      if (value === "sent") return "발송 완료";
+      if (value === "failed") return "실패";
+      return value;
+    }
+
+    function cafe24OrderRecoveryActions(order) {
+      const status = String(order.status || "pending");
+      const id = escapeHtml(order.id);
+      const canRetry = !order.sent_at && (
+        ["failed", "provisioned"].includes(status)
+        || Boolean(order.auto_process_error)
+        || (status === "pending" && !order.auto_process_started_at)
+      );
+      const canResend = status === "sent";
+      const buttons = [];
+      if (canRetry) {
+        buttons.push(`<button class="btn compact" type="button" data-order-retry="${id}">자동 재시도</button>`);
+      }
+      if (canResend) {
+        buttons.push(`<button class="btn compact" type="button" data-order-resend="${id}">설정 링크 재발송</button>`);
+      }
+      return buttons.length ? `<div class="actions" style="margin-top:6px; gap:6px; flex-wrap:wrap;">${buttons.join("")}</div>` : "";
+    }
+
+    function renderCafe24Orders() {
+      const openCount = Number(state.cafe24Stats?.open || 0);
+      $("#orderTabCount").textContent = openCount || state.cafe24Orders.length || 0;
+      $("#selectAllOrders").checked = false;
+      $("#selectAllOrders").disabled = !state.cafe24Orders.length;
+      $("#cafe24OrdersBody").innerHTML = state.cafe24Orders.length ? state.cafe24Orders.map((order) => {
+        const status = String(order.status || "pending");
+        const selectable = !["sent", "ignored"].includes(status);
+        const issueText = order.issue ? statusLabels[order.issue] || order.issue : "";
+        return `
+          <tr>
+            <td class="order-select-col">
+              <input type="checkbox" data-order-select="${escapeHtml(order.id)}" ${selectable ? "" : "disabled"}>
+            </td>
+            <td>
+              <strong>${escapeHtml(order.email || "-")}</strong>
+              <div class="small muted">${escapeHtml(order.name || "-")}${order.masked_phone ? ` · ${escapeHtml(order.masked_phone)}` : ""}</div>
+            </td>
+            <td>
+              <strong>${escapeHtml(order.product_name || "-")}</strong>
+              <div class="small muted">${escapeHtml(cafe24OrderAmount(order))}${order.order_date ? ` · ${escapeHtml(order.order_date)}` : ""}</div>
+            </td>
+            <td class="order-product-col">
+              <select data-order-product="${escapeHtml(order.id)}" ${selectable ? "" : "disabled"}>
+                ${orderProductOptions(order.product || "")}
+              </select>
+            </td>
+            <td class="order-status-col">
+              ${orderStatusPill(order)}
+              ${issueText ? `<div class="small muted">${escapeHtml(issueText)}</div>` : ""}
+              ${order.review_alert_sent_at ? `<div class="small muted">알림 ${escapeHtml(formatTime(order.review_alert_sent_at))}</div>` : ""}
+              ${order.review_alert_error ? `<div class="small muted">알림 실패: ${escapeHtml(order.review_alert_error)}</div>` : ""}
+              ${order.auto_process_started_at ? `<div class="small muted">자동 처리 ${escapeHtml(formatTime(order.auto_process_started_at))}${order.auto_process_stage ? ` · ${escapeHtml(cafe24AutoStageText(order.auto_process_stage))}` : ""}${order.auto_process_attempts ? ` · ${Number(order.auto_process_attempts)}회` : ""}</div>` : ""}
+              ${order.auto_process_error ? `<div class="small muted">자동 실패: ${escapeHtml(order.auto_process_error)}</div>` : ""}
+              ${order.auto_process_error_stage ? `<div class="small muted">실패 단계: ${escapeHtml(cafe24AutoStageText(order.auto_process_error_stage))}</div>` : ""}
+              ${order.auto_process_alert_sent_at ? `<div class="small muted">실패 알림 ${escapeHtml(formatTime(order.auto_process_alert_sent_at))}</div>` : ""}
+              ${order.auto_process_alert_error ? `<div class="small muted">실패 알림 오류: ${escapeHtml(order.auto_process_alert_error)}</div>` : ""}
+              ${cafe24OrderRecoveryActions(order)}
+            </td>
+            <td class="order-time-col">
+              <div>${escapeHtml(formatTime(order.created_at || order.received_at))}</div>
+              <div class="small muted">수정 ${escapeHtml(formatTime(order.updated_at))}</div>
+            </td>
+          </tr>
+        `;
+      }).join("") : `
+        <tr><td colspan="6" class="muted">표시할 카페24 주문이 없습니다.</td></tr>
+      `;
+
+      $$("[data-order-product]").forEach((select) => {
+        select.addEventListener("change", () => updateCafe24OrderProduct(select.dataset.orderProduct, select.value).catch((error) => alert(apiError(error))));
+      });
+      $$("[data-order-retry]").forEach((button) => {
+        button.addEventListener("click", () => retryCafe24Order(button.dataset.orderRetry, "retry", button).catch((error) => alert(apiError(error))));
+      });
+      $$("[data-order-resend]").forEach((button) => {
+        button.addEventListener("click", () => retryCafe24Order(button.dataset.orderResend, "resend", button).catch((error) => alert(apiError(error))));
+      });
+    }
+
+    function renderCafe24Guides(results) {
+      const rows = results || [];
+      state.lastCafe24Guides = rows.map((row) => row.guide).filter((guide) => guide?.text);
+      const summary = rows.map((row) => {
+        const order = row.order || {};
+        const user = row.user || {};
+        return `${user.email || order.email || "-"} | ${labelForProduct(row.product || user.product || order.product)} | ${row.guide?.setup_url_visible_once ? "설정 링크 생성" : row.temporary_password_visible_once ? "임시 비밀번호 생성" : "기존 비밀번호 유지"}`;
+      });
+      $("#cafe24OrderResult").classList.remove("warn");
+      $("#cafe24OrderResult").textContent = [
+        `${rows.length}건 계정을 생성/갱신했습니다.`,
+        "",
+        ...summary,
+        "",
+        "아래 안내문을 확인한 뒤 발송 버튼을 눌러주세요.",
+      ].join("\n");
+      $("#cafe24GuideResult").textContent = state.lastCafe24Guides.length
+        ? state.lastCafe24Guides.map((guide) => `[${guide.email}]\n${guide.text}`).join("\n\n---\n\n")
+        : "생성된 안내문이 없습니다.";
+      $("#sendCafe24GuidesBtn").disabled = !state.lastCafe24Guides.length;
+      $("#copyCafe24GuidesBtn").disabled = !state.lastCafe24Guides.length;
+    }
+
+    function reportStatusPill(status) {
+      const value = String(status || "new");
+      if (value === "new") return `<span class="pill warn">접수됨</span>`;
+      if (value === "reviewing") return `<span class="pill">확인 중</span>`;
+      if (value === "working") return `<span class="pill warn">조치 중</span>`;
+      if (value === "waiting_user" || value === "need_user_info") return `<span class="pill bad">사용자 확인 필요</span>`;
+      if (value === "done" || value === "resolved" || value === "fixed") return `<span class="pill ok">완료</span>`;
+      return `<span class="pill">${escapeHtml(value)}</span>`;
+    }
+
+    function isReportDone(report) {
+      return ["done", "resolved", "fixed"].includes(String(report?.status || ""));
+    }
+
+    function reportStatusText(status) {
+      const value = String(status || "new");
+      if (value === "new") return "접수됨";
+      if (value === "reviewing") return "확인 중";
+      if (value === "working") return "조치 중";
+      if (value === "waiting_user" || value === "need_user_info") return "사용자 확인 필요";
+      if (value === "done" || value === "resolved" || value === "fixed") return "완료";
+      return value || "-";
+    }
+
+    function reportSupportDefaults(status) {
+      const value = String(status || "new");
+      const defaults = {
+        new: {
+          public_message: "오류 보고가 접수되었습니다. 운영팀 알림이 전달되었습니다. 같은 오류를 다시 보내지 않아도 됩니다.",
+          next_update_message: "영업시간 기준 24시간 안에 1차 확인 상태로 바뀝니다.",
+        },
+        reviewing: {
+          public_message: "운영자가 오류 보고를 확인 중입니다.",
+          next_update_message: "원인 확인 중입니다. 추가 안내가 필요하면 이 화면에 표시됩니다.",
+        },
+        working: {
+          public_message: "수정, 설정 확인, 배포 준비 중입니다.",
+          next_update_message: "조치가 끝나면 이 화면의 상태가 완료 또는 사용자 확인 필요로 바뀝니다.",
+        },
+        waiting_user: {
+          public_message: "사용자 확인이 필요합니다. 아래 안내를 확인한 뒤 다시 시도해주세요.",
+          next_update_message: "안내대로 진행한 뒤 같은 문제가 계속되면 접수 ID와 함께 카카오채널로 알려주세요.",
+        },
+        done: {
+          public_message: "오류 보고 확인이 완료되었습니다.",
+          next_update_message: "같은 문제가 계속되면 이 접수 ID와 함께 다시 알려주세요.",
+        },
+      };
+      return defaults[value] || defaults.new;
+    }
+
+    function reportAppVersion(report, raw) {
+      return report?.app_version
+        || raw?.system?.app?.version
+        || raw?.system?.agent?.version
+        || raw?.agent_context?.version
+        || raw?.web_context?.agent?.version
+        || "";
+    }
+
+    function reportOs(report, raw) {
+      return report?.os
+        || raw?.system?.runtime?.system
+        || raw?.system?.runtime?.platform
+        || raw?.web_context?.detected_platform
+        || raw?.web_context?.platform
+        || "";
+    }
+
+    function reportBrowser(raw) {
+      const runtime = raw?.system?.runtime || {};
+      const web = raw?.web_context || {};
+      return runtime.browser_name
+        || runtime.user_agent
+        || web.user_agent
+        || "";
+    }
+
+    function reportAgent(raw) {
+      return raw?.system?.agent || raw?.agent_context || raw?.web_context?.agent || {};
+    }
+
+    function reportJobLine(report, raw) {
+      const source = report || {};
+      const summaryParts = [
+        source.job_id ? `job=${source.job_id}` : "",
+        source.job_kind ? `kind=${source.job_kind}` : "",
+        source.job_worker ? `worker=${source.job_worker}` : "",
+        source.job_status ? `status=${source.job_status}` : "",
+        source.job_stage ? `stage=${source.job_stage}` : "",
+        source.job_failed_keyword ? `keyword=${source.job_failed_keyword}` : "",
+      ].filter(Boolean);
+      if (summaryParts.length) return summaryParts.join(" / ");
+      const jobs = raw?.system?.agent?.jobs_recent || raw?.agent_context?.jobs_recent || raw?.jobs_recent || [];
+      const list = Array.isArray(jobs) ? jobs : [];
+      const job = list.find((item) => ["failed", "cancelled", "running"].includes(String(item?.status || ""))) || list[0];
+      if (!job) return "";
+      return [
+        job.id ? `job=${job.id}` : "",
+        job.kind ? `kind=${job.kind}` : "",
+        job.worker_code ? `worker=${job.worker_code}` : "",
+        job.status ? `status=${job.status}` : "",
+        (job.failed_stage || job.result?.failed_stage || job.result?.stage) ? `stage=${job.failed_stage || job.result?.failed_stage || job.result?.stage}` : "",
+        (job.failed_keyword || job.result?.failed_keyword) ? `keyword=${job.failed_keyword || job.result?.failed_keyword}` : "",
+      ].filter(Boolean).join(" / ");
+    }
+
+    function reportMediaToolLine(report, raw) {
+      const source = report || {};
+      if (source.media_tools_missing) return `누락: ${source.media_tools_missing}`;
+      if (source.media_tools_ready === "ready") return "영상 도구 준비됨";
+      const tools = raw?.system?.research?.media_tools || raw?.research?.media_tools || raw?.media_tools || {};
+      const missing = [
+        tools.video_download?.available === false ? "yt-dlp" : "",
+        tools.frame_extract?.available === false ? "ffmpeg" : "",
+      ].filter(Boolean);
+      if (missing.length) return `누락: ${missing.join(", ")}`;
+      return tools.video_file_analysis_ready === true ? "영상 도구 준비됨" : "";
+    }
+
+    function reportCopyText(report, detail = null) {
+      const source = report || {};
+      const raw = detail?.report || null;
+      const agent = reportAgent(raw);
+      const jobLine = reportJobLine(source, raw);
+      const mediaToolLine = reportMediaToolLine(source, raw);
+      const agentText = agent.version
+        ? `${agent.connected === false ? "미연결" : "연결"} / ${agent.version} / ${agent.platform || "-"}`
+        : "-";
+      const lines = [
+        `[AIMAX 오류 보고] ${source.report_id || "-"}`,
+        `상태: ${reportStatusText(source.status)}`,
+        `접수: ${formatTime(source.stored_at)}`,
+        `구매자: ${source.account_email || "-"}`,
+        `상품: ${labelForProduct(source.product) || source.product || "-"}`,
+        `작업: ${source.work_context || "-"}`,
+        `화면 오류: ${source.visible_error || "-"}`,
+        `작업 ID/단계: ${jobLine || "-"}`,
+        `영상 도구: ${mediaToolLine || "-"}`,
+        `사용자 안내: ${source.public_message || "-"}`,
+        `다음 안내: ${source.next_update_message || "-"}`,
+        `앱/OS: ${reportAppVersion(source, raw) || "-"} / ${reportOs(source, raw) || "-"}`,
+        `브라우저: ${reportBrowser(raw) || "-"}`,
+        `실행기: ${agentText}`,
+      ];
+      if (raw) {
+        lines.push("", "redacted 원문:", JSON.stringify(raw, null, 2));
+      }
+      return lines.join("\n");
+    }
+
+    function reportRequestBlock(report, detail, index) {
+      const source = report || {};
+      const raw = detail?.report || null;
+      const agent = reportAgent(raw);
+      const jobLine = reportJobLine(source, raw);
+      const mediaToolLine = reportMediaToolLine(source, raw);
+      const agentText = agent.version
+        ? `${agent.connected === false ? "미연결" : "연결"} / ${agent.version} / ${agent.platform || "-"}`
+        : "-";
+      const lines = [
+        `## ${index + 1}. ${source.report_id || "-"}`,
+        `상태: ${reportStatusText(source.status)}`,
+        `접수: ${formatTime(source.stored_at)}`,
+        `구매자: ${source.account_email || "-"}`,
+        `상품: ${labelForProduct(source.product) || source.product || "-"}`,
+        `작업: ${source.work_context || "-"}`,
+        `화면 오류: ${source.visible_error || "-"}`,
+        `작업 ID/단계: ${jobLine || "-"}`,
+        `영상 도구: ${mediaToolLine || "-"}`,
+        `사용자 안내: ${source.public_message || "-"}`,
+        `다음 안내: ${source.next_update_message || "-"}`,
+        `앱/OS: ${reportAppVersion(source, raw) || "-"} / ${reportOs(source, raw) || "-"}`,
+        `브라우저: ${reportBrowser(raw) || "-"}`,
+        `실행기: ${agentText}`,
+      ];
+      if (raw) {
+        lines.push("", "redacted 진단 원문:", "```json", JSON.stringify(raw, null, 2), "```");
+      }
+      return lines.join("\n");
+    }
+
+    function reportRequestText(reports, details, scopeLabel) {
+      const rows = reports.filter(Boolean);
+      const pendingIds = rows.filter((report) => !isReportDone(report)).map((report) => report.report_id).filter(Boolean);
+      const lines = [
+        "[AIMAX 오류 수정 요청서]",
+        "",
+        `대상: ${scopeLabel || "오류 보고"} ${rows.length}건`,
+        `작성 시각: ${formatTime(new Date().toISOString())}`,
+        "",
+        "목표:",
+        "아래 오류 보고를 확인하고 같은 원인끼리 묶어서 수정해주세요.",
+        "",
+        "처리 기준:",
+        "- 실제 원인 파악, 코드/설정 수정, 배포, 기능 검증까지 끝난 항목만 완료 처리해주세요.",
+        "- 재현 불가 또는 정보 부족인 항목은 완료 처리하지 말고 필요한 추가 정보를 남겨주세요.",
+        "- 같은 원인으로 보이는 보고는 대표 report_id 기준으로 묶고, 같이 해결된 report_id를 함께 기록해주세요.",
+        "- 민감정보는 redacted 처리된 자료만 사용하고 원문 복구를 시도하지 마세요.",
+        "",
+        "완료 체크 요청:",
+        pendingIds.length
+          ? "수정/배포/검증이 끝난 뒤 admin 오류 보고에서 아래 report_id를 완료 체크해주세요."
+          : "현재 미완료 report_id가 없습니다. 이미 완료된 항목은 재작업이 필요한 경우에만 다시 열어주세요.",
+        ...pendingIds.map((reportId) => `- ${reportId}`),
+        "",
+        "오류 보고:",
+        ...rows.map((report, index) => reportRequestBlock(report, details[index], index)),
+      ];
+      return lines.join("\n");
+    }
+
+    async function writeClipboardText(text) {
+      const value = String(text || "");
+      if (!value.trim()) return;
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(value);
+        return;
+      }
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      textarea.style.top = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand("copy");
+      textarea.remove();
+      if (!ok) {
+        const error = new Error("copy_failed");
+        error.body = { error: "copy_failed" };
+        throw error;
+      }
+    }
+
+    async function copyTextWithButton(text, button, doneLabel = "복사 완료") {
+      if (!String(text || "").trim()) return;
+      await writeClipboardText(text);
+      if (!button) return;
+      const original = button.textContent;
+      button.textContent = doneLabel;
+      setTimeout(() => { button.textContent = original; }, 1200);
+    }
+
+    function openReportDrawer() {
+      $("#reportDrawerBackdrop").classList.add("open");
+      $("#reportDrawer").classList.add("open");
+      $("#reportDrawer").setAttribute("aria-hidden", "false");
+      document.body.classList.add("drawer-open");
+    }
+
+    function closeReportDrawer() {
+      $("#reportDrawerBackdrop").classList.remove("open");
+      $("#reportDrawer").classList.remove("open");
+      $("#reportDrawer").setAttribute("aria-hidden", "true");
+      document.body.classList.remove("drawer-open");
+    }
+
+    function setSelectedReportActions() {
+      const selected = state.selectedReport;
+      const hasSelected = Boolean(selected?.report_id);
+      $("#copyReportDetailBtn").disabled = !hasSelected;
+      $("#toggleReportDoneBtn").disabled = !hasSelected;
+      $("#toggleReportDoneBtn").textContent = isReportDone(selected) ? "다시 열기" : "완료 처리";
+    }
+
+    function renderReports() {
+      $("#reportTabCount").textContent = state.reports.length || 0;
+      $("#reportsBody").innerHTML = state.reports.length ? state.reports.map((report) => `
+        <tr class="report-row ${isReportDone(report) ? "done" : ""}">
+          <td class="report-copy-col">
+            <button class="btn primary compact" type="button" data-report-copy-id="${escapeHtml(report.report_id)}">요청서</button>
+          </td>
+          <td>
+            <div class="report-main">
+              <div class="report-error-title">${escapeHtml(report.work_context || "오류 보고")}</div>
+              <div class="report-error-text">${escapeHtml(report.visible_error || "-")}</div>
+              ${reportJobLine(report) ? `<div class="small muted">${escapeHtml(reportJobLine(report))}</div>` : ""}
+              ${reportMediaToolLine(report) ? `<div class="small muted">${escapeHtml(reportMediaToolLine(report))}</div>` : ""}
+              <div class="mono report-id-line" title="${escapeHtml(report.report_id)}">${escapeHtml(report.report_id)}</div>
+            </div>
+          </td>
+          <td>
+            <strong>${escapeHtml(report.account_email || "-")}</strong>
+            <div class="small muted">${escapeHtml(labelForProduct(report.product) || report.product || "-")}</div>
+          </td>
+          <td class="report-status-col">
+            ${reportStatusPill(report.status)}
+            <label class="checkline">
+              <input type="checkbox" data-report-done-id="${escapeHtml(report.report_id)}" ${isReportDone(report) ? "checked" : ""}>
+              완료
+            </label>
+          </td>
+          <td class="report-time-col">${escapeHtml(formatTime(report.stored_at))}</td>
+          <td class="report-detail-col">
+            <button class="btn compact" type="button" data-report-id="${escapeHtml(report.report_id)}">상세</button>
+          </td>
+        </tr>
+      `).join("") : `
+        <tr><td colspan="6" class="muted">접수된 오류 보고가 없습니다.</td></tr>
+      `;
+
+      $$("[data-report-id]").forEach((button) => {
+        button.addEventListener("click", () => loadReportDetail(button.dataset.reportId));
+      });
+      $$("[data-report-copy-id]").forEach((button) => {
+        button.addEventListener("click", () => copyReport(button.dataset.reportCopyId, button).catch((error) => alert(apiError(error))));
+      });
+      $$("[data-report-done-id]").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          const nextStatus = checkbox.checked ? "done" : "new";
+          updateReportStatus(checkbox.dataset.reportDoneId, nextStatus).catch((error) => {
+            checkbox.checked = !checkbox.checked;
+            alert(apiError(error));
+          });
+        });
+      });
+      setSelectedReportActions();
+    }
+
+    function renderReportDetail(data) {
+      const summary = data.summary || {};
+      const report = data.report || {};
+      state.selectedReport = summary;
+      state.selectedReportDetail = data;
+      $("#reportDrawerTitle").textContent = summary.report_id || "보고 상세";
+      $("#reportDrawerMeta").innerHTML = `
+        <div>${escapeHtml(summary.account_email || "-")} · ${escapeHtml(labelForProduct(summary.product) || summary.product || "-")}</div>
+        <div>${escapeHtml(formatTime(summary.stored_at))} · ${reportStatusPill(summary.status)}</div>
+      `;
+      $("#reportDetail").classList.remove("warn");
+      $("#reportDetail").innerHTML = `
+        <div class="stack">
+          <div>
+            <strong>${escapeHtml(summary.report_id || "-")}</strong>
+            <div class="small muted">${escapeHtml(summary.account_email || "-")} · ${escapeHtml(formatTime(summary.stored_at))}</div>
+          </div>
+          <pre class="prebox">${escapeHtml(JSON.stringify(report || summary, null, 2))}</pre>
+        </div>
+      `;
+      fillReportSupportForm(summary);
+      setSelectedReportActions();
+      openReportDrawer();
+    }
+
+    function guideText(email, password, product) {
+      const setupStep = product === "songi"
+        ? "6. 웹앱에서 작업 탭의 송이를 선택해 벤치마킹 링크를 넣어주세요."
+        : "6. 설치 파일을 한 번 설치한 뒤, 웹앱에서 실행기 연결을 눌러주세요.";
+      return [
+        "AIMAX 이용 안내입니다.",
+        "",
+        "1. 웹앱에 접속해주세요.",
+        "https://api.aimax.ai.kr/app",
+        "",
+        `2. 이메일: ${email}`,
+        `3. 임시 비밀번호: ${password}`,
+        "",
+        "4. 첫 로그인 후 새 비밀번호로 변경해주세요.",
+        `5. 구매 상품: ${labelForProduct(product)}`,
+        setupStep,
+        "",
+        product === "songi"
+          ? "SNS 수집/AI 분석이 막히면 설정 탭의 API 키 발급 가이드를 확인해주세요."
+          : "설치가 막히면 웹앱의 권한 허용 가이드를 순서대로 확인해주세요.",
+      ].join("\n");
+    }
+
+    function guideSubject(user) {
+      const name = (user?.name || "").trim();
+      return name ? `[AIMAX] ${name}님, 계정 이용 안내입니다.` : "[AIMAX] 계정 이용 안내입니다.";
+    }
+
+    function normalizeBulkProduct(value) {
+      const raw = String(value || "").trim().toLowerCase();
+      if (!raw) return "";
+      if (["yeri", "예리"].includes(raw)) return "yeri";
+      if (["hyunju", "현주"].includes(raw)) return "hyunju";
+      if (["songi", "송이", "research", "리서치", "자료조사"].includes(raw)) return "songi";
+      if (["blog_team", "blogteam", "블로그팀", "블로그마케팅팀", "마케팅팀", "예리현주", "예리+현주", "현주예리", "현주+예리"].includes(raw)) return "blog_team";
+      if (["bundle", "통합", "전체통합", "전체", "all", "올인원"].includes(raw)) return "bundle";
+      return raw;
+    }
+
+    function parseBulkBuyers(text, defaultProduct) {
+      return String(text || "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const parts = line.split(/[\t,]/).map((part) => part.trim());
+          return {
+            email: parts[0] || "",
+            name: parts[1] || "",
+            product: normalizeBulkProduct(parts[2]) || defaultProduct,
+            expires_at: parts[3] || null,
+            admin_note: parts.slice(4).join(" ").trim(),
+          };
+        });
+    }
+
+    function renderProvisionResult(result) {
+      const user = result.user || {};
+      const password = result.temporary_password || "";
+      $("#mailResult").classList.add("hidden");
+      if (password) {
+        state.lastGuide = guideText(user.email, password, user.product);
+        state.lastGuideEmail = {
+          email: user.email,
+          subject: guideSubject(user),
+          text: state.lastGuide,
+        };
+        $("#provisionResult").classList.remove("warn");
+        $("#provisionResult").textContent = [
+          result.created ? "신규 계정을 생성했습니다." : "계정을 갱신하고 임시 비밀번호를 재발급했습니다.",
+          "",
+          `이메일: ${user.email}`,
+          `상품: ${labelForProduct(user.product)}`,
+          `임시 비밀번호: ${password}`,
+          "",
+          "임시 비밀번호는 이 응답에서만 확인할 수 있습니다.",
+        ].join("\n");
+        $("#copyGuideBtn").disabled = false;
+        $("#sendGuideEmailBtn").disabled = false;
+      } else {
+        state.lastGuide = "";
+        state.lastGuideEmail = null;
+        $("#provisionResult").classList.remove("warn");
+        $("#provisionResult").textContent = [
+          "계정 권한을 갱신했습니다.",
+          "",
+          `이메일: ${user.email}`,
+          `상품: ${labelForProduct(user.product)}`,
+          "비밀번호는 변경하지 않았습니다.",
+        ].join("\n");
+        $("#copyGuideBtn").disabled = true;
+        $("#sendGuideEmailBtn").disabled = true;
+      }
+    }
+
+    function renderBatchResult(result) {
+      const rows = result.users || [];
+      const guideBlocks = [];
+      const summary = rows.map((row) => {
+        const user = row.user || {};
+        const password = row.temporary_password || "";
+        if (password) guideBlocks.push(guideText(user.email, password, user.product));
+        return `${user.email} | ${labelForProduct(user.product)} | ${password ? `임시 비밀번호: ${password}` : "비밀번호 변경 없음"}`;
+      });
+      state.lastBulkGuide = guideBlocks.join("\n\n---\n\n");
+      $("#bulkResult").classList.remove("warn");
+      $("#bulkResult").textContent = [
+        `${rows.length}명 계정을 처리했습니다.`,
+        "",
+        ...summary,
+        "",
+        "임시 비밀번호는 이 응답에서만 확인할 수 있습니다.",
+      ].join("\n");
+      $("#copyBulkGuideBtn").disabled = !state.lastBulkGuide;
+    }
+
+    async function loadCatalog() {
+      const catalog = await api("/api/admin/catalog");
+      state.products = catalog.products || [];
+      state.workers = catalog.workers || [];
+      state.jobKinds = catalog.job_kinds || [];
+      renderProductOptions();
+      renderWorkerCatalog();
+    }
+
+    async function loadUsers() {
+      const params = new URLSearchParams();
+      if ($("#searchInput").value.trim()) params.set("query", $("#searchInput").value.trim());
+      if ($("#productFilter").value) params.set("product", $("#productFilter").value);
+      if ($("#statusFilter").value) params.set("status", $("#statusFilter").value);
+      const data = await api(`/api/admin/users?${params.toString()}`);
+      state.users = data.users || [];
+      state.stats = data.stats || {};
+      renderStats();
+      renderUsers();
+    }
+
+    async function loadCafe24Orders() {
+      const params = new URLSearchParams();
+      params.set("status", $("#orderStatusFilter").value || "open");
+      const data = await api(`/api/admin/cafe24-orders?${params.toString()}`);
+      state.cafe24Orders = data.orders || [];
+      state.cafe24Stats = data.stats || {};
+      renderCafe24Orders();
+    }
+
+    async function updateCafe24OrderProduct(orderId, product) {
+      if (!orderId) return;
+      const order = state.cafe24Orders.find((item) => item.id === orderId);
+      const nextStatus = !product ? "needs_review" : product && order?.status === "needs_review" ? "pending" : order?.status || "pending";
+      const result = await api("/api/admin/cafe24-orders/update", {
+        method: "POST",
+        body: JSON.stringify({ order_id: orderId, product, status: nextStatus }),
+      });
+      const updated = result.order;
+      if (updated?.id) {
+        state.cafe24Orders = state.cafe24Orders.map((item) => item.id === updated.id ? updated : item);
+        renderCafe24Orders();
+      }
+      return updated;
+    }
+
+    async function retryCafe24Order(orderId, mode, button) {
+      if (!orderId) return;
+      const resend = mode === "resend";
+      if (resend && !confirm("설정 링크를 새로 만들고 안내 메일을 다시 발송할까요?")) return;
+      const original = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = resend ? "재발송 중" : "재시도 중";
+      }
+      try {
+        const result = await api("/api/admin/cafe24-orders/retry", {
+          method: "POST",
+          body: JSON.stringify({
+            order_ids: [orderId],
+            mode: resend ? "resend" : "retry",
+            resend_guide: resend,
+          }),
+        });
+        const rows = result.results || [];
+        const errors = result.errors || [];
+        rows.forEach((row) => {
+          if (row.order?.id) {
+            state.cafe24Orders = state.cafe24Orders.map((item) => item.id === row.order.id ? row.order : item);
+          }
+        });
+        $("#cafe24OrderResult").classList.toggle("warn", Boolean(errors.length));
+        $("#cafe24OrderResult").textContent = [
+          `${resend ? "재발송" : "자동 재시도"} 완료: ${rows.length}건`,
+          errors.length ? `실패: ${errors.length}건` : "",
+          ...errors.slice(0, 8).map((item) => `${item.email || item.order_id || "-"}: ${statusLabels[item.error] || item.error}${item.stage ? ` (${cafe24AutoStageText(item.stage)})` : ""}`),
+        ].filter(Boolean).join("\n");
+        renderCafe24Orders();
+        await loadUsers();
+        await loadCafe24Orders();
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = original;
+        }
+      }
+    }
+
+    async function provisionCafe24Orders() {
+      const ids = selectedCafe24OrderIds();
+      if (!ids.length) {
+        alert(statusLabels.empty_selection);
+        return;
+      }
+      const button = $("#provisionCafe24OrdersBtn");
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "생성 중";
+      try {
+        const result = await api("/api/admin/cafe24-orders/provision", {
+          method: "POST",
+          body: JSON.stringify({
+            order_ids: ids,
+            product_overrides: cafe24ProductOverrides(ids),
+            expires_at: $("#orderExpires").value || null,
+            reset_password: $("#orderResetPassword").checked,
+          }),
+        });
+        renderCafe24Guides(result.results || []);
+        await loadUsers();
+        await loadCafe24Orders();
+      } catch (error) {
+        $("#cafe24OrderResult").classList.add("warn");
+        $("#cafe24OrderResult").textContent = apiError(error);
+        $("#sendCafe24GuidesBtn").disabled = true;
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    }
+
+    async function sendCafe24Guides() {
+      if (!state.lastCafe24Guides.length) return;
+      const button = $("#sendCafe24GuidesBtn");
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "발송 중";
+      try {
+        const result = await api("/api/admin/cafe24-orders/send-guides", {
+          method: "POST",
+          body: JSON.stringify({ guides: state.lastCafe24Guides }),
+        });
+        const errors = result.errors || [];
+        $("#cafe24OrderResult").classList.toggle("warn", Boolean(errors.length));
+        $("#cafe24OrderResult").textContent = [
+          `발송 완료: ${result.sent_count || 0}건`,
+          errors.length ? `실패: ${errors.length}건` : "",
+          ...errors.slice(0, 8).map((item) => `${item.email || item.order_id || "-"}: ${statusLabels[item.error] || item.error}`),
+        ].filter(Boolean).join("\n");
+        if (!errors.length) {
+          state.lastCafe24Guides = [];
+          $("#cafe24GuideResult").textContent = "발송이 완료되었습니다.";
+          $("#copyCafe24GuidesBtn").disabled = true;
+        } else {
+          const failedOrderIds = new Set(errors.map((item) => item.order_id).filter(Boolean));
+          state.lastCafe24Guides = state.lastCafe24Guides.filter((guide) => failedOrderIds.has(guide.order_id));
+          $("#cafe24GuideResult").textContent = state.lastCafe24Guides.length
+            ? state.lastCafe24Guides.map((guide) => `[${guide.email}]\n${guide.text}`).join("\n\n---\n\n")
+            : "발송 실패 항목이 있지만 다시 보낼 안내문이 없습니다.";
+          $("#copyCafe24GuidesBtn").disabled = !state.lastCafe24Guides.length;
+        }
+        await loadUsers();
+        await loadCafe24Orders();
+      } catch (error) {
+        $("#cafe24OrderResult").classList.add("warn");
+        $("#cafe24OrderResult").textContent = apiError(error);
+      } finally {
+        button.textContent = original;
+        button.disabled = !state.lastCafe24Guides.length;
+      }
+    }
+
+    async function loadReports() {
+      const data = await api("/api/admin/reports");
+      state.reports = data.reports || [];
+      if (state.selectedReport?.report_id) {
+        state.selectedReport = state.reports.find((report) => report.report_id === state.selectedReport.report_id) || state.selectedReport;
+      }
+      renderReports();
+    }
+
+    async function loadReportDetail(reportId) {
+      if (!reportId) return;
+      openReportDrawer();
+      $("#reportDrawerTitle").textContent = "보고 상세";
+      $("#reportDrawerMeta").textContent = "불러오는 중입니다.";
+      $("#reportDetail").classList.add("warn");
+      $("#reportDetail").textContent = "오류 보고를 불러오는 중입니다.";
+      $("#reportSupportForm").classList.add("hidden");
+      const data = await api(`/api/admin/reports/${encodeURIComponent(reportId)}`);
+      renderReportDetail(data);
+    }
+
+    async function fetchReportDetailForCopy(report) {
+      if (!report?.report_id) return null;
+      if (state.selectedReportDetail?.summary?.report_id === report.report_id) {
+        return state.selectedReportDetail;
+      }
+      return api(`/api/admin/reports/${encodeURIComponent(report.report_id)}`);
+    }
+
+    async function copyReport(reportId, button) {
+      const report = state.reports.find((item) => item.report_id === reportId);
+      if (!report) return;
+      const detail = await fetchReportDetailForCopy(report);
+      await copyTextWithButton(reportRequestText([report], [detail], "선택 오류 보고"), button);
+    }
+
+    async function copyReports(reports, button, emptyMessage, scopeLabel) {
+      const rows = reports.filter(Boolean);
+      if (!rows.length) {
+        alert(emptyMessage || "복사할 오류 보고가 없습니다.");
+        return;
+      }
+      const original = button?.textContent;
+      if (button) {
+        button.disabled = true;
+        button.textContent = "작성 중";
+      }
+      try {
+        const details = await Promise.all(rows.map(fetchReportDetailForCopy));
+        await copyTextWithButton(reportRequestText(rows, details, scopeLabel), button);
+      } finally {
+        if (button && original) {
+          setTimeout(() => {
+            button.disabled = false;
+            button.textContent = original;
+          }, 1200);
+        }
+      }
+    }
+
+    function fillReportSupportForm(summary) {
+      const report = summary || {};
+      const status = String(report.status || "new");
+      const defaults = reportSupportDefaults(status);
+      $("#reportSupportForm").classList.toggle("hidden", !report.report_id);
+      $("#reportSupportStatus").value = ["new", "reviewing", "working", "waiting_user", "done"].includes(status) ? status : "new";
+      $("#reportSupportMessage").value = report.public_message || defaults.public_message;
+      $("#reportSupportNext").value = report.next_update_message || defaults.next_update_message;
+    }
+
+    async function updateReportStatus(reportId, status, options = {}) {
+      if (!reportId || !status) return;
+      const result = await api(`/api/admin/reports/${encodeURIComponent(reportId)}/status`, {
+        method: "POST",
+        body: JSON.stringify({
+          status,
+          public_message: options.public_message,
+          next_update_message: options.next_update_message,
+        }),
+      });
+      const updated = result.report;
+      if (updated?.report_id) {
+        state.reports = state.reports.map((report) => report.report_id === updated.report_id ? updated : report);
+        if (state.selectedReport?.report_id === updated.report_id) {
+          state.selectedReport = updated;
+          if (state.selectedReportDetail) {
+            state.selectedReportDetail = { ...state.selectedReportDetail, summary: updated };
+            $("#reportDrawerMeta").innerHTML = `
+              <div>${escapeHtml(updated.account_email || "-")} · ${escapeHtml(labelForProduct(updated.product) || updated.product || "-")}</div>
+              <div>${escapeHtml(formatTime(updated.stored_at))} · ${reportStatusPill(updated.status)}</div>
+            `;
+          }
+          fillReportSupportForm(updated);
+        }
+      }
+      renderReports();
+      return updated;
+    }
+
+    async function refreshAll() {
+      await loadCatalog();
+      await loadUsers();
+      await loadCafe24Orders();
+      await loadReports();
+      showAdmin();
+      const initialTab = window.location.hash === "#reports" ? "reports" : window.location.hash === "#orders" ? "orders" : state.activeTab;
+      setAdminTab(initialTab, { updateHash: false, refresh: false });
+    }
+
+    async function provision(payload) {
+      const result = await api("/api/admin/users/provision", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      renderProvisionResult(result);
+      await loadUsers();
+      return result;
+    }
+
+    async function provisionBatch(payload) {
+      const result = await api("/api/admin/users/provision-batch", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      renderBatchResult(result);
+      await loadUsers();
+      return result;
+    }
+
+    async function grantProductToActiveUsers(product, button = null) {
+      if (!product) return;
+      const label = labelForProduct(product);
+      if (!confirm(`활성 사용자 전체에게 ${label} 권한을 추가할까요? 기존 상품 권한은 유지됩니다.`)) return;
+      const previous = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "권한 추가 중...";
+      }
+      try {
+        const result = await api("/api/admin/users/grant-product", {
+          method: "POST",
+          body: JSON.stringify({ product, scope: "active" }),
+        });
+        $("#grantProductResult").classList.remove("warn");
+        $("#grantProductResult").textContent = `${label} 권한 추가 완료: 대상 ${result.scanned_count || 0}명 중 ${result.updated_count || 0}명 갱신`;
+        await loadUsers();
+      } catch (error) {
+        $("#grantProductResult").classList.add("warn");
+        $("#grantProductResult").textContent = apiError(error);
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = previous || "권한 추가";
+        }
+      }
+    }
+
+    async function updateUserProduct(email, product, button = null) {
+      if (!email || !product) return;
+      const original = button?.textContent || "";
+      try {
+        if (button) {
+          button.disabled = true;
+          button.textContent = "저장 중";
+        }
+        await provision({ email, product, source: "admin_product_change" });
+      } catch (error) {
+        alert(apiError(error));
+      } finally {
+        if (button && original) {
+          button.disabled = false;
+          button.textContent = original;
+        }
+      }
+    }
+
+    async function resetUserPassword(email, product) {
+      if (!email || !product) return;
+      await provision({ email, product, reset_password: true, source: "admin_password_reset" });
+    }
+
+    async function expireUser(email) {
+      if (!email) return;
+      if (!confirm(`${email} 계정을 만료시킵니다.\n현재 세션과 미사용 셋업 링크가 즉시 끊깁니다.`)) return;
+      const result = await api("/api/admin/users/expire", {
+        method: "POST",
+        body: JSON.stringify({ email, source: "admin_page" }),
+      });
+      alert(`계정을 만료했습니다.\n끊은 세션: ${result.revoked_sessions || 0}\n폐기한 셋업 링크: ${result.revoked_setup_tokens || 0}`);
+      await loadUsers();
+    }
+
+    async function deleteUser(email) {
+      if (!email) return;
+      const typed = prompt(`계정을 삭제하려면 이메일을 그대로 입력하세요.\n삭제 대상: ${email}`, "");
+      if (typed !== email) return;
+      const result = await api("/api/admin/users/delete", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      alert(`계정을 삭제했습니다.\n삭제 작업: ${result.removed_jobs || 0}\n끊은 세션: ${result.revoked_sessions || 0}\n폐기한 셋업 링크: ${result.revoked_setup_tokens || 0}`);
+      await loadUsers();
+    }
+
+    async function sendGuideEmail() {
+      if (!state.lastGuideEmail) return;
+      const button = $("#sendGuideEmailBtn");
+      const resultBox = $("#mailResult");
+      button.disabled = true;
+      button.textContent = "발송 중...";
+      resultBox.classList.add("hidden");
+      try {
+        const result = await api("/api/admin/users/send-guide", {
+          method: "POST",
+          body: JSON.stringify(state.lastGuideEmail),
+        });
+        resultBox.classList.remove("hidden", "warn");
+        resultBox.textContent = `메일 발송 완료: ${state.lastGuideEmail.email}\n발송 시각: ${formatTime(result.sent_at)}\n제공자: ${result.provider || "-"}`;
+        await loadUsers();
+      } catch (error) {
+        resultBox.classList.remove("hidden");
+        resultBox.classList.add("warn");
+        resultBox.textContent = apiError(error);
+      } finally {
+        button.textContent = "Gmail로 안내문 보내기";
+        button.disabled = !state.lastGuideEmail;
+      }
+    }
+
+    $("#loginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("#loginError").classList.add("hidden");
+      try {
+        await api("/api/admin/login", {
+          method: "POST",
+          body: JSON.stringify({ password: $("#adminPassword").value }),
+        });
+        $("#adminPassword").value = "";
+        await refreshAll();
+      } catch (error) {
+        $("#loginError").textContent = apiError(error);
+        $("#loginError").classList.remove("hidden");
+      }
+    });
+
+    $("#provisionForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        email: $("#buyerEmail").value.trim(),
+        name: $("#buyerName").value.trim(),
+        product: $("#buyerProduct").value,
+        expires_at: $("#buyerExpires").value || null,
+        admin_note: $("#buyerNote").value.trim(),
+        reset_password: $("#buyerResetPassword").checked,
+        source: "admin_page",
+      };
+      try {
+        await provision(payload);
+        $("#buyerEmail").value = "";
+        $("#buyerName").value = "";
+        $("#buyerNote").value = "";
+        $("#buyerResetPassword").checked = false;
+      } catch (error) {
+        $("#provisionResult").classList.add("warn");
+        $("#provisionResult").textContent = apiError(error);
+      }
+    });
+
+    $("#bulkForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const buyers = parseBulkBuyers($("#bulkBuyers").value, $("#bulkProduct").value);
+      const payload = {
+        product: $("#bulkProduct").value,
+        expires_at: $("#bulkExpires").value || null,
+        reset_password: $("#bulkResetPassword").checked,
+        source: "admin_batch_page",
+        buyers,
+      };
+      try {
+        await provisionBatch(payload);
+        $("#bulkResetPassword").checked = false;
+      } catch (error) {
+        $("#bulkResult").classList.add("warn");
+        $("#bulkResult").textContent = apiError(error);
+        $("#copyBulkGuideBtn").disabled = true;
+      }
+    });
+
+    $("#copyGuideBtn").addEventListener("click", async () => {
+      if (!state.lastGuide) return;
+      await navigator.clipboard.writeText(state.lastGuide);
+      $("#copyGuideBtn").textContent = "복사 완료";
+      setTimeout(() => { $("#copyGuideBtn").textContent = "안내문 복사"; }, 1200);
+    });
+
+    $("#sendGuideEmailBtn").addEventListener("click", () => sendGuideEmail());
+
+    $("#copyBulkGuideBtn").addEventListener("click", async () => {
+      if (!state.lastBulkGuide) return;
+      await navigator.clipboard.writeText(state.lastBulkGuide);
+      $("#copyBulkGuideBtn").textContent = "복사 완료";
+      setTimeout(() => { $("#copyBulkGuideBtn").textContent = "전체 안내문 복사"; }, 1200);
+    });
+
+    $("#clearBulkBtn").addEventListener("click", () => {
+      $("#bulkBuyers").value = "";
+      $("#bulkResult").classList.add("warn");
+      $("#bulkResult").textContent = "아직 대량 생성 결과가 없습니다.";
+      state.lastBulkGuide = "";
+      $("#copyBulkGuideBtn").disabled = true;
+    });
+
+    $("#openUserAppBtn").addEventListener("click", () => window.open("/app", "_blank", "noopener"));
+    $("#grantSongiAllBtn").addEventListener("click", (event) => grantProductToActiveUsers("songi", event.currentTarget));
+    $("#refreshBtn").addEventListener("click", () => refreshAll().catch((error) => alert(apiError(error))));
+    $("#refreshReportsBtn").addEventListener("click", () => loadReports().catch((error) => alert(apiError(error))));
+    $("#refreshCafe24OrdersBtn").addEventListener("click", () => loadCafe24Orders().catch((error) => alert(apiError(error))));
+    $("#orderStatusFilter").addEventListener("change", () => loadCafe24Orders().catch((error) => alert(apiError(error))));
+    $("#selectAllOrders").addEventListener("change", (event) => {
+      $$("[data-order-select]:not(:disabled)").forEach((checkbox) => { checkbox.checked = event.currentTarget.checked; });
+    });
+    $("#provisionCafe24OrdersBtn").addEventListener("click", () => provisionCafe24Orders());
+    $("#sendCafe24GuidesBtn").addEventListener("click", () => sendCafe24Guides());
+    $("#copyCafe24GuidesBtn").addEventListener("click", (event) => {
+      const text = state.lastCafe24Guides.map((guide) => `[${guide.email}]\n${guide.text}`).join("\n\n---\n\n");
+      copyTextWithButton(text, event.currentTarget).catch((error) => alert(apiError(error)));
+    });
+    $("#copyOpenReportsBtn").addEventListener("click", (event) => {
+      copyReports(state.reports.filter((report) => !isReportDone(report)), event.currentTarget, "미완료 오류 보고가 없습니다.", "미완료 오류 보고").catch((error) => alert(apiError(error)));
+    });
+    $("#copyAllReportsBtn").addEventListener("click", (event) => {
+      copyReports(state.reports, event.currentTarget, "복사할 오류 보고가 없습니다.", "전체 오류 보고").catch((error) => alert(apiError(error)));
+    });
+    $("#copyReportDetailBtn").addEventListener("click", (event) => {
+      const detail = state.selectedReportDetail;
+      const report = state.selectedReport;
+      copyTextWithButton(reportRequestText([report], [detail], "선택 오류 보고"), event.currentTarget).catch((error) => alert(apiError(error)));
+    });
+    $("#toggleReportDoneBtn").addEventListener("click", () => {
+      const report = state.selectedReport;
+      if (!report?.report_id) return;
+      updateReportStatus(report.report_id, isReportDone(report) ? "new" : "done").catch((error) => alert(apiError(error)));
+    });
+    $("#reportSupportStatus").addEventListener("change", () => {
+      const defaults = reportSupportDefaults($("#reportSupportStatus").value);
+      $("#reportSupportMessage").value = defaults.public_message;
+      $("#reportSupportNext").value = defaults.next_update_message;
+    });
+    $("#reportSupportForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const report = state.selectedReport;
+      if (!report?.report_id) return;
+      const button = $("#saveReportSupportBtn");
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "저장 중";
+      try {
+        await updateReportStatus(report.report_id, $("#reportSupportStatus").value, {
+          public_message: $("#reportSupportMessage").value,
+          next_update_message: $("#reportSupportNext").value,
+        });
+        button.textContent = "저장 완료";
+        setTimeout(() => { button.textContent = original; }, 1200);
+      } catch (error) {
+        alert(apiError(error));
+        button.textContent = original;
+      } finally {
+        setTimeout(() => { button.disabled = false; }, 1200);
+      }
+    });
+    $("#closeReportDrawerBtn").addEventListener("click", closeReportDrawer);
+    $("#reportDrawerBackdrop").addEventListener("click", closeReportDrawer);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeReportDrawer();
+    });
+    $("#filterBtn").addEventListener("click", () => loadUsers().catch((error) => alert(apiError(error))));
+    $$("[data-admin-tab]").forEach((button) => {
+      button.addEventListener("click", () => setAdminTab(button.dataset.adminTab));
+    });
+    $("#searchInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") loadUsers().catch((error) => alert(apiError(error)));
+    });
+    $("#logoutBtn").addEventListener("click", async () => {
+      await api("/api/admin/logout", { method: "POST", body: "{}" }).catch(() => {});
+      showLogin();
+    });
+
+    refreshAll().catch(() => showLogin());
+  </script>
+</body>
+</html>

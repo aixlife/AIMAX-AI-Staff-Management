@@ -1,0 +1,301 @@
+{
+  "variant": "optimized",
+  "ok": true,
+  "returncode": 0,
+  "duration_seconds": 19.16,
+  "dist_app": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX",
+  "size_bytes": 82468864,
+  "size": "78.6MB",
+  "internal_top": [
+    {
+      "name": "selenium",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/selenium",
+      "kind": "dir",
+      "size_bytes": 12759040,
+      "size": "12.2MB"
+    },
+    {
+      "name": "PIL",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/PIL",
+      "kind": "dir",
+      "size_bytes": 11886592,
+      "size": "11.3MB"
+    },
+    {
+      "name": "cryptography",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/cryptography",
+      "kind": "dir",
+      "size_bytes": 11194368,
+      "size": "10.7MB"
+    },
+    {
+      "name": "python3.13",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/python3.13",
+      "kind": "dir",
+      "size_bytes": 6451200,
+      "size": "6.2MB"
+    },
+    {
+      "name": "Python.framework",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/Python.framework",
+      "kind": "dir",
+      "size_bytes": 5021696,
+      "size": "4.8MB"
+    },
+    {
+      "name": "libcrypto.3.dylib",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/libcrypto.3.dylib",
+      "kind": "file",
+      "size_bytes": 4849664,
+      "size": "4.6MB"
+    },
+    {
+      "name": "pydantic_core",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/pydantic_core",
+      "kind": "dir",
+      "size_bytes": 4165632,
+      "size": "4.0MB"
+    },
+    {
+      "name": "_tcl_data",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/_tcl_data",
+      "kind": "dir",
+      "size_bytes": 2674688,
+      "size": "2.6MB"
+    },
+    {
+      "name": "libtcl9.0.dylib",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/libtcl9.0.dylib",
+      "kind": "file",
+      "size_bytes": 1708032,
+      "size": "1.6MB"
+    },
+    {
+      "name": "libtcl9tk9.0.dylib",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/libtcl9tk9.0.dylib",
+      "kind": "file",
+      "size_bytes": 1667072,
+      "size": "1.6MB"
+    },
+    {
+      "name": "base_library.zip",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/base_library.zip",
+      "kind": "file",
+      "size_bytes": 1404928,
+      "size": "1.3MB"
+    },
+    {
+      "name": "_tk_data",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/_tk_data",
+      "kind": "dir",
+      "size_bytes": 1110016,
+      "size": "1.1MB"
+    },
+    {
+      "name": "ttkbootstrap",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/ttkbootstrap",
+      "kind": "dir",
+      "size_bytes": 950272,
+      "size": "928.0KB"
+    },
+    {
+      "name": "libssl.3.dylib",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/libssl.3.dylib",
+      "kind": "file",
+      "size_bytes": 884736,
+      "size": "864.0KB"
+    },
+    {
+      "name": "jiter",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/jiter",
+      "kind": "dir",
+      "size_bytes": 729088,
+      "size": "712.0KB"
+    },
+    {
+      "name": "yaml",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/yaml",
+      "kind": "dir",
+      "size_bytes": 397312,
+      "size": "388.0KB"
+    },
+    {
+      "name": "81d243bd2c585b0f4821__mypyc.cpython-313-darwin.so",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/81d243bd2c585b0f4821__mypyc.cpython-313-darwin.so",
+      "kind": "file",
+      "size_bytes": 393216,
+      "size": "384.0KB"
+    },
+    {
+      "name": "tcl9",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/tcl9",
+      "kind": "dir",
+      "size_bytes": 376832,
+      "size": "368.0KB"
+    },
+    {
+      "name": "certifi",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/certifi",
+      "kind": "dir",
+      "size_bytes": 241664,
+      "size": "236.0KB"
+    },
+    {
+      "name": "_cffi_backend.cpython-313-darwin.so",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/_cffi_backend.cpython-313-darwin.so",
+      "kind": "file",
+      "size_bytes": 233472,
+      "size": "228.0KB"
+    },
+    {
+      "name": "libmpdec.4.dylib",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/libmpdec.4.dylib",
+      "kind": "file",
+      "size_bytes": 188416,
+      "size": "184.0KB"
+    },
+    {
+      "name": "charset_normalizer",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/charset_normalizer",
+      "kind": "dir",
+      "size_bytes": 139264,
+      "size": "136.0KB"
+    },
+    {
+      "name": "pydantic-2.13.3.dist-info",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/pydantic-2.13.3.dist-info",
+      "kind": "dir",
+      "size_bytes": 139264,
+      "size": "136.0KB"
+    },
+    {
+      "name": "libtommath.1.dylib",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/libtommath.1.dylib",
+      "kind": "file",
+      "size_bytes": 131072,
+      "size": "128.0KB"
+    },
+    {
+      "name": "_tkinter.cpython-313-darwin.so",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/_tkinter.cpython-313-darwin.so",
+      "kind": "file",
+      "size_bytes": 122880,
+      "size": "120.0KB"
+    },
+    {
+      "name": "assets",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/assets",
+      "kind": "dir",
+      "size_bytes": 114688,
+      "size": "112.0KB"
+    },
+    {
+      "name": "cryptography-47.0.0.dist-info",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/cryptography-47.0.0.dist-info",
+      "kind": "dir",
+      "size_bytes": 110592,
+      "size": "108.0KB"
+    },
+    {
+      "name": "websockets",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/websockets",
+      "kind": "dir",
+      "size_bytes": 69632,
+      "size": "68.0KB"
+    },
+    {
+      "name": "keyring-25.7.0.dist-info",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/keyring-25.7.0.dist-info",
+      "kind": "dir",
+      "size_bytes": 53248,
+      "size": "52.0KB"
+    },
+    {
+      "name": "setuptools",
+      "path": "/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist/AIMAX/_internal/setuptools",
+      "kind": "dir",
+      "size_bytes": 40960,
+      "size": "40.0KB"
+    }
+  ],
+  "output_tail": "e_safe_import_module'\n5694 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!\n5914 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks/pre_safe_import_module'\n5914 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!\n6105 INFO: Processing standard module hook 'hook-charset_normalizer.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n6165 INFO: Processing standard module hook 'hook-cryptography.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n6421 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.\n6613 INFO: Processing standard module hook 'hook-keyring.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks'\n6857 INFO: Processing standard module hook 'hook-selenium.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n7085 INFO: Processing standard module hook 'hook-websockets.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n7459 INFO: Processing standard module hook 'hook-pydantic.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n7755 INFO: Processing standard module hook 'hook-zoneinfo.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n8409 INFO: Processing standard module hook 'hook-pycparser.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n8950 INFO: Processing standard module hook 'hook-anyio.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n9443 INFO: Processing standard module hook 'hook-difflib.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks'\n11390 INFO: Processing standard module hook 'hook-openpyxl.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/stdhooks'\n11828 INFO: Analyzing hidden import 'content.gemini_text'\n11829 INFO: Analyzing hidden import 'PIL._tkinter_finder'\n11830 INFO: Analyzing hidden import 'keyring.backends.macOS'\n11833 INFO: Analyzing hidden import 'google.genai._local_tokenizer_loader'\n11836 INFO: Analyzing hidden import 'google.genai._test_api_client'\n11838 INFO: Analyzing hidden import 'google.genai.local_tokenizer'\n11843 INFO: Analyzing hidden import 'anthropic.lib.bedrock._stream'\n11844 INFO: Analyzing hidden import 'anthropic.lib.tools.mcp'\n11848 INFO: Analyzing hidden import 'anthropic.tools'\n11849 INFO: Analyzing hidden import 'undetected_chromedriver.devtool'\n11853 INFO: Analyzing hidden import 'ttkbootstrap.__main__'\n11862 INFO: Analyzing hidden import 'ttkbootstrap.dialogs.dialogs'\n11863 INFO: Analyzing hidden import 'ttkbootstrap.scrolled'\n11863 INFO: Analyzing hidden import 'ttkbootstrap.tableview'\n11891 INFO: Analyzing hidden import 'ttkbootstrap.toast'\n11892 INFO: Analyzing hidden import 'ttkbootstrap.tooltip'\n11892 INFO: Processing module hooks (post-graph stage)...\n11968 WARNING: Hidden import \"pycparser.lextab\" not found!\n11968 WARNING: Hidden import \"pycparser.yacctab\" not found!\n12105 INFO: Processing standard module hook 'hook-_tkinter.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks'\n12118 INFO: Processing pre-safe-import-module hook 'hook-gi.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks/pre_safe_import_module'\n12257 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks'\n12313 INFO: Performing binary vs. data reclassification (433 entries)\n12356 INFO: Looking for ctypes DLLs\n12365 WARNING: Library msvcrt required via ctypes not found\n12377 INFO: Analyzing run-time hooks ...\n12377 INFO: Including custom run-time hook '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/hooks/macos_tk_fix.py'\n12383 INFO: Including run-time hook 'pyi_rth_inspect.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'\n12402 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'\n12403 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/_pyinstaller_hooks_contrib/rthooks'\n12403 INFO: Including run-time hook 'pyi_rth_setuptools.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'\n12404 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'\n12405 INFO: Including run-time hook 'pyi_rth__tkinter.py' from '/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/hooks/rthooks'\n12423 INFO: Creating base_library.zip...\n12432 INFO: Looking for dynamic libraries\n12533 INFO: Warnings written to /private/tmp/aimax-pyinstaller-collect-experiment/optimized/build/AIMAX/warn-AIMAX.txt\n12578 INFO: Graph cross-reference written to /private/tmp/aimax-pyinstaller-collect-experiment/optimized/build/AIMAX/xref-AIMAX.html\n12633 INFO: checking PYZ\n12633 INFO: Building PYZ because PYZ-00.toc is non existent\n12633 INFO: Building PYZ (ZlibArchive) /private/tmp/aimax-pyinstaller-collect-experiment/optimized/build/AIMAX/PYZ-00.pyz\n13271 INFO: Building PYZ (ZlibArchive) /private/tmp/aimax-pyinstaller-collect-experiment/optimized/build/AIMAX/PYZ-00.pyz completed successfully.\n13287 INFO: EXE target arch: arm64\n13287 INFO: Code signing identity: None\n13288 INFO: checking PKG\n13288 INFO: Building PKG because PKG-00.toc is non existent\n13288 INFO: Building PKG (CArchive) AIMAX.pkg\n13353 INFO: Building PKG (CArchive) AIMAX.pkg completed successfully.\n13354 INFO: Bootloader /Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/lib/python3.13/site-packages/PyInstaller/bootloader/Darwin-64bit/runw\n13354 INFO: checking EXE\n13354 INFO: Building EXE because EXE-00.toc is non existent\n13354 INFO: Building EXE from EXE-00.toc\n13354 INFO: Copying bootloader EXE to /private/tmp/aimax-pyinstaller-collect-experiment/optimized/build/AIMAX/AIMAX\n13356 INFO: Converting EXE to target arch (arm64)\n13369 INFO: Removing signature(s) from EXE\n13382 INFO: Modifying Mach-O image UUID(s) in EXE\n13387 INFO: Appending PKG archive to EXE\n13390 INFO: Fixing EXE headers for code signing\n13392 INFO: Re-signing the EXE\n13411 INFO: Building EXE from EXE-00.toc completed successfully.\n13414 INFO: checking COLLECT\n13414 INFO: Building COLLECT because COLLECT-00.toc is non existent\n13414 INFO: Building COLLECT COLLECT-00.toc\n16353 INFO: Building COLLECT COLLECT-00.toc completed successfully.\n16359 INFO: checking BUNDLE\n16359 INFO: Building BUNDLE because BUNDLE-00.toc is non existent\n16359 INFO: Building BUNDLE BUNDLE-00.toc\n18862 INFO: Signing the BUNDLE...\n19012 INFO: Building BUNDLE BUNDLE-00.toc completed successfully.\n19016 INFO: Build complete! The results are available in: /private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist\n",
+  "generated_at": "2026-05-28T10:07:19+09:00",
+  "command": [
+    "/Users/aixlife/Projects/AIMAX-AI-Staff-Management/venv/bin/python",
+    "-m",
+    "PyInstaller",
+    "--onedir",
+    "--name=AIMAX",
+    "--distpath=/private/tmp/aimax-pyinstaller-collect-experiment/optimized/dist",
+    "--workpath=/private/tmp/aimax-pyinstaller-collect-experiment/optimized/build",
+    "--specpath=/private/tmp/aimax-pyinstaller-collect-experiment/optimized/spec",
+    "--clean",
+    "--noconfirm",
+    "--noconsole",
+    "--hidden-import=auth",
+    "--hidden-import=aimax_compliance",
+    "--hidden-import=browser",
+    "--hidden-import=bulk",
+    "--hidden-import=content",
+    "--hidden-import=content.neighbor_message_ai",
+    "--hidden-import=content.ai_text",
+    "--hidden-import=content.gemini_text",
+    "--hidden-import=content.gemini_image",
+    "--hidden-import=content.openai_image",
+    "--hidden-import=content.prompts",
+    "--hidden-import=content.markdown_parser",
+    "--hidden-import=engagement",
+    "--hidden-import=engagement.neighbor_quota",
+    "--hidden-import=engagement.auto_neighbor",
+    "--hidden-import=local_agent",
+    "--hidden-import=local_agent.runtime",
+    "--hidden-import=local_agent.single_instance",
+    "--hidden-import=diagnostics",
+    "--hidden-import=diagnostics.error_reporter",
+    "--hidden-import=diagnostics.redaction",
+    "--hidden-import=diagnostics.system_info",
+    "--hidden-import=posting",
+    "--hidden-import=scraper",
+    "--hidden-import=scraper.follower_scraper",
+    "--hidden-import=utils",
+    "--hidden-import=web_agent",
+    "--hidden-import=web_agent.client",
+    "--hidden-import=ttkbootstrap",
+    "--hidden-import=ttkbootstrap.themes",
+    "--hidden-import=selenium_stealth",
+    "--hidden-import=google.genai",
+    "--hidden-import=google.genai.types",
+    "--hidden-import=anthropic",
+    "--hidden-import=PIL._tkinter_finder",
+    "--hidden-import=keyring.backends",
+    "--hidden-import=undetected_chromedriver",
+    "--hidden-import=undetected_chromedriver.patcher",
+    "--hidden-import=setuptools",
+    "--hidden-import=setuptools._distutils",
+    "--hidden-import=packaging",
+    "--hidden-import=keyring.backends.macOS",
+    "--runtime-hook",
+    "/Users/aixlife/Projects/AIMAX-AI-Staff-Management/hooks/macos_tk_fix.py",
+    "--collect-submodules=content",
+    "--collect-submodules=diagnostics",
+    "--collect-submodules=engagement",
+    "--collect-submodules=local_agent",
+    "--collect-submodules=scraper",
+    "--collect-submodules=web_agent",
+    "--collect-submodules=google.genai",
+    "--collect-submodules=anthropic",
+    "--collect-submodules=undetected_chromedriver",
+    "--exclude-module=IPython",
+    "--exclude-module=jupyter",
+    "--exclude-module=matplotlib",
+    "--exclude-module=numpy",
+    "--exclude-module=pandas",
+    "--exclude-module=pytest",
+    "--exclude-module=tkinter.test",
+    "--exclude-module=unittest",
+    "--collect-all=ttkbootstrap",
+    "--add-data=/Users/aixlife/Projects/AIMAX-AI-Staff-Management/config.yaml:.",
+    "--add-data=/Users/aixlife/Projects/AIMAX-AI-Staff-Management/assets:assets",
+    "/Users/aixlife/Projects/AIMAX-AI-Staff-Management/app.py"
+  ]
+}

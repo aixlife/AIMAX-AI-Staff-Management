@@ -1,0 +1,222 @@
+{
+  "artifact": "aimax-windows-v107-installer-ai-diagnostics-evidence-20260518.json",
+  "generated_at": "2026-05-18T18:13:41.8874915+09:00",
+  "work_scope": "Windows v1.0.7 installer guard, localhost:8669 timeout diagnostics, AI provider diagnostics, rebuild 3 installers",
+  "source_basis": {
+    "base": "v1.0.6 local work folder: .tmp\\aimax-unified-launcher-guard-v106-work\\source",
+    "local_work_source": ".tmp\\aimax-v107-installer-ai-diagnostics-work\\source",
+    "shared_bridge_input": "20_Deploy-To-Windows\\AIMAX-20260518-windows-v107-installer-ai-diagnostics",
+    "built_inside_syncthing": false
+  },
+  "version": {
+    "app_version": "v1.0.7",
+    "inno_app_version": "1.0.7",
+    "frozen_probe_versions": [
+      {
+        "flavor": "bundle",
+        "version": "v1.0.7",
+        "mode": "all",
+        "ai_text_import_smoke_ok": true
+      },
+      {
+        "flavor": "yeri",
+        "version": "v1.0.7",
+        "mode": "engage_write",
+        "ai_text_import_smoke_ok": true
+      },
+      {
+        "flavor": "hyunju",
+        "version": "v1.0.7",
+        "mode": "find",
+        "ai_text_import_smoke_ok": true
+      }
+    ]
+  },
+  "changes": [
+    "Inno installer now attempts AIMAX-only graceful process close before replacing files and stops with a Korean process-close prompt if AIMAX is still running, avoiding vague deletefile code 5 handoff.",
+    "localhost:8669 120-second timeout paths now create structured local_executor details: endpoint, stage, timeout_seconds, health_check, restart_attempted, final_status, action, sanitized error.",
+    "content_generation failures now propagate ai_error diagnostics for OpenAI, Gemini, and Claude: provider, model, HTTP status when available, sanitized error/type/code, request_id/response_id, usage/cost when available.",
+    "APP_VERSION and Inno AppVersion bumped to v1.0.7 / 1.0.7."
+  ],
+  "changed_source_files": [
+    "aimax_compliance.py",
+    "app.py",
+    "content/ai_text.py",
+    "packaging/windows/aimax_installer.iss",
+    "scripts/v107_diagnostics_smoke.py",
+    "split_version/aimax_compliance.py",
+    "split_version/app.py"
+  ],
+  "ai_diagnostics_smoke": {
+    "ok": true,
+    "paid_api_or_publish_calls": "not_run",
+    "cases": [
+      {
+        "case": "openai_http_400_invalid_model",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "http_status": 400,
+        "code": "model_not_found",
+        "request_id": "req-openai-400",
+        "passed": true
+      },
+      {
+        "case": "openai_http_429_quota",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "http_status": 429,
+        "code": "insufficient_quota",
+        "request_id": "req-openai-429",
+        "hard_stop": true,
+        "passed": true
+      },
+      {
+        "case": "openai_empty_output",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
+        "http_status": 200,
+        "code": "empty_output",
+        "request_id": "req-openai-empty",
+        "response_id": "resp-empty",
+        "usage": {
+          "input_tokens": 11,
+          "total_tokens": 11
+        },
+        "passed": true
+      },
+      {
+        "case": "gemini_exception_path",
+        "provider": "gemini",
+        "model": "gemini-2.5-pro",
+        "hard_stop": true,
+        "passed": true
+      },
+      {
+        "case": "claude_exception_path",
+        "provider": "claude",
+        "model": "claude-sonnet-4-5",
+        "http_status": 500,
+        "code": "server_error",
+        "request_id": "req-claude-500",
+        "passed": true
+      },
+      {
+        "case": "localhost_8669_timeout_result",
+        "endpoint": "localhost:8669",
+        "stage": "naver_login",
+        "timeout_seconds": 120,
+        "health_check": "failed_timeout",
+        "restart_attempted": false,
+        "final_status": "failed",
+        "passed": true
+      }
+    ]
+  },
+  "validation": [
+    {
+      "name": "py_compile",
+      "status": "passed",
+      "command": "python -m py_compile content\\ai_text.py app.py split_version\\app.py aimax_compliance.py split_version\\aimax_compliance.py scripts\\v107_diagnostics_smoke.py scripts\\headless_agent_polling_smoke.py"
+    },
+    {
+      "name": "v107_diagnostics_smoke",
+      "status": "passed",
+      "command": "python scripts\\v107_diagnostics_smoke.py",
+      "note": "stub/mock only; no paid AI calls and no Naver publish"
+    },
+    {
+      "name": "headless_agent_polling_smoke",
+      "status": "passed",
+      "command": "python scripts\\headless_agent_polling_smoke.py",
+      "note": "stub worker flows"
+    },
+    {
+      "name": "go_test_launcher_package",
+      "status": "passed",
+      "command": "go test .\\packaging\\windows",
+      "note": "[no test files]"
+    },
+    {
+      "name": "pyinstaller_bundle",
+      "status": "passed",
+      "command": "python build.py"
+    },
+    {
+      "name": "pyinstaller_split_all",
+      "status": "passed",
+      "command": "python split_version\\build_split.py all"
+    },
+    {
+      "name": "inno_bundle_installer",
+      "status": "passed",
+      "output": "dist\\upload\\aimax-bundle-windows.exe"
+    },
+    {
+      "name": "inno_yeri_installer",
+      "status": "passed",
+      "output": "dist\\upload\\aimax-yeri-windows.exe"
+    },
+    {
+      "name": "inno_hyunju_installer",
+      "status": "passed",
+      "output": "dist\\upload\\aimax-hyunju-windows.exe"
+    },
+    {
+      "name": "frozen_diagnostics_probe_bundle",
+      "status": "passed",
+      "version": "v1.0.7",
+      "mode": "all"
+    },
+    {
+      "name": "frozen_diagnostics_probe_yeri",
+      "status": "passed",
+      "version": "v1.0.7",
+      "mode": "engage_write"
+    },
+    {
+      "name": "frozen_diagnostics_probe_hyunju",
+      "status": "passed",
+      "version": "v1.0.7",
+      "mode": "find"
+    },
+    {
+      "name": "source_delta_patch_apply_check",
+      "status": "passed",
+      "command": "git apply --check windows-source-delta-20260518-v106-to-v107-installer-ai-diagnostics.patch"
+    }
+  ],
+  "runtime_tools": {
+    "python": "3.14.3 via .venv-build",
+    "pyinstaller": "6.20.0",
+    "go": "go1.25.0 windows/amd64",
+    "inno_setup": "6.7.1 local ISCC.exe"
+  },
+  "safety": {
+    "paid_ai_generation": "not_run",
+    "real_naver_publish": "not_run",
+    "secret_material_in_shared_outputs": "not_included",
+    "diagnostics_redaction": "provider/model/request ids retained where useful; tokens/passwords/headers omitted or sanitized"
+  },
+  "artifacts": [
+    {
+      "name": "aimax-bundle-windows.exe",
+      "bytes": 50571656,
+      "sha256": "ac32de957a85f09b64558fd4a16f9e25df0c06ab3511a531656fc0cf8b7c3340"
+    },
+    {
+      "name": "aimax-yeri-windows.exe",
+      "bytes": 50577781,
+      "sha256": "88090d9672a59e85cc443f44768eb4f2658e5b2101f744b08e66195ad5e5205e"
+    },
+    {
+      "name": "aimax-hyunju-windows.exe",
+      "bytes": 50578128,
+      "sha256": "cae05072a96aacb158a2dcba2c60da052195160aa64590ff6e24510fa9d0bfd2"
+    },
+    {
+      "name": "windows-source-delta-20260518-v106-to-v107-installer-ai-diagnostics.patch",
+      "bytes": 59364,
+      "sha256": "45248c78ee2ec105ef8bd31fce7f31b32aeb15cb8389bc8ee0b3f74028959359"
+    }
+  ]
+}

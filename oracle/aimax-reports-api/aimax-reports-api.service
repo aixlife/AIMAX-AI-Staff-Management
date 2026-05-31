@@ -1,0 +1,15 @@
+[Unit]
+Description=AIMAX Reports API
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/aimax-reports-api
+EnvironmentFile=/home/ubuntu/aimax-reports-api/.env
+ExecStart=/usr/bin/node /home/ubuntu/aimax-reports-api/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+

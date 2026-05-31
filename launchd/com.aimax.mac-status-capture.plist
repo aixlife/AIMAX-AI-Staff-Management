@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aimax.mac-status-capture</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/aixlife/.hermes-venv/bin/python3</string>
+    <string>/Users/aixlife/Projects/AIMAX-AI-Staff-Management/scripts/aimax_mac_status_capture_local.py</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/aixlife/Projects/AIMAX-AI-Staff-Management</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AIMAX_STATUS_CAPTURE_SINCE</key>
+    <string>2026-05-23</string>
+    <key>AIMAX_STATUS_CAPTURE_MARKER_DAYS</key>
+    <string>2</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/aixlife/Library/Logs/aimax-mac-status-capture.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/aixlife/Library/Logs/aimax-mac-status-capture.err.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

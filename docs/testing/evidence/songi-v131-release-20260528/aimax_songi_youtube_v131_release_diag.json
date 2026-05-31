@@ -1,0 +1,426 @@
+{
+  "generated_at": "2026-05-28T16:54:34+09:00",
+  "workspace": "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck",
+  "handoff": {
+    "path": "C:\\Users\\likim\\Documents\\Shared-Bridge\\20_Deploy-To-Windows\\2026-05-28-songi-youtube-discovery-v131-release\\WINDOWS_HANDOFF_20260528_songi_youtube_v131_release.md",
+    "source_zip_local_copy": "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\_handoff_work\\2026-05-28-songi-youtube-v131-release\\aimax_songi_youtube_v131_release_source_20260528.zip",
+    "source_zip_sha256": "2D8BDFC3294154B92612C78173CAE7D40D35984F405022231D106CFD0662B1D4",
+    "source_zip_sha256_expected": "2D8BDFC3294154B92612C78173CAE7D40D35984F405022231D106CFD0662B1D4",
+    "source_zip_sha256_matches": true
+  },
+  "version_updates": {
+    "aimax_compliance_app_version": true,
+    "split_aimax_compliance_app_version": true,
+    "inno_app_version": true,
+    "go_launcher_version": true
+  },
+  "required_checks": {
+    "py_compile": "pass",
+    "node_check_server_js": "pass",
+    "node_check_smoke_songi_discovery": "pass",
+    "gofmt_launcher": "pass",
+    "python_build_py": "pass",
+    "node_smoke_songi_discovery": "pass: SONGI_DISCOVERY_SMOKE_OK"
+  },
+  "artifacts": {
+    "installer_path": "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\dist\\upload\\aimax-bundle-windows.exe",
+    "installer_sha256": "264418C71AC013DA8B8496737BFC315CCB410A87946009B8371BA05D933FC0EB",
+    "installer_size_bytes": 129526161,
+    "installer_signature_status": "NotSigned",
+    "dist_zip_path": "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\dist\\AIMAX-windows.zip",
+    "dist_zip_sha256": "AD5950AF7FA6893E9AD207DCBEE48B65BBA9B70D9EA362CEBA0BEAF4964BAE40",
+    "aimax_exe_sha256": "7E4E7DC46B4680554448BB56795BB93F5ECC0387FAE04CE256B646926327F4C9",
+    "launcher_exe_sha256": "8DEE5DEC92CE2D083C2B843F715CF94A67CF0F0465CF198FB6A3499AB880A49B"
+  },
+  "install_verification": {
+    "visible_wizard_evidence": {
+      "ok": true,
+      "installer": "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\dist\\upload\\aimax-bundle-windows.exe",
+      "command": "\"C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\dist\\upload\\aimax-bundle-windows.exe\" /LOG=\"C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-v131-release\\installer-v131.log\"",
+      "pid": 69076,
+      "elapsed_seconds": 114.335,
+      "first_window_seconds": 3.382,
+      "log_created": true,
+      "log_created_seconds": 2.55,
+      "exit_code": 0,
+      "process_remaining": false,
+      "setup_processes_after": null,
+      "button_presses": 5,
+      "initial_visible_text": "추가 작업 선택 | 어떤 추가 작업을 수행하시겠습니까? | AIMAX을(를) 설치하는 동안 수행할 추가 작업을 선택하고 다음을 클릭합니다. | 추가 아이콘: | 바탕화면 바로가기 만들기 | 다음(N) | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기",
+      "completion_visible_text": "AIMAX 설치 마법사 완료 | 컴퓨터에 AIMAX 설치를 완료했습니다. 설치된 바로 가기를 선택하여 응용 프로그램을 시작할 수 있습니다.\r\n\r\n설치를 종료하려면 마침을 클릭하세요. | AIMAX 실행기 연결 상태 열기 | 마침(F) | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기",
+      "screenshots": [
+        "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-v131-release\\installer-visible\\r3t_v129_installer_initial.png",
+        "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-v131-release\\installer-visible\\r3t_v129_installer_completed.png",
+        "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-v131-release\\installer-visible\\r3t_v129_installer_completed.png",
+        "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-v131-release\\installer-visible\\r3t_v129_installer_completed.png",
+        "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-v131-release\\installer-visible\\r3t_v129_installer_completed.png"
+      ],
+      "snapshots": [
+        {
+          "seconds": 3.382,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "추가 작업 선택 | 어떤 추가 작업을 수행하시겠습니까? | AIMAX을(를) 설치하는 동안 수행할 추가 작업을 선택하고 다음을 클릭합니다. | 추가 아이콘: | 바탕화면 바로가기 만들기 | 다음(N) | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 4.387,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "추가 작업 선택 | 어떤 추가 작업을 수행하시겠습니까? | AIMAX을(를) 설치하는 동안 수행할 추가 작업을 선택하고 다음을 클릭합니다. | 추가 아이콘: | 바탕화면 바로가기 만들기 | 다음(N) | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 7.666,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 준비 완료 | AIMAX을(를) 컴퓨터에 설치할 준비가 되었습니다. | 설치를 클릭하여 설치를 계속합니다. | 뒤로(B) | 설치(I) | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 12.253,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\AIMAX.exe | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 13.209,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 종료 | 예(Y) | 아니요(N) | 설치가 완료되지 않았습니다. 지금 종료하면 프로그램이 설치되지 않습니다.\r\n\r\n설치를 다시 실행하여 설치를 완료할 수 있습니다.\r\n\r\n설치를 종료하시겠습니까? | 시스템 메뉴 모음 | System | 닫기 | 설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\AIMAX.exe | 취소 | 설치 - AIMAX 버전 1.0.31 | 최소화 | 최대화"
+        },
+        {
+          "seconds": 46.617,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Programs\\AIMAX\\oracle\\aimax-reports-api\\vendor\\media-tools\\win32\\x64\\ffmpeg.exe | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 52.789,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Programs\\AIMAX\\oracle\\aimax-reports-api\\vendor\\media-tools\\win32\\x64\\ffprobe.exe | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 58.695,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Programs\\AIMAX\\oracle\\aimax-reports-api\\vendor\\media-tools\\win32\\x64\\yt-dlp.exe | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 60.142,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\pyexpat.pyd | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 61.754,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\anthropic\\_legacy_response.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 63.214,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\AppData\\Local\\Programs\\AIMAX\\_internal\\anthropic\\types\\beta_invalid_request_error.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 64.514,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Local\\Programs\\AIMAX\\_internal\\anthropic\\types\\thinking_config_disabled_param.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 65.69,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\AppData\\Local\\Programs\\AIMAX\\_internal\\anthropic\\types\\beta\\beta_content_block.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 67.083,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\AIMAX\\_internal\\anthropic\\types\\beta\\beta_text_editor_code_execution_tool_result_error.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 68.366,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\_internal\\anthropic\\types\\beta\\memory_stores\\beta_managed_agents_memory_view.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 69.668,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\anthropic\\types\\beta\\vaults\\__init_ | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 70.735,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\cryptography\\hazmat\\bindings\\_rust.pyd | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 72.155,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\google\\genai\\tests\\caches\\test_update.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 73.533,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Local\\Programs\\AIMAX\\_internal\\google\\genai\\tests\\shared\\models\\test_embed.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 74.895,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Local\\Programs\\AIMAX\\_internal\\google\\genai\\_interactions\\types\\image_config.p | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 76.649,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Local\\Programs\\AIMAX\\_internal\\numpy\\_core\\_multiarray_umath.cp314-win_amd64.pyd | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 77.601,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\AIMAX\\_internal\\numpy.libs\\libscipy_openblas64_-63c857e738469261263c764a36be9436.dll | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 79.207,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\PIL\\_avif.cp314-win_amd64.pyd | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 80.711,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\selenium\\webdriver\\chrome\\__init | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 82.192,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Programs\\AIMAX\\_internal\\selenium\\webdriver\\common\\devtools\\v145\\service_worker.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 83.68,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Programs\\AIMAX\\_internal\\selenium\\webdriver\\common\\devtools\\v147\\indexed_db.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 84.747,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\...\\Local\\Programs\\AIMAX\\_internal\\selenium\\webdriver\\common\\macos\\selenium-manager | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 86.026,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\selenium_stealth\\navigator_vendor.py | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 87.358,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\tzdata\\zoneinfo\\Iceland | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 88.671,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\tzdata\\zoneinfo\\America\\Guyana | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 89.898,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\tzdata\\zoneinfo\\Asia\\Ashkhaba | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 91.123,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\tzdata\\zoneinfo\\Etc\\GMT | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 92.414,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\tzdata\\zoneinfo\\Pacific\\Noumea | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 93.703,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\_tcl_data\\encoding\\iso2022.enc | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 94.94,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\_tcl_data\\msgs\\mr.msg | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 96.154,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\_tcl_data\\tzdata\\Africa\\Tripoli | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 97.386,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\_tcl_data\\tzdata\\America\\Thule | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 98.645,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\_tcl_data\\tzdata\\Asia\\Tehran | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 99.845,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\_tcl_data\\tzdata\\Europe\\Paris | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 101.101,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 파일을 추출하는 중... | C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\_internal\\_tk_data\\msgbox.tcl | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 102.163,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "설치 중 | 컴퓨터에 AIMAX을(를) 설치하는 동안 잠시 기다려 주세요. | 바로 가기를 만드는 중... | C:\\Users\\likim\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\AIMAX.lnk | 취소 | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        },
+        {
+          "seconds": 102.837,
+          "title": "설치 - AIMAX 버전 1.0.31",
+          "text": "AIMAX 설치 마법사 완료 | 컴퓨터에 AIMAX 설치를 완료했습니다. 설치된 바로 가기를 선택하여 응용 프로그램을 시작할 수 있습니다.\r\n\r\n설치를 종료하려면 마침을 클릭하세요. | AIMAX 실행기 연결 상태 열기 | 마침(F) | 설치 - AIMAX 버전 1.0.31 | 시스템 메뉴 모음 | System | 최소화 | 최대화 | 닫기"
+        }
+      ]
+    },
+    "uninstall_entry": {
+      "display_name": "AIMAX 버전 1.0.31",
+      "display_version": "1.0.31",
+      "install_location": "C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\",
+      "display_icon": "C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\AIMAX.exe",
+      "uninstall_string": "\"C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\unins000.exe\""
+    },
+    "protocol": {
+      "default": "URL:AIMAX Local Agent",
+      "url_protocol_present": true,
+      "command": "\"C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\aimax-agent-launcher.exe\" \"%1\""
+    },
+    "launcher_connect_evidence": {
+      "ok": true,
+      "launcher": "C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\aimax-agent-launcher.exe",
+      "command": "\"C:\\Users\\likim\\AppData\\Local\\Programs\\AIMAX\\aimax-agent-launcher.exe\" aimax://agent/connect",
+      "launcher_pid": 63424,
+      "elapsed_seconds": 4.19,
+      "visible_window": {
+        "handle": 5572836,
+        "pid": 63496,
+        "visible": true,
+        "title": "AIMAX - 개인 - Microsoft? Edge"
+      },
+      "all_aimax_windows_seen": [
+        {
+          "handle": 5572836,
+          "pid": 63496,
+          "visible": true,
+          "title": "AIMAX - 개인 - Microsoft? Edge"
+        },
+        {
+          "handle": 33752138,
+          "pid": 63424,
+          "visible": true,
+          "title": "AIMAX 실행 중"
+        },
+        {
+          "handle": 723270,
+          "pid": 68780,
+          "visible": true,
+          "title": "AIMAX 실행기 종료"
+        },
+        {
+          "handle": 1508338,
+          "pid": 43184,
+          "visible": true,
+          "title": "AIMAX - Chrome"
+        }
+      ],
+      "diagnostics_tail": [
+        "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"launcher_started\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true}",
+        "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"core_detected\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+        "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"request_written\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+        "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"core_started\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"pid=68316\"}",
+        "{\"timestamp\":\"2026-05-28T16:43:16+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"launcher_handoff\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"core still running after startup window\"}",
+        "{\"timestamp\":\"2026-05-28T16:49:31+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"launcher_started\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true}",
+        "{\"timestamp\":\"2026-05-28T16:49:31+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"core_detected\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+        "{\"timestamp\":\"2026-05-28T16:49:32+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"request_written\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+        "{\"timestamp\":\"2026-05-28T16:49:32+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"core_started\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"pid=68604\"}",
+        "{\"timestamp\":\"2026-05-28T16:49:33+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"core_exited_quickly\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"exit_code=0\"}",
+        "{\"timestamp\":\"2026-05-28T16:50:26+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"launcher_started\",\"kind\":\"connect\",\"pid\":63424,\"protocol_url_present\":true}",
+        "{\"timestamp\":\"2026-05-28T16:50:26+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"mutex_already_running\",\"kind\":\"connect\",\"pid\":63424,\"protocol_url_present\":true,\"message\":\"request written for existing runner\"}"
+      ],
+      "aimax_processes": null
+    },
+    "diagnostics_path": "C:\\Users\\likim\\AppData\\Roaming\\AIMAX\\launcher_diagnostics\\launcher_20260528.jsonl",
+    "diagnostics_tail": [
+      "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"launcher_started\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true}",
+      "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"core_detected\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+      "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"request_written\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+      "{\"timestamp\":\"2026-05-28T16:43:08+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"core_started\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"pid=68316\"}",
+      "{\"timestamp\":\"2026-05-28T16:43:16+09:00\",\"launcher_version\":\"v1.0.30\",\"stage\":\"launcher_handoff\",\"kind\":\"connect\",\"pid\":67060,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"core still running after startup window\"}",
+      "{\"timestamp\":\"2026-05-28T16:49:31+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"launcher_started\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true}",
+      "{\"timestamp\":\"2026-05-28T16:49:31+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"core_detected\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+      "{\"timestamp\":\"2026-05-28T16:49:32+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"request_written\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\"}",
+      "{\"timestamp\":\"2026-05-28T16:49:32+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"core_started\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"pid=68604\"}",
+      "{\"timestamp\":\"2026-05-28T16:49:33+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"core_exited_quickly\",\"kind\":\"connect\",\"pid\":68780,\"protocol_url_present\":true,\"core_exe_name\":\"AIMAX.exe\",\"message\":\"exit_code=0\"}",
+      "{\"timestamp\":\"2026-05-28T16:50:26+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"launcher_started\",\"kind\":\"connect\",\"pid\":63424,\"protocol_url_present\":true}",
+      "{\"timestamp\":\"2026-05-28T16:50:26+09:00\",\"launcher_version\":\"v1.0.31\",\"stage\":\"mutex_already_running\",\"kind\":\"connect\",\"pid\":63424,\"protocol_url_present\":true,\"message\":\"request written for existing runner\"}"
+    ]
+  },
+  "ui_packaging_hashes": {
+    "app_html_source_sha256": "CBC97EC008D28D98C65B91E459082F80859E124CBF215F9422BD3B5087FBC1CB",
+    "app_html_dist_sha256": "CBC97EC008D28D98C65B91E459082F80859E124CBF215F9422BD3B5087FBC1CB",
+    "app_html_installed_sha256": "CBC97EC008D28D98C65B91E459082F80859E124CBF215F9422BD3B5087FBC1CB",
+    "app_html_source_dist_installed_match": true,
+    "server_js_source_sha256": "CF6F822EE06F50E01CAE81A6BF3A7EF6260DE9B6EE678C7C4945B46821AE63B9",
+    "server_js_dist_sha256": "CF6F822EE06F50E01CAE81A6BF3A7EF6260DE9B6EE678C7C4945B46821AE63B9",
+    "server_js_installed_sha256": "CF6F822EE06F50E01CAE81A6BF3A7EF6260DE9B6EE678C7C4945B46821AE63B9",
+    "server_js_source_dist_installed_match": true
+  },
+  "songi_ui": {
+    "ok": true,
+    "baseUrl": "http://127.0.0.1:19741",
+    "projectId": "7276e2e1-3b4f-4ce6-b860-24c58086a899",
+    "runId": "79623ffb-2f6d-4801-973f-a1dbba6d4fce",
+    "apiCandidateCount": 8,
+    "commandType": "songi_youtube_discovery",
+    "sourceMode": "local_ytdlp",
+    "noPaidEnvBlank": true,
+    "keywordChecks": {
+      "pageTitle": "작업",
+      "songiTitle": "송이 자료조사",
+      "titleTop": 432,
+      "tabsTop": 488,
+      "tabsImmediatelyAfterTitle": true,
+      "activeTaskTab": "키워드로 찾기",
+      "labelsAboveTabs": [],
+      "discoveryVisible": true,
+      "linkVisible": false,
+      "discoveryHasProfileCategoryTopic": false,
+      "discoveryTextSample": "YouTube 키워드 벤치마킹 키워드 기반 후보를 모아 조회 속도와 참여 반응을 비교합니다. 로컬 검색 준비됨 저장할 프로젝트 AI 직원 벤치마킹 UI + 새 프로젝트 만들기 찾고 싶은 키워드 최근성 기준 최근 7일 최근 30일 최근 90일 후보 수 8개 12개 20개 후보 찾기 이 PC 실행기의 yt-dlp로 YouTube 공개 검색 메타데이터만 가져옵니다. 영상 다운로드와 YouTube API quota 사용은 없습니다. 8개 후보 총 조회수 37.3만 최고 시간당 491 분석 추가 0개 점수순 후보 99 로컬 공개 검색 AI 직원 벤치마킹 후보 8 - 긴 제목 줄바꿈 확인용 텍스트와 Windows UI 카드 안정성 점검 AIMAX Smoke Channel · 05. 28. 오후 04:51 조회수 8.1만 시간당 491 참여율 3.5% 시간당 조회수 약 491 · 참여율 약 3.50% · 최근 3일 내 게시 분석에 추가 원문 열기 후보 92 로컬 공개 검색 AI 직원 벤치마킹 후보 7 - 긴 제목 줄바꿈 확인용 텍스트와 Windows UI 카드 안정성 점검 CONNECT AI LAB Long Channel Name · 05. 28. 오후 04:51 조회수 7.1만 시간당 438 참여율 3.3% 시간당 조회수 약 438 · 참여율 약 3.30% · 최근 3일 내 게시 분석에 추가 원문 열기 후보 84 로컬 공개 검색 AI 직원 벤치마킹 후보 6 - 긴 제목 줄바꿈 확인용 텍스트와 Windows UI 카드 안정성 점검 AIMAX Smoke Channel · 05. 28. 오후 04:51 조회수 6.1만 시간당",
+      "statusText": "로컬 검색 준비됨",
+      "summaryText": "8개 후보 총 조회수 37.3만 최고 시간당 491 분석 추가 0개",
+      "cardCount": 8,
+      "gridColumns": "329.328px 329.328px 329.344px",
+      "gridColumnCount": 3,
+      "overflow": []
+    },
+    "linkChecks": {
+      "activeTaskTab": "링크로 분석",
+      "linkVisible": true,
+      "discoveryVisible": false,
+      "hasProjectProfileCategoryTopicLink": true,
+      "linkTextSample": "링크 분석 워크플로우 기존처럼 특정 영상이나 웹 링크를 직접 넣어 송이가 브리프를 만듭니다. 프로젝트 AI 직원 벤치마킹 UI + 새 프로젝트 만들기 프로젝트 삭제 내 인스타그램 프로필 링크 프로필 분석 프로필 없음 영상 카테고리 만들고 싶은 주제 프로필 링크가 없으면 영상 카테고리와 주제를 입력해야 맞춤 기획 문서를 만들 수 있습니다. 벤치마킹하고 싶은 링크 예상 원가: 링크를 넣으면 계산합니다. 기본 AI 분석 모델: Gemini 2.5 Flash Instagram/TikTok은 SNS 수집 1개 결과 기준으로 계산합니다. 송이에게 지시 브리프 복사"
+    },
+    "screenshots": {
+      "keywordShotPath": "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-ui-cdp-20260528\\songi-keyword-board-windows.png",
+      "linkShotPath": "C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\.tmp\\songi-ui-cdp-20260528\\songi-link-workflow-windows.png"
+    },
+    "serverStdout": "aimax-reports-api listening on http://127.0.0.1:19741",
+    "serverStderr": "",
+    "chromeStderrTail": "\nDevTools listening on ws://127.0.0.1:19742/devtools/browser/ff3acdeb-c8d2-4196-adc0-5b8d0ea8e8ae\n[24852:69500:0528/165142.930:ERROR:google_apis\\gcm\\engine\\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT\n"
+  },
+  "yt_dlp_metadata_lookup": {
+    "local_media_tools_path": "C:\\Users\\likim\\AppData\\Local\\AIMAX\\media-tools\\win32\\x64\\yt-dlp.exe",
+    "version": "2026.03.17",
+    "command": "yt-dlp --skip-download --flat-playlist --no-warnings --dump-json --playlist-end 3 \"ytsearch3:AI 직원\"",
+    "result_count": 3,
+    "ids": [
+      "jpd7gYchCbQ",
+      "qDKHEXZ8p6w",
+      "5ondE0i0lwM"
+    ],
+    "download_performed": false
+  },
+  "forbidden_actions": {
+    "apify": "not used",
+    "paid_ai_generation": "not used",
+    "youtube_data_api": "not used",
+    "naver_publish_schedule_draft_edit_save_credentials": "not used",
+    "oracle_deploy_or_version_api_change": "not used",
+    "secrets_in_shared_artifacts": "redacted/sanitized outputs only"
+  }
+}
