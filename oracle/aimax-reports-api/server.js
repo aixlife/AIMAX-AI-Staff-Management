@@ -1834,12 +1834,13 @@ function adminProductCatalog() {
 
 function adminUserRow(user, agent) {
   const entitlement = user.entitlements || {};
+  const product = primaryProductForEntitlements(entitlement);
   const emailEvents = Array.isArray(user.email_events) ? user.email_events : [];
   return {
     ...publicUser(user),
     can_execute: canExecute(user),
-    product: entitlement.product || "",
-    product_label: adminProductCatalog().find((item) => item.product === entitlement.product)?.label || entitlement.product || "",
+    product,
+    product_label: productLabel(product),
     entitlement_status: entitlement.status || "",
     yunmi_access: canAccessYunmi(user),
     expires_at: entitlement.expires_at || null,
@@ -7714,6 +7715,17 @@ function orderedProducts(products) {
   return ["yeri", "hyunju", "songi", "blog_team", "bundle"].filter((product) => products.has(product));
 }
 
+function primaryProductForEntitlements(entitlements, fallbackProduct = "") {
+  const products = entitlementProductsForMerge(entitlements || {});
+  if (products.has("bundle")) return "bundle";
+  if (products.has("blog_team")) return "blog_team";
+  const current = String(entitlements?.product || "").trim();
+  if (PRODUCTS.has(current) && products.has(current)) return current;
+  const fallback = String(fallbackProduct || "").trim();
+  if (PRODUCTS.has(fallback) && products.has(fallback)) return fallback;
+  return orderedProducts(products)[0] || "";
+}
+
 function grantProductToUser(user, product, now, source = "admin_product_grant") {
   if (!user || !PRODUCTS.has(product)) return false;
   const entitlements = user.entitlements || {};
@@ -7721,7 +7733,7 @@ function grantProductToUser(user, product, now, source = "admin_product_grant") 
   const before = orderedProducts(products).join("|");
   productList(product).forEach((item) => products.add(item));
   const nextProducts = orderedProducts(products);
-  const primaryProduct = PRODUCTS.has(entitlements.product || "") ? entitlements.product : product;
+  const primaryProduct = primaryProductForEntitlements({ ...entitlements, products: nextProducts }, product);
   user.entitlements = {
     ...entitlements,
     product: primaryProduct,
@@ -10812,6 +10824,9 @@ module.exports = {
     JOB_KINDS,
     WORKERS,
     adminProductCatalog,
+    adminUserRow,
+    grantProductToUser,
+    primaryProductForEntitlements,
     publicJobKind,
     publicWorker,
     workerCatalogContractIssues,
