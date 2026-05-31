@@ -696,6 +696,7 @@
             <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 직원 권한만 추가합니다.</p>
           </div>
           <div class="actions">
+            <button id="grantBundleAllBtn" class="btn primary" type="button">활성 사용자에게 전체 통합 권한 추가</button>
             <button id="grantSongiAllBtn" class="btn primary" type="button">활성 사용자에게 송이 권한 추가</button>
           </div>
         </div>
@@ -2316,6 +2317,7 @@
     });
 
     $("#openUserAppBtn").addEventListener("click", () => window.open("/app", "_blank", "noopener"));
+    $("#grantBundleAllBtn").addEventListener("click", (event) => grantProductToActiveUsers("bundle", event.currentTarget));
     $("#grantSongiAllBtn").addEventListener("click", (event) => grantProductToActiveUsers("songi", event.currentTarget));
     $("#refreshBtn").addEventListener("click", () => refreshAll().catch((error) => alert(apiError(error))));
     $("#refreshReportsBtn").addEventListener("click", () => loadReports().catch((error) => alert(apiError(error))));
