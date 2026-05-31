@@ -382,6 +382,9 @@ class AimaxWebAgentClient:
             payload={"value": value},
         )
 
+    def get_user_secrets(self) -> dict[str, Any]:
+        return self._request("GET", "/api/user/secrets")
+
     def update_job(self, job_id: str, status: str, log: str, level: str = "info", result: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = {
             "job_id": job_id,
