@@ -14,10 +14,12 @@ DRY_RUN=0
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/deploy_oracle.sh [web|bundle-installers|installers|all] [--dry-run]
+  scripts/deploy_oracle.sh [web|macos-bundle|windows-bundle|bundle-installers|installers|all] [--dry-run]
 
 Modes:
   web                Deploy server.js and static web/admin HTML
+  macos-bundle       Deploy the unified macOS bundle installer only
+  windows-bundle     Deploy the unified Windows bundle installer only
   bundle-installers  Deploy unified macOS/Windows bundle installers only
   installers         Deploy legacy macOS/Windows bundle + individual installer files
   all                Deploy server/static files and all legacy installer files
@@ -33,7 +35,7 @@ USAGE
 
 for arg in "$@"; do
   case "$arg" in
-    web|bundle-installers|installers|all)
+    web|macos-bundle|windows-bundle|bundle-installers|installers|all)
       MODE="$arg"
       ;;
     --dry-run)
@@ -123,8 +125,11 @@ if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
     "avatar placeholder"
 fi
 
-if [[ "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
+if [[ "$MODE" == "macos-bundle" || "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-macos.dmg" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-macos.dmg" "macOS bundle"
+fi
+
+if [[ "$MODE" == "windows-bundle" || "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-windows.exe" "Windows bundle"
 fi
 
