@@ -5333,7 +5333,7 @@
           if (fallback.available) return "";
           if (fallback.reason) return fallback.reason;
           if (modelReady !== "ready" && webSecretReady(provider)) {
-            return "웹 AI/API 키는 저장되어 있지만 예리 서버 글 생성에 필요한 Gemini API Key가 아직 없습니다. 설정 탭의 AI/API 연결에서 Gemini 키를 저장해주세요.";
+            return "웹 AI/API 키는 저장되어 있습니다. 실행기를 최신 버전으로 업데이트하면 자동으로 인식됩니다.";
           }
         }
         if (kind === "hyunju_find" && r.naver_account?.status === "ready" && webNeighborMessages().length) {
