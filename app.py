@@ -979,6 +979,10 @@ class NaverBlogApp:
         self.web_agent_active_job_stage = ""
         self.web_agent_active_job_latest_stage_error = ""
         self._shown_update_popup_keys = set()
+        # 웹앱 명령 재진입/중복 처리 방지: open_settings 가 done 처리되기 전 폴링마다
+        # 재전달되어 설정창이 중첩되며 무한 로딩되는 문제를 막는다.
+        self._local_settings_dialog_open = False
+        self._handled_command_ids = set()
 
         # 패널 관리
         self.panels = {}
@@ -2556,6 +2560,19 @@ class NaverBlogApp:
         command_id = command.get("id") or ""
         command_type = command.get("type") or ""
 
+        # open_settings 는 모달 설정창을 띄우므로, done 처리 전 폴링으로 재전달되면
+        # 설정창이 중첩되며 무한 로딩된다. (1) 같은 command_id 재처리 차단,
+        # (2) 설정창이 이미 열려 있으면 추가로 띄우지 않는다.
+        if command_type == "open_settings":
+            if command_id and command_id in self._handled_command_ids:
+                return
+            if self._local_settings_dialog_open:
+                return
+            if command_id:
+                self._handled_command_ids.add(command_id)
+                if len(self._handled_command_ids) > 200:
+                    self._handled_command_ids = set(list(self._handled_command_ids)[-100:])
+
         def _send_command_update(status, log, result=None):
             if not client or not command_id:
                 return
@@ -2595,7 +2612,11 @@ class NaverBlogApp:
                 return
             if command_type != "open_settings":
                 raise ValueError(f"지원하지 않는 웹앱 명령입니다: {command_type}")
-            saved = self._open_web_requested_local_settings_dialog()
+            self._local_settings_dialog_open = True
+            try:
+                saved = self._open_web_requested_local_settings_dialog()
+            finally:
+                self._local_settings_dialog_open = False
             self.root.lift()
             self.root.focus_force()
             if saved:

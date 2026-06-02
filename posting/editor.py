@@ -141,6 +141,97 @@ def _click_new_post_from_draft_popup(driver):
     return False
 
 
+# 작성중 글 팝업의 취소 버튼 셀렉터 후보 (사용자 제공 셀렉터 우선)
+_DRAFT_CANCEL_SELECTORS = [
+    "button.se-popup-button.se-popup-button-cancel",  # 사용자 카피 셀렉터 (가장 구체적)
+    ".se-popup-alert-confirm .se-popup-button-cancel",
+    POPUP_CANCEL,
+    ".se-popup-button-cancel",
+    ".se-popup-button-container button.se-popup-button-cancel",
+    ".se-popup-footer button:first-child",  # 팝업 하단 첫 번째 버튼
+    "button[data-action='cancel']",
+    "button[class*='cancel']",
+]
+
+
+def _draft_popup_visible(driver):
+    """작성중 글 팝업(또는 확인 팝업)이 화면에 떠 있는지 JS로 판정."""
+    try:
+        return bool(driver.execute_script("""
+            function visible(el) {
+                if (!el) return false;
+                const rect = el.getBoundingClientRect();
+                const style = window.getComputedStyle(el);
+                return rect.width > 0 && rect.height > 0 &&
+                       style.visibility !== 'hidden' && style.display !== 'none';
+            }
+            // 작성중 글 팝업은 확인형 알럿(.se-popup-alert-confirm)이다.
+            // generic .se-popup 까지 잡으면 '임시저장' 버튼 텍스트로 오탐하므로 알럿류로 한정한다.
+            const popup = document.querySelector('.se-popup-alert-confirm, .se-popup-alert');
+            if (!popup || !visible(popup)) return false;
+            const text = (popup.innerText || popup.textContent || '').replace(/\\s+/g, ' ');
+            return /작성\\s*중|임시\\s*저장|이어\\s*쓰기/.test(text);
+        """))
+    except Exception:
+        return False
+
+
+def _click_draft_cancel(driver):
+    """취소 버튼을 Selenium 클릭 + JS 클릭 양쪽으로 시도. 하나라도 누르면 True."""
+    for sel in _DRAFT_CANCEL_SELECTORS:
+        try:
+            btn = driver.find_element(By.CSS_SELECTOR, sel)
+        except Exception:
+            continue
+        # is_displayed() 가 일부 환경에서 false negative 라 보임 여부와 무관하게 클릭 시도
+        try:
+            btn.click()
+            logger.info(f"작성중 팝업 취소 클릭 (selenium, {sel})")
+            return True
+        except Exception:
+            pass
+        try:
+            driver.execute_script("arguments[0].click();", btn)
+            logger.info(f"작성중 팝업 취소 클릭 (js, {sel})")
+            return True
+        except Exception:
+            continue
+    return False
+
+
+def _dismiss_draft_popup(driver, timeout=8):
+    """'작성중인 글이 있습니다' 팝업을 최대 timeout 초 동안 폴링하며 취소(새 글) 처리.
+
+    팝업은 에디터 로드 직후 약간 늦게 뜰 수 있어 단발성 클릭으로는 놓친다.
+    팝업이 사라질 때까지(또는 timeout) 반복 시도한다.
+    """
+    deadline = time.time() + timeout
+    handled = False
+    while time.time() < deadline:
+        if not _draft_popup_visible(driver):
+            if handled:
+                logger.info("작성중 글 팝업 닫힘 확인")
+                return True
+            # 아직 안 떴을 수 있으니 잠깐 더 기다린다
+            time.sleep(0.3)
+            continue
+        # 팝업이 보인다 → 취소 버튼(사용자 제공 셀렉터) 우선, 실패 시 라벨 기반 폴백.
+        # 라벨 기반(_click_new_post...)은 팝업 밖 엉뚱한 버튼을 눌러 True를 반환하고도
+        # 팝업을 못 닫는 경우가 있어 신뢰성 있는 취소 셀렉터를 먼저 시도한다.
+        if _click_draft_cancel(driver) or _click_new_post_from_draft_popup(driver):
+            handled = True
+        time.sleep(0.4)
+        # 클릭 후 사라졌는지 즉시 확인
+        if not _draft_popup_visible(driver):
+            logger.info("작성중 글 팝업 닫힘 확인")
+            return True
+    if handled:
+        # timeout 안에 사라짐 확인은 못 했지만 클릭은 했음 — 마지막으로 한 번 더 확인
+        return not _draft_popup_visible(driver)
+    logger.info("작성중 글 팝업 미감지 — 건너뜀")
+    return False
+
+
 def ensure_editor_context(driver, timeout=20):
     """에디터가 mainFrame 안이든 기본 문서든 실제 입력 가능한 컨텍스트로 이동."""
     driver.switch_to.default_content()
@@ -252,24 +343,10 @@ def navigate_to_editor(driver, naver_id=None, naver_pw=None):
             raise
     wait_short()
 
-    # "작성중인 글이 있습니다" 팝업 → 새 글 작성 선택
-    if not _click_new_post_from_draft_popup(driver):
-        for cancel_sel in [
-            POPUP_CANCEL,
-            ".se-popup-button-cancel",
-            "button[class*='cancel']",
-            ".se-popup-footer button:first-child",  # 팝업 하단 첫 번째 버튼
-            "button[data-action='cancel']",
-        ]:
-            try:
-                btn = driver.find_element(By.CSS_SELECTOR, cancel_sel)
-                if btn.is_displayed():
-                    btn.click()
-                    logger.info(f"작성중 팝업 취소 클릭 ({cancel_sel})")
-                    wait_short()
-                    break
-            except Exception:
-                continue
+    # "작성중인 글이 있습니다" 팝업 → 새 글 작성(취소) 선택.
+    # 팝업이 늦게 뜨는 경우가 있어 최대 8초 폴링하며 사라질 때까지 재시도한다.
+    _dismiss_draft_popup(driver, timeout=8)
+    wait_short()
 
     # 도움말/기타 팝업 닫기
     try:
