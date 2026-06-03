@@ -3411,10 +3411,18 @@ class NaverBlogApp:
         info = version_info if isinstance(version_info, dict) else {}
         if _is_update_popup_dismissed(info):
             return
+        # 재진입 가드 + 메인 root 필수. root 없을 때 블로킹 tk.Tk()/mainloop() 분기를 타면
+        # 메인루프가 막혀 "창 다시 뜨며 무한 로딩"이 된다(구버전 버그). root 없으면 로그만.
+        if getattr(self, "_update_popup_open", False):
+            return
+        parent = getattr(self, "root", None)
+        if parent is None or not parent.winfo_exists():
+            self._log("[업데이트] 새 실행기 버전이 있습니다. 웹앱 업데이트 탭에서 새 파일을 설치해주세요.")
+            return
+        self._update_popup_open = True
         try:
-            parent = getattr(self, "root", None)
-            owns_root = parent is None
-            popup = tk.Tk() if owns_root else tk.Toplevel(parent)
+            owns_root = False
+            popup = tk.Toplevel(parent)
             required = bool(info.get("update_required"))
             current_version = str(info.get("current_version") or aimax.APP_VERSION)
             latest_version = str(info.get("latest_version") or "-")
@@ -3495,6 +3503,7 @@ class NaverBlogApp:
             def _close():
                 if dont_show_var.get():
                     dismiss_update_popup(info)
+                self._update_popup_open = False
                 popup.destroy()
 
             btn = tk.Button(
@@ -3519,11 +3528,10 @@ class NaverBlogApp:
             except Exception:
                 pass
             popup.focus_force()
-            if owns_root:
-                popup.mainloop()
-            else:
-                popup.update()
+            # 메인스레드 _poll_queue 에서 호출되므로 블로킹 금지(mainloop X). non-blocking update 만.
+            popup.update()
         except Exception as e:
+            self._update_popup_open = False
             self._log(f"[업데이트 팝업 오류] {e}")
             self._log("[업데이트] 새 실행기 버전이 있습니다. 웹앱에서 업데이트 파일을 내려받아 설치해주세요.")
 
