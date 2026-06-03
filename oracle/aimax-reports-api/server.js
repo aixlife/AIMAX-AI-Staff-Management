@@ -360,13 +360,13 @@ const WORKERS = {
     avatarImage: "/assets/avatar_jieun.jpg",
     repoUrl: "https://github.com/aixlife/aimax-viseo",
     releaseUrl: "",
-    setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-Setup-0.1.4.exe`,
+    setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-Setup-0.1.5.exe`,
     portableDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-portable.exe`,
     downloadLabel: "Setup exe 다운로드",
     supportedPlatforms: ["windows"],
-    version: "0.1.4",
-    shortDescription: "화면 캡처, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
-    capabilities: ["화면 캡처", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+    version: "0.1.5",
+    shortDescription: "화면 캡처, 캡처 이미지 모자이크, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
+    capabilities: ["화면 캡처", "캡처 이미지 모자이크", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
   },
 };
 const JOB_KINDS = {
@@ -415,6 +415,7 @@ const DOWNLOAD_CATALOG = {
 };
 const PUBLIC_DOWNLOAD_FILES = new Set([
   "AIMAX-Office-Manager-Setup-0.1.4.exe",
+  "AIMAX-Office-Manager-Setup-0.1.5.exe",
   "AIMAX-Office-Manager-portable.exe",
   "Pencil-Setup-1.0.0.exe",
   "Pencil-portable.exe",
@@ -1426,13 +1427,14 @@ function yeriSelectedModel(payload = {}) {
 
 function normalizeYeriGeminiModel(model) {
   const value = String(model || "").trim();
-  // 기본/제네릭/구버전 기본값(2.5 Pro)은 무료 등급에서 동작하는 2.5 Flash 로 통일.
-  // 명시적 3.1 Pro 선택만 유료 프리뷰로 유지 (runner app.py/_LEGACY_AI_MODEL_MAP 과 일치).
+  // 기본/제네릭/접미사 없는 레거시값(2.5 Pro, 3.1 Pro)은 무료 등급에서 동작하는 2.5 Flash 로 통일.
+  // UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)라, 접미사 없는 "gemini-3.1-pro"는
+  // 명시 선택이 아니라 자동/레거시값 → flash 안전 (runner app.py/_LEGACY_AI_MODEL_MAP 과 일치).
   const aliases = {
     gemini: YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
     "gemini-pro": "gemini-3.1-pro-preview",
     "gemini-2.5-pro": "gemini-2.5-flash",
-    "gemini-3.1-pro": "gemini-3.1-pro-preview",
+    "gemini-3.1-pro": "gemini-2.5-flash",
   };
   return aliases[value] || (value.startsWith("gemini-") ? value : (YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash"));
 }
