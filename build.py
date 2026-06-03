@@ -43,8 +43,8 @@ def _build_agent_launcher(dist_app_dir: Path) -> Path | None:
     if not IS_WIN:
         return None
 
-    go = os.getenv("AIMAX_GO_EXE", "").strip() or shutil.which("go")
-    if not go:
+    go = os.getenv("AIMAX_GO_EXE", "").strip() or shutil.which("go") or r"C:\Program Files\Go\bin\go.exe"
+    if not go or not os.path.exists(go):
         raise RuntimeError("Go compiler not found; install Go to build aimax-agent-launcher.exe")
 
     src = ROOT / "packaging" / "windows" / "aimax_agent_launcher.go"
@@ -260,6 +260,9 @@ def main() -> int:
     # 플랫폼별 옵션
     if IS_WIN:
         cmd.append("--hidden-import=keyring.backends.Windows")
+        # 클립보드 이미지 업로드(posting/editor.py _try_upload_via_clipboard)에 필요.
+        # pywin32 의 win32clipboard 는 동적 import 라 PyInstaller 가 자동 수집하지 못한다.
+        cmd.append("--hidden-import=win32clipboard")
         icon = ROOT / "assets" / "app.ico"
         if icon.exists():
             cmd.append(f"--icon={icon}")

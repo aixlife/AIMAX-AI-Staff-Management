@@ -11,9 +11,12 @@
 
 ## Employee Launch Checklist
 
+- For any new AI employee or employee-facing workflow, read `docs/runbooks/aimax-employee-release.md` and follow the sequence before final reporting.
 - Before adding or changing an AI employee, decide whether the employee should be `web-first`, `local-agent-required`, or `hybrid`; explain that decision in recommendations and handoffs.
 - Default to `web-first` when the employee's core job can run safely from the server/web app. Require the local agent only for OS/browser automation, local files, local-only secrets, or platform capabilities that cannot safely run on the server.
 - Do not make a new employee depend on the local agent merely because existing Blog Team flows do; Blog Team needs the agent for Naver browser automation, but research/analysis employees may not.
+- At employee intake, explicitly check display assets such as profile image/name/role. If an image is not provided yet, use a placeholder only with a visible TODO in the handoff/final summary and replace it when the user provides the asset.
+- For free/public employees, use catalog-level public access so existing and new accounts can use them by default; do not rely on per-user bulk grants for free public access. Verify the admin catalog and new-account behavior.
 - For web-first employees, prefer web-entered per-user provider secrets stored server-side with encryption, status-only API responses, delete/replace controls, and strict redaction. Do not require local-agent secrets for web-first work.
 - Keep Naver browser automation credentials/session local-agent-only unless the user explicitly approves a different security model; do not store Naver passwords/cookies on the server by default.
 - If local-only API keys are chosen for a future privacy mode, make the UX explicit: users should understand that keeping keys on their PC requires the local agent for those paid-provider actions.

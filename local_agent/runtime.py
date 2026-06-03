@@ -128,6 +128,9 @@ class HeadlessAgentMixin:
         self.web_agent_stop_event = threading.Event()
         self.web_agent_active_job_id = None
         self.web_agent_active_job_claimed_at = 0.0
+        self.web_agent_active_job_kind = ""
+        self.web_agent_active_job_stage = ""
+        self.web_agent_active_job_latest_stage_error = ""
         self._shown_update_popup_keys = set()
         self._headless_last_status = ""
         self._headless_tk_root = None
@@ -568,7 +571,13 @@ class HeadlessAgentMixin:
                 elif msg_type == "web_agent_command":
                     self._handle_web_agent_command(msg_data)
                 elif msg_type == "remote_job":
-                    self._start_remote_job(msg_data)
+                    try:
+                        self._start_remote_job(msg_data)
+                    except Exception as error:
+                        if hasattr(self, "_fail_remote_job_dispatch"):
+                            self._fail_remote_job_dispatch(msg_data, error)
+                        else:
+                            raise
                 elif msg_type == "ai_ment_done":
                     self._headless_print("[AI 멘트] headless mode에서는 화면 반영을 건너뜁니다.")
                 elif msg_type == "ai_ment_error":
@@ -579,8 +588,14 @@ class HeadlessAgentMixin:
     def _stop_headless_agent(self) -> None:
         self.running = False
         self.web_agent_stop_event.set()
-        self.web_agent_active_job_id = None
-        self.web_agent_active_job_claimed_at = 0.0
+        if hasattr(self, "_reset_web_agent_active_job"):
+            self._reset_web_agent_active_job()
+        else:
+            self.web_agent_active_job_id = None
+            self.web_agent_active_job_claimed_at = 0.0
+            self.web_agent_active_job_kind = ""
+            self.web_agent_active_job_stage = ""
+            self.web_agent_active_job_latest_stage_error = ""
         if self.driver:
             try:
                 self.driver.quit()

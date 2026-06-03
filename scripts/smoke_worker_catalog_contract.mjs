@@ -101,12 +101,47 @@ const publicJobKinds = Object.entries(jobKinds).map(([kind, config]) => __catalo
 assert(publicWorkers.some((worker) => worker.staff_code === "songi" && worker.job_kind === "songi_research"), "songi_worker_job_kind_missing");
 assert(publicJobKinds.some((jobKind) => jobKind.kind === "songi_research" && jobKind.api_mode === "research_api" && jobKind.queue === false), "songi_job_kind_contract_missing");
 assert(publicJobKinds.some((jobKind) => jobKind.kind === "yunmi_script" && jobKind.execution === "web_module"), "yunmi_job_kind_contract_missing");
+assert(publicJobKinds.some((jobKind) => jobKind.kind === "sangsu_quote" && jobKind.api_mode === "client_only" && jobKind.queue === false), "sangsu_job_kind_contract_missing");
 assert(productCatalog.some((product) => product.product === "songi" && product.job_kinds.includes("songi_research")), "songi_product_job_kind_missing");
+assert(productCatalog.some((product) => product.product === "sangsu" && product.job_kinds.includes("sangsu_quote")), "sangsu_product_job_kind_missing");
 assert(productCatalog.every((product) => (product.job_kinds || []).every((kind) => jobKinds[kind])), "product_catalog_unknown_job_kind");
+const sangsu = publicWorkers.find((worker) => worker.staff_code === "sangsu");
+assert(sangsu?.name === "상수", "sangsu_worker_name_missing");
+assert(sangsu?.role === "경리", "sangsu_worker_role_missing");
+assert(sangsu?.execution === "web_module", "sangsu_execution_contract_missing");
+assert(sangsu?.product === "sangsu", "sangsu_product_contract_missing");
+assert(sangsu?.profile_image === "/assets/avatar_sangsu.jpg", "sangsu_profile_image_missing");
+assert(__catalogTest.productList("bundle").includes("sangsu"), "bundle_should_include_sangsu_product");
+const bundleOnlyUser = { status: "active", entitlements: { product: "bundle", products: ["bundle"], status: "active", source: "test" } };
+assert(__catalogTest.isJobAllowed(bundleOnlyUser, "sangsu_quote"), "bundle_should_allow_sangsu_quote");
+const bundleUser = { entitlements: { product: "bundle", products: ["yeri", "hyunju", "songi", "blog_team", "bundle"], status: "active", source: "test" } };
+__catalogTest.grantProductToUser(bundleUser, "sangsu", "2026-06-01T00:00:00.000Z", "test");
+assert(bundleUser.entitlements.product === "bundle", "grant_sangsu_should_keep_bundle_primary");
+assert(bundleUser.entitlements.products.includes("bundle"), "grant_sangsu_should_keep_bundle");
+assert(bundleUser.entitlements.products.includes("sangsu"), "grant_sangsu_should_add_sangsu");
+const jieun = publicWorkers.find((worker) => worker.staff_code === "jieun");
+assert(jieun?.name === "지은", "jieun_worker_name_missing");
+assert(jieun?.role === "AI 오피스 지원", "jieun_worker_role_missing");
+assert(jieun?.execution === "external_download", "jieun_execution_contract_missing");
+assert(jieun?.access_policy === "public", "jieun_public_access_missing");
+assert(jieun?.supported_platforms?.includes("windows"), "jieun_windows_only_missing");
+assert(jieun?.setup_download_url === "https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-Setup-0.1.4.exe", "jieun_setup_download_missing");
+assert(jieun?.profile_image === "/assets/avatar_jieun.jpg", "jieun_profile_image_missing");
+const nakyung = publicWorkers.find((worker) => worker.staff_code === "nakyung");
+assert(nakyung?.name === "나경", "nakyung_worker_name_missing");
+assert(nakyung?.role === "판서", "nakyung_worker_role_missing");
+assert(nakyung?.execution === "external_download", "nakyung_execution_contract_missing");
+assert(nakyung?.access_policy === "public", "nakyung_public_access_missing");
+assert(nakyung?.supported_platforms?.includes("windows"), "nakyung_windows_only_missing");
+assert(nakyung?.setup_download_url === "https://api.aimax.ai.kr/downloads/Pencil-Setup-1.0.0.exe", "nakyung_setup_download_missing");
+assert(nakyung?.profile_image === "/assets/avatar_nakyung.jpg", "nakyung_profile_image_missing");
 
 const appHtml = fs.readFileSync("oracle/aimax-reports-api/static/app.html", "utf8");
 const appJobKindKeys = extractObjectKeys(appHtml, "jobKinds");
 const serverJobKindKeys = Object.keys(jobKinds);
+assert(appHtml.includes("function staffCatalogEmployees()"), "staff_catalog_employees_helper_missing");
+assert(appHtml.includes("return staffCatalogEmployees().map(({ key, employee }) => [key, employee]).filter"), "staff_filter_should_use_full_catalog");
+assert(appHtml.includes("const entries = staffCatalogEmployees().map(({ key, employee }) => [key, employee]);"), "staff_counts_should_use_full_catalog");
 
 for (const kind of appJobKindKeys) {
   assert(serverJobKindKeys.includes(kind), `app_job_kind_not_in_server_catalog:${kind}`);

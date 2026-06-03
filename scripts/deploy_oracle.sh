@@ -14,10 +14,11 @@ DRY_RUN=0
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/deploy_oracle.sh [web|macos-bundle|windows-bundle|bundle-installers|installers|all] [--dry-run]
+  scripts/deploy_oracle.sh [web|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all] [--dry-run]
 
 Modes:
   web                Deploy server.js and static web/admin HTML
+  external-staff     Deploy external staff Windows EXE files only
   macos-bundle       Deploy the unified macOS bundle installer only
   windows-bundle     Deploy the unified Windows bundle installer only
   bundle-installers  Deploy unified macOS/Windows bundle installers only
@@ -35,7 +36,7 @@ USAGE
 
 for arg in "$@"; do
   case "$arg" in
-    web|macos-bundle|windows-bundle|bundle-installers|installers|all)
+    web|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all)
       MODE="$arg"
       ;;
     --dry-run)
@@ -120,6 +121,18 @@ if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
     "$REMOTE_APP_DIR/static/assets/avatar_songi.jpg" \
     "avatar songi"
   add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_jieun.jpg" \
+    "$REMOTE_APP_DIR/static/assets/avatar_jieun.jpg" \
+    "avatar jieun"
+  add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/assets/aimax-brain-preview.mp4" \
+    "$REMOTE_APP_DIR/static/assets/aimax-brain-preview.mp4" \
+    "aimax brain preview"
+  add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/assets/aimax-brain-preview.webm" \
+    "$REMOTE_APP_DIR/static/assets/aimax-brain-preview.webm" \
+    "aimax brain preview webm"
+  add_file \
     "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_placeholder.svg" \
     "$REMOTE_APP_DIR/static/assets/avatar_placeholder.svg" \
     "avatar placeholder"
@@ -131,6 +144,13 @@ fi
 
 if [[ "$MODE" == "windows-bundle" || "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-windows.exe" "Windows bundle"
+fi
+
+if [[ "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
+  add_file "$ROOT_DIR/dist/upload_installers/AIMAX-Office-Manager-Setup-0.1.4.exe" "$REMOTE_DOWNLOAD_DIR/AIMAX-Office-Manager-Setup-0.1.4.exe" "Jieun Office setup"
+  add_file "$ROOT_DIR/dist/upload_installers/AIMAX-Office-Manager-portable.exe" "$REMOTE_DOWNLOAD_DIR/AIMAX-Office-Manager-portable.exe" "Jieun Office portable"
+  add_file "$ROOT_DIR/dist/upload_installers/Pencil-Setup-1.0.0.exe" "$REMOTE_DOWNLOAD_DIR/Pencil-Setup-1.0.0.exe" "Nakyung Pencil setup"
+  add_file "$ROOT_DIR/dist/upload_installers/Pencil-portable.exe" "$REMOTE_DOWNLOAD_DIR/Pencil-portable.exe" "Nakyung Pencil portable"
 fi
 
 if [[ "$MODE" == "installers" || "$MODE" == "all" ]]; then

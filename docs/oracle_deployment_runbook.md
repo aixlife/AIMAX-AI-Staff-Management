@@ -43,6 +43,7 @@ scripts/deploy_oracle.sh all
 ## 모드
 
 - `web`: `server.js`, `static/app.html`, `static/admin.html` 배포
+- `external-staff`: 지은/나경 같은 외부 직원 Windows EXE만 배포
 - `installers`: macOS/Windows 설치 파일 6종만 배포
 - `all`: 서버/웹앱/관리자 페이지와 설치 파일 전체 배포
 
@@ -54,6 +55,8 @@ scripts/deploy_oracle.sh all
 - `/api/*`
 - `/app*`
 - `/admin*`
+- `/setup*`
+- `/downloads/*`
 - `/assets/*`
 - `/health`
 - `/`
@@ -104,6 +107,7 @@ docs/deployments/oracle-deploy-YYYYMMDD-HHMMSS.md
 curl -sS -L https://api.aimax.ai.kr/app | rg "실행기 연결|aimax://agent/connect"
 curl -sS -L https://api.aimax.ai.kr/admin | rg "AIMAX Admin|계정 등록|오류 보고"
 curl -sS -i https://api.aimax.ai.kr/api/admin/users | rg "401|unauthorized"
+curl -sS -I -L https://api.aimax.ai.kr/downloads/Pencil-Setup-1.0.0.exe | rg "200|content-disposition"
 ```
 
 서비스 상태:

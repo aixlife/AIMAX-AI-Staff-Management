@@ -33,7 +33,7 @@ _CONFIRM_BTN_SELECTORS = [
     CONFIRM_BUTTON,
     ".btn_ok",
     "button.confirm",
-    ".layer_btn_group button:last-child",
+    # '.layer_btn_group button:last-child' 는 취소 옆 버튼을 오클릭할 위험이 있어 제거했다.
 ]
 _SAVE_BTN_SELECTORS = [
     SAVE_BUTTON,
@@ -50,7 +50,11 @@ _SAVE_BTN_SELECTORS = [
 ]
 _SAVE_TEXTS = ["임시저장", "임시 저장", "저장"]
 _PUBLISH_OPEN_TEXTS = ["발행", "Publish"]
-_CONFIRM_TEXTS = ["발행", "예약", "예약 발행", "확인", "완료"]
+# 발행 레이어 감지(어떤 확정 버튼이든 보이면 레이어가 열린 것)용 — 넓게 잡는다.
+_CONFIRM_TEXTS = ["예약 발행", "발행", "예약", "확인", "완료"]
+# 즉시/예약 확정 버튼을 분리해 오클릭을 막는다. 'includes' 매칭이므로 더 구체적인 텍스트를 앞에 둔다.
+_CONFIRM_TEXTS_NOW = ["발행", "확인", "완료"]
+_CONFIRM_TEXTS_SCHEDULE = ["예약 발행", "예약", "확인", "완료"]
 
 
 def _normalize_text(text):
@@ -237,8 +241,55 @@ def _wait_publish_layer(driver, timeout=8):
     return False
 
 
-def _wait_draft_saved(driver, timeout=10):
-    """임시저장 완료 토스트/상태 메시지를 확인한다."""
+def _read_draft_count(driver):
+    """네이버 에디터의 '임시저장된 글 보기, N개' 라벨에서 저장 글 수를 읽는다.
+
+    토스트 메시지를 놓쳐도 저장 글 수 증가로 임시저장 성공을 확인하기 위함.
+    읽지 못하면 None을 반환한다.
+    """
+    try:
+        count = driver.execute_script(
+            """
+            const nodes = document.querySelectorAll('[aria-label*="임시저장"]');
+            for (const node of nodes) {
+                const label = node.getAttribute('aria-label') || '';
+                const m = label.match(/임시저장.*?(\\d+)\\s*개/);
+                if (m) return parseInt(m[1], 10);
+            }
+            return null;
+            """
+        )
+        if isinstance(count, (int, float)):
+            return int(count)
+    except Exception:
+        pass
+    return None
+
+
+def _read_autosave_message(driver):
+    """네이버 에디터 상단의 자동저장 메시지를 읽는다."""
+    try:
+        message = driver.execute_script(
+            """
+            const node = document.querySelector('[class*="autosave_message"]');
+            return node ? (node.innerText || node.textContent || '').trim() : '';
+            """
+        )
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _wait_draft_saved(driver, timeout=10, baseline_count=None, baseline_autosave=None):
+    """임시저장 완료를 확인한다.
+
+    1) 완료 토스트/상태 메시지 텍스트, 또는
+    2) '임시저장된 글 보기, N개' 카운트가 baseline 대비 증가, 또는
+    3) 현재 글의 자동저장 메시지
+    중 하나라도 만족하면 성공으로 본다.
+    """
     done_texts = [
         "임시저장 되었습니다",
         "임시 저장되었습니다",
@@ -256,6 +307,17 @@ def _wait_draft_saved(driver, timeout=10):
                 return True
         except Exception:
             pass
+        if baseline_count is not None:
+            current = _read_draft_count(driver)
+            if current is not None and current > baseline_count:
+                return True
+        autosave = _read_autosave_message(driver)
+        if autosave:
+            if baseline_autosave is None or autosave != baseline_autosave:
+                return True
+            current = _read_draft_count(driver)
+            if current is not None and current > 0:
+                return True
         time.sleep(0.3)
     return False
 
@@ -288,19 +350,65 @@ def set_category(driver, category_name):
         logger.warning(f"카테고리 설정 실패 (건너뜀): {e}")
 
 
+def _select_option(driver, selector, value, alt_value=None, label=""):
+    """예약 시/분 select 설정. value 매칭 실패 시 대체 value, 표시 텍스트 순으로 폴백하고
+    최종 선택값을 검증한다. (네이버가 '09'↔'9' 처럼 value 형식을 바꿔도 견디게 함)"""
+    sel = Select(_find_any(driver, [selector]))
+    candidates = [value]
+    if alt_value and alt_value != value:
+        candidates.append(alt_value)
+    selected = False
+    for cand in candidates:
+        try:
+            sel.select_by_value(cand)
+            selected = True
+            break
+        except Exception:
+            continue
+    if not selected:
+        for cand in candidates:
+            try:
+                sel.select_by_visible_text(cand)
+                selected = True
+                break
+            except Exception:
+                continue
+    # 선택 결과 검증 (실패해도 진행하되 경고로 남긴다)
+    try:
+        chosen = sel.first_selected_option.get_attribute("value")
+        if chosen not in candidates:
+            logger.warning(f"예약 {label} 선택 검증 불일치: 기대 {candidates}, 실제 '{chosen}'")
+        else:
+            logger.info(f"예약 {label} 설정: {chosen}")
+    except Exception:
+        if not selected:
+            logger.warning(f"예약 {label} 옵션 '{value}' 설정 실패")
+    return selected
+
+
 def save_draft(driver):
     """임시 저장"""
     logger.info("임시 저장 중...")
+    baseline_count = _read_draft_count(driver)
+    baseline_autosave = _read_autosave_message(driver)
+    if baseline_count is not None:
+        logger.info(f"임시저장 글 수(저장 전): {baseline_count}")
+    if baseline_autosave:
+        logger.info(f"자동저장 상태(저장 전): {baseline_autosave}")
     btn = _find_save_button(driver)
     try:
         human_click(driver, btn)
     except Exception:
         driver.execute_script("arguments[0].click();", btn)
     wait_medium()
-    confirmed = _wait_draft_saved(driver)
+    confirmed = _wait_draft_saved(
+        driver,
+        baseline_count=baseline_count,
+        baseline_autosave=baseline_autosave,
+    )
     if not confirmed:
         _save_publish_debug(driver, "draft_confirmation_missing")
-        logger.warning("임시 저장 완료 메시지를 확인하지 못했습니다. 버튼 클릭은 수행했습니다.")
+        logger.warning("임시 저장 완료 메시지/글 수 증가/자동저장 상태를 확인하지 못했습니다. 버튼 클릭은 수행했습니다.")
     logger.info("임시 저장 완료" if confirmed else "임시 저장 버튼 클릭 완료")
     return confirmed
 
@@ -311,13 +419,14 @@ def publish_now(driver, category=None):
     pub_btn = _find_any(driver, _PUBLISH_BTN_SELECTORS, text_candidates=_PUBLISH_OPEN_TEXTS)
     human_click(driver, pub_btn)
     wait_short()
-    _wait_publish_layer(driver, timeout=8)
+    _wait_publish_layer(driver, timeout=10)
+    wait_short()  # 레이어 렌더 완료 여유 (race 완화)
 
     if category:
         set_category(driver, category)
 
     try:
-        confirm_btn = _find_any(driver, _CONFIRM_BTN_SELECTORS, text_candidates=_CONFIRM_TEXTS)
+        confirm_btn = _find_any(driver, _CONFIRM_BTN_SELECTORS, text_candidates=_CONFIRM_TEXTS_NOW)
         human_click(driver, confirm_btn)
     except Exception:
         _save_publish_debug(driver, "confirm_missing")
@@ -339,7 +448,8 @@ def schedule_publish(driver, target_date=None, hour=None, category=None):
     pub_btn = _find_any(driver, _PUBLISH_BTN_SELECTORS, text_candidates=_PUBLISH_OPEN_TEXTS)
     human_click(driver, pub_btn)
     wait_short()
-    _wait_publish_layer(driver, timeout=8)
+    _wait_publish_layer(driver, timeout=10)
+    wait_short()  # 레이어 렌더 완료 여유 (race 완화)
 
     if category:
         set_category(driver, category)
@@ -376,27 +486,41 @@ def schedule_publish(driver, target_date=None, hour=None, category=None):
         cur_year = int(_find_any(driver, [DATEPICKER_YEAR]).text.replace('년', ''))
         cur_month = int(_find_any(driver, [DATEPICKER_MONTH]).text.replace('월', ''))
 
-    # 날짜 선택
+    # 날짜 선택 — 다른 달(ui-datepicker-other-month)의 같은 일자 오클릭 방지
     target_day = str(target_date.day)
     clickable_dates = _find_all(driver, DATEPICKER_DAYS)
+    date_clicked = False
     for date_btn in clickable_dates:
-        if date_btn.text.strip() == target_day:
-            human_click(driver, date_btn)
-            break
+        if date_btn.text.strip() != target_day:
+            continue
+        try:
+            td_class = driver.execute_script(
+                "var td = arguments[0].closest('td'); return td ? (td.className || '') : '';",
+                date_btn,
+            ) or ""
+        except Exception:
+            td_class = ""
+        if "ui-datepicker-other-month" in td_class:
+            continue  # 현재 달이 아닌 칸 → 건너뜀
+        human_click(driver, date_btn)
+        date_clicked = True
+        break
+    if not date_clicked:
+        logger.warning(f"예약 날짜 {target_day}일 버튼을 현재 달에서 찾지 못했습니다.")
     wait_short()
 
-    # 시간 설정
+    # 시간 설정 (value 우선, 형식이 바뀌면 표시 텍스트로 폴백 + 검증)
     hour_str = str(hour).zfill(2)
-    Select(_find_any(driver, [HOUR_SELECT])).select_by_value(hour_str)
+    _select_option(driver, HOUR_SELECT, hour_str, str(int(hour)), label="시")
     wait_short()
 
     minute_val = str(random.choice([0, 10, 20, 30, 40, 50])).zfill(2)
-    Select(_find_any(driver, [MINUTE_SELECT])).select_by_value(minute_val)
+    _select_option(driver, MINUTE_SELECT, minute_val, str(int(minute_val)), label="분")
     wait_short()
 
     # 최종 발행 확인
     try:
-        confirm_btn = _find_any(driver, _CONFIRM_BTN_SELECTORS, text_candidates=_CONFIRM_TEXTS)
+        confirm_btn = _find_any(driver, _CONFIRM_BTN_SELECTORS, text_candidates=_CONFIRM_TEXTS_SCHEDULE)
         human_click(driver, confirm_btn)
     except Exception:
         _save_publish_debug(driver, "schedule_confirm_missing")
