@@ -71,7 +71,37 @@ def _safe_generate_once(prompt, api_key, model):
         return None, {}
 
 
-def generate_blog_content(keyword, api_key, style_id="info", model="gemini-3.1-pro",
+# 사전검증을 통과한 키는 같은 프로세스 동안 재검증을 생략한다(대량 발행 시 불필요한 호출 방지).
+_gemini_key_precheck_ok = set()
+
+
+def precheck_gemini_key(api_key):
+    """무료 ListModels 호출로 Gemini 키 유효성을 사전 점검한다.
+
+    유효하면 None, 문제가 있으면 사용자에게 보여줄 오류 객체(AiQuotaError/AiGenerationError)를 반환한다.
+    만료/무효 키를 과금 생성 시도(및 재시도) 전에 즉시 걸러, 모호한 실패 대신 정확한 사유를
+    빠르게 노출하기 위함이다.
+    """
+    key = (api_key or "").strip()
+    if not key:
+        return AiGenerationError("Gemini 모델을 선택했으나 API 키가 없습니다.")
+    if key in _gemini_key_precheck_ok:
+        return None
+    try:
+        from google import genai
+    except Exception as e:
+        return AiGenerationError(f"Gemini SDK 로드 실패: {e}")
+    try:
+        client = genai.Client(api_key=key)
+        next(iter(client.models.list()), None)  # 가장 가벼운 무료 호출 1건
+        _gemini_key_precheck_ok.add(key)
+        return None
+    except Exception as e:
+        error, _ = _classify_provider_error("Gemini", e)
+        return error
+
+
+def generate_blog_content(keyword, api_key, style_id="info", model="gemini-2.5-flash",
                           cta_link=None, cta_text=None, word_count=1500,
                           image_count=3,
                           seo_brief=None,
@@ -136,6 +166,14 @@ CTA 요청:
 
     logger.info(f"블로그 글 생성 중: {keyword} (스타일: {style_name}, 모델: {model})")
 
+    # 무료 ListModels 로 Gemini 키 유효성 사전 점검 (만료/무효 키를 과금 시도 전에 즉시 차단).
+    # claude/gpt-* 외에는 모두 Gemini 경로다.
+    if model != "claude" and not str(model or "").startswith("gpt-"):
+        gemini_precheck_error = precheck_gemini_key(api_key)
+        if gemini_precheck_error is not None:
+            logger.warning("Gemini 키 사전검증 실패 — 생성 시도 전 중단: %s", str(gemini_precheck_error)[:160])
+            raise gemini_precheck_error
+
     result = _generate_once(prompt, api_key, model)
     text, usage = _normalize_generation_result(result)
     report = _keyword_repetition_report(text, keyword, target_chars)
@@ -194,7 +232,7 @@ def _generate_once(prompt, api_key, model):
         return _generate_with_openai(prompt, api_key, str(model).strip())
     # model 값이 구체적인 Gemini 모델 ID이면 그대로 사용,
     # 레거시 "gemini" 문자열이면 기본 모델로 폴백
-    gemini_model_id = model if str(model or "").startswith("gemini-") else "gemini-3.1-pro"
+    gemini_model_id = model if str(model or "").startswith("gemini-") else "gemini-2.5-flash"
     return _generate_with_gemini(prompt, api_key, gemini_model_id)
 
 
@@ -564,7 +602,7 @@ def _generate_with_openai(prompt, api_key, model_id="gpt-5.4-mini"):
     raise last_error or AiGenerationError("OpenAI 글 생성 실패")
 
 
-def _generate_with_gemini(prompt, api_key, model_id="gemini-3.1-pro"):
+def _generate_with_gemini(prompt, api_key, model_id="gemini-2.5-flash"):
     """Gemini API로 글 생성 → (content, usage) 반환.
 
     실패 시 None 을 조용히 반환하지 않고 사용자에게 보여줄 오류를 raise 한다.

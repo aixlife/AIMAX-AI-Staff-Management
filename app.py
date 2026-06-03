@@ -139,7 +139,7 @@ _SECRET_ENV_KEYS = {
     "openai_api_key": ("AIMAX_OPENAI_API_KEY", "OPENAI_API_KEY", "openai_api_key"),
     "apify_api_token": ("AIMAX_APIFY_API_TOKEN", "APIFY_API_TOKEN", "apify_api_token"),
 }
-_DEFAULT_AI_MODEL = "gemini-3.1-pro"
+_DEFAULT_AI_MODEL = "gemini-2.5-flash"
 API_KEY_GUIDE_URL = os.environ.get(
     "AIMAX_API_KEY_GUIDE_URL",
     "https://www.notion.so/367b31f1da5581ed9b11f23757476cd2",
@@ -160,11 +160,13 @@ _AI_TEXT_PRICE_USD_PER_1M = {
 }
 _LEGACY_AI_MODEL_MAP = {
     "gemini": _DEFAULT_AI_MODEL,
-    "gemini-pro": "gemini-3.1-pro",
+    "gemini-pro": "gemini-2.5-flash",
     "gemini-flash": "gemini-2.5-flash",
-    # 구버전 기본값/프리뷰 선택은 현행 3.1 Pro 로 자동 마이그레이션
-    "gemini-2.5-pro": "gemini-3.1-pro",
-    "gemini-3.1-pro-preview": "gemini-3.1-pro",
+    # 현행 선택지는 gemini-3.1-pro(유료/고급) 와 gemini-2.5-flash(기본) 뿐.
+    # 그 외 비선택 레거시값(2.5 Pro, 3.1 Pro Preview 등)은 무료 등급 동작 flash 로 매핑.
+    # gemini-3.1-pro 는 whitelist passthrough 라 명시 재선택 시 보존됨.
+    "gemini-2.5-pro": "gemini-2.5-flash",
+    "gemini-3.1-pro-preview": "gemini-2.5-flash",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -855,6 +857,27 @@ def repair_accidental_provider_clear_markers():
     return repaired
 
 
+def migrate_forced_pro_preview_default():
+    """기본값이 유료 모델(gemini-3.1-pro / 2.5 Pro / 3.1 Pro Preview)이던 기간에 설정을
+    저장한 사용자는 settings.json 에 유료 모델이 강제로 박혀 무료 등급에서 글 생성이 실패한다.
+
+    저장된 유료-기본값을 무료 기본값(gemini-2.5-flash)으로 '1회만' 되돌린다.
+    마이그레이션 이후 사용자가 다시 'Gemini 3.1 Pro(유료/고급)'를 명시적으로 고르면
+    그 선택은 그대로 유지된다(_normalize_ai_model whitelist 는 건드리지 않음).
+    영향 받은 경우 True 를 반환한다.
+    """
+    data = _load_settings_data()
+    if not data or data.get("forced_pro_preview_default_migrated"):
+        return False
+    migrated = data.get("ai_model") in ("gemini-3.1-pro", "gemini-3.1-pro-preview", "gemini-2.5-pro")
+    if migrated:
+        data["ai_model"] = "gemini-2.5-flash"
+    data["forced_pro_preview_default_migrated"] = True
+    data["forced_pro_preview_default_migrated_at"] = datetime.now(timezone.utc).isoformat()
+    _save_settings_data(data)
+    return migrated
+
+
 def _safe_legacy_b64_secret(value):
     if not value:
         return ""
@@ -873,6 +896,8 @@ def _legacy_plain_secret(data, storage_key, data_key):
 
 
 def load_settings():
+    # 저장된 강제 유료-기본값을 무료 flash 로 1회 마이그레이션한 뒤 읽는다.
+    migrate_forced_pro_preview_default()
     data = _load_settings_data()
     if not data:
         return "", "", "", _DEFAULT_AI_MODEL, "", "", ""
@@ -3846,8 +3871,8 @@ class NaverBlogApp:
             bg=COLORS["card_bg"], fg=COLORS["text_secondary"], anchor="w",
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
-            ("gemini-3.1-pro",         "Gemini 3.1 Pro  (~44원/글)  ★ 기본"),
-            ("gemini-2.5-flash",       "Gemini 2.5 Flash  (~11원/글)"),
+            ("gemini-2.5-flash",       "Gemini 2.5 Flash  (~11원/글)  ★ 기본"),
+            ("gemini-3.1-pro",         "Gemini 3.1 Pro  (~44원/글, 유료/고급)"),
             ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
             ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),
             ("claude",                 "Claude Sonnet  (~70원/글)"),
@@ -4073,8 +4098,8 @@ class NaverBlogApp:
 
         cost_text = (
             "[ 글 생성 — 텍스트, 모델별 실측 ]\n"
-            "  • Gemini 2.5 Pro            ~44원/글  ★ 기본\n"
-            "  • Gemini 2.5 Flash          ~11원/글\n"
+            "  • Gemini 2.5 Flash          ~11원/글  ★ 기본\n"
+            "  • Gemini 3.1 Pro             ~44원/글  (유료/고급)\n"
             "  • GPT-5.4 mini              ~21원/글\n"
             "  • GPT-5 mini                ~9원/글\n"
             "  • Claude Sonnet             ~70원/글\n"
