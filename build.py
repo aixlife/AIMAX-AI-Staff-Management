@@ -236,6 +236,9 @@ def main() -> int:
 
         # 전체 데이터 수집은 런타임 리소스가 필요한 패키지만 유지한다.
         "--collect-all=ttkbootstrap",
+        # selenium_stealth 는 js/utils.js 데이터가 필요(미포함 시 'stealth 미적용' → 네이버 탐지 위험).
+        # AIMAX.spec 의 collect_all('selenium_stealth') 와 동일하게 build.py 에서도 데이터까지 수집.
+        "--collect-all=selenium_stealth",
         "--collect-submodules=undetected_chromedriver",
         "--collect-submodules=google.genai",
         "--collect-submodules=anthropic",
