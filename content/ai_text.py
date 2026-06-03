@@ -25,7 +25,83 @@ class AiQuotaError(AiGenerationError):
         self.hard_stop = hard_stop
 
 
-def generate_blog_content(keyword, api_key, style_id="info", model="gemini-2.5-pro",
+def _classify_provider_error(provider, exc):
+    """공급자 예외를 사용자에게 보여줄 오류로 분류한다.
+
+    반환: (raise 할 오류 객체, 일시적 오류라 재시도 가치가 있는지)
+    """
+    msg = str(exc) or exc.__class__.__name__
+    low = msg.lower()
+    status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+
+    # 인증/키 문제 - 재시도해도 안 됨
+    if status in (401, 403) or any(k in low for k in (
+        "authentication", "invalid x-api-key", "api key", "api_key_invalid", "api key expired", "permission")):
+        return AiQuotaError(f"{provider} API 키 인증 실패 - 키를 확인/갱신해주세요. ({msg[:160]})", hard_stop=True), False
+
+    # 사용량/요금제 - 결제/크레딧 고갈은 재시도 무의미, 순간 rate limit 은 재시도 가치 있음
+    if status == 429 or any(k in low for k in (
+        "quota", "insufficient", "credit", "billing", "rate limit", "resource_exhausted", "limit: 0")):
+        credit_dead = any(k in low for k in ("insufficient_quota", "credit", "billing", "limit: 0", "expired"))
+        transient = (not credit_dead) and (status == 429 or "rate" in low)
+        return AiQuotaError(f"{provider} 사용량/요금제 한도 초과 - 결제/사용량 한도를 확인해주세요. ({msg[:160]})", hard_stop=True), transient
+
+    # 일시적 서버/네트워크 오류 - 재시도 가치 있음
+    if status in (500, 502, 503, 529) or any(k in low for k in (
+        "overloaded", "unavailable", "timeout", "timed out", "temporarily", "try again", "503", "529", "500")):
+        return AiGenerationError(f"{provider} 일시적 오류 - 잠시 후 다시 시도해주세요. ({msg[:160]})"), True
+
+    return AiGenerationError(f"{provider} 글 생성 오류: {msg[:200]}"), False
+
+
+def _safe_generate_once(prompt, api_key, model):
+    """보조(재작성) 생성용 — 실패해도 예외를 삼켜 원본 결과를 보존한다.
+
+    1차 생성은 _generate_once 로 직접 호출해 실패를 사용자에게 노출하지만,
+    키워드/글자수 완화 같은 재작성은 실패하더라도 이미 만든(과금된) 본문을 버리면 안 되므로
+    여기서 예외를 흡수한다.
+    """
+    try:
+        return _normalize_generation_result(_generate_once(prompt, api_key, model))
+    except AiGenerationError as e:
+        logger.warning("보조 재작성 실패 - 직전 결과를 유지합니다: %s", e)
+        return None, {}
+    except Exception as e:  # noqa: BLE001 - 재작성은 어떤 실패든 원본 보존이 우선
+        logger.warning("보조 재작성 예외 - 직전 결과를 유지합니다: %s", str(e)[:160])
+        return None, {}
+
+
+# 사전검증을 통과한 키는 같은 프로세스 동안 재검증을 생략한다(대량 발행 시 불필요한 호출 방지).
+_gemini_key_precheck_ok = set()
+
+
+def precheck_gemini_key(api_key):
+    """무료 ListModels 호출로 Gemini 키 유효성을 사전 점검한다.
+
+    유효하면 None, 문제가 있으면 사용자에게 보여줄 오류 객체(AiQuotaError/AiGenerationError)를 반환한다.
+    만료/무효 키를 과금 생성 시도(및 재시도 3회) 전에 즉시 걸러내, 같은 stage 의 모호한
+    실패 대신 '키 인증 실패' 같은 정확한 사유를 빠르게 노출하기 위함이다.
+    """
+    key = (api_key or "").strip()
+    if not key:
+        return AiGenerationError("Gemini 모델을 선택했으나 API 키가 없습니다.")
+    if key in _gemini_key_precheck_ok:
+        return None
+    try:
+        from google import genai
+    except Exception as e:
+        return AiGenerationError(f"Gemini SDK 로드 실패: {e}")
+    try:
+        client = genai.Client(api_key=key)
+        next(iter(client.models.list()), None)  # 가장 가벼운 무료 호출 1건
+        _gemini_key_precheck_ok.add(key)
+        return None
+    except Exception as e:
+        error, _ = _classify_provider_error("Gemini", e)
+        return error
+
+
+def generate_blog_content(keyword, api_key, style_id="info", model="gemini-2.5-flash",
                           cta_link=None, cta_text=None, word_count=1500,
                           image_count=3,
                           seo_brief=None,
@@ -90,6 +166,14 @@ CTA 요청:
 
     logger.info(f"블로그 글 생성 중: {keyword} (스타일: {style_name}, 모델: {model})")
 
+    # 무료 ListModels 로 Gemini 키 유효성 사전 점검 (만료/무효 키를 과금 시도 전에 즉시 차단).
+    # claude/gpt-* 외에는 모두 Gemini 경로다.
+    if model != "claude" and not str(model or "").startswith("gpt-"):
+        gemini_precheck_error = precheck_gemini_key(api_key)
+        if gemini_precheck_error is not None:
+            logger.warning("Gemini 키 사전검증 실패 — 생성 시도 전 중단: %s", str(gemini_precheck_error)[:160])
+            raise gemini_precheck_error
+
     result = _generate_once(prompt, api_key, model)
     text, usage = _normalize_generation_result(result)
     report = _keyword_repetition_report(text, keyword, target_chars)
@@ -108,8 +192,7 @@ CTA 요청:
             cta_link=cta_link,
             target_chars=target_chars,
         )
-        rewrite_result = _generate_once(rewrite_prompt, api_key, model)
-        rewritten_text, rewrite_usage = _normalize_generation_result(rewrite_result)
+        rewritten_text, rewrite_usage = _safe_generate_once(rewrite_prompt, api_key, model)
         if rewritten_text:
             text = rewritten_text
             usage = _merge_usage(usage, rewrite_usage)
@@ -149,8 +232,23 @@ def _generate_once(prompt, api_key, model):
         return _generate_with_openai(prompt, api_key, str(model).strip())
     # model 값이 구체적인 Gemini 모델 ID이면 그대로 사용,
     # 레거시 "gemini" 문자열이면 기본 모델로 폴백
-    gemini_model_id = model if str(model or "").startswith("gemini-") else "gemini-2.5-pro"
+    gemini_model_id = _normalize_gemini_model_id(model)
     return _generate_with_gemini(prompt, api_key, gemini_model_id)
+
+
+def _normalize_gemini_model_id(model):
+    value = str(model or "").strip()
+    # 기본/제네릭/구버전 기본값은 무료 등급에서 동작하는 2.5 Flash 로 통일한다.
+    # 명시적 3.1 Pro 선택만 유료 프리뷰로 유지 (app.py _LEGACY_AI_MODEL_MAP 과 일치).
+    aliases = {
+        "gemini": "gemini-2.5-flash",
+        "gemini-pro": "gemini-3.1-pro-preview",
+        "gemini-2.5-pro": "gemini-2.5-flash",
+        "gemini-3.1-pro": "gemini-3.1-pro-preview",
+    }
+    if value in aliases:
+        return aliases[value]
+    return value if value.startswith("gemini-") else "gemini-2.5-flash"
 
 
 def _normalize_generation_result(result):
@@ -346,8 +444,7 @@ def _enforce_character_count(text, keyword, target_chars, image_count, cta_link,
             image_count=image_count,
             cta_link=cta_link,
         )
-        rewrite_result = _generate_once(rewrite_prompt, api_key, model)
-        rewritten_text, rewrite_usage = _normalize_generation_result(rewrite_result)
+        rewritten_text, rewrite_usage = _safe_generate_once(rewrite_prompt, api_key, model)
         if not rewritten_text:
             logger.warning("글자 수 조정 재작성 실패. 직전 결과를 사용합니다.")
             break
@@ -358,29 +455,74 @@ def _enforce_character_count(text, keyword, target_chars, image_count, cta_link,
     return text, usage, report
 
 
+def _extract_anthropic_text(response):
+    """Anthropic 응답에서 텍스트 블록을 안전하게 합쳐 반환 (과금된 본문을 잃지 않도록 방어적)."""
+    try:
+        blocks = getattr(response, "content", None) or []
+        parts = []
+        for block in blocks:
+            text = getattr(block, "text", None)
+            if text:
+                parts.append(text)
+        return "\n".join(parts).strip()
+    except Exception:
+        return ""
+
+
 def _generate_with_claude(prompt, api_key):
-    """Claude API로 글 생성 → (content, usage) 반환"""
+    """Claude API로 글 생성 → (content, usage) 반환.
+
+    실패 시 None 을 조용히 반환하지 않고, 사용자에게 보여줄 수 있는 오류(AiQuotaError/AiGenerationError)를
+    raise 한다. 일시적 오류(rate limit/overload/timeout)는 백오프로 최대 3회 재시도한다.
+    """
+    import time
+
+    if not (api_key or "").strip():
+        raise AiGenerationError("Claude 모델을 선택했으나 API 키가 없습니다.")
     try:
         import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-
-        response = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=8000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        if response and response.content:
-            text = response.content[0].text
-            usage = {
-                "input_tokens":  response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            }
-            logger.info(f"Claude 글 생성 완료 (in={usage['input_tokens']}, out={usage['output_tokens']})")
-            return text, usage
     except Exception as e:
-        logger.error(f"Claude 글 생성 오류: {e}")
-    return None, {}
+        raise AiGenerationError(f"Claude SDK 로드 실패: {e}")
+
+    client = anthropic.Anthropic(api_key=api_key)
+    max_attempts = 3
+    last_error = None
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=8000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = _extract_anthropic_text(response)
+            usage = {}
+            try:
+                usage = {
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                }
+            except Exception:
+                pass  # 본문은 살아있으니 usage 실패해도 본문을 버리지 않는다
+            if text:
+                logger.info(f"Claude 글 생성 완료 (in={usage.get('input_tokens','?')}, out={usage.get('output_tokens','?')})")
+                return text, usage
+            stop = getattr(response, "stop_reason", None)
+            last_error = AiGenerationError(f"Claude가 빈 본문을 반환했습니다 (stop_reason={stop}). 잠시 후 다시 시도해주세요.")
+            break  # 빈 본문은 재시도해도 동일할 가능성이 커서 중단
+        except AiGenerationError:
+            raise
+        except Exception as e:
+            error, transient = _classify_provider_error("Claude", e)
+            last_error = error
+            if transient and attempt < max_attempts:
+                delay = min(20, 4 * attempt)
+                logger.warning(f"Claude 글 생성 재시도 {attempt}/{max_attempts - 1}: {str(e)[:160]} (대기 {delay}s)")
+                time.sleep(delay)
+                continue
+            raise error
+
+    raise last_error or AiGenerationError("Claude 글 생성 실패")
 
 
 def _extract_openai_text(data):
@@ -401,64 +543,98 @@ def _extract_openai_text(data):
     return "\n".join(chunks).strip() or None
 
 
+class _HttpStatusError(Exception):
+    """HTTP 상태코드를 분류기에 넘기기 위한 경량 예외."""
+
+    def __init__(self, status, body):
+        super().__init__(f"HTTP {status} {body}")
+        self.status_code = status
+
+
 def _generate_with_openai(prompt, api_key, model_id="gpt-5.4-mini"):
-    """OpenAI Responses API로 글 생성 -> (content, usage) 반환."""
-    if not api_key:
-        logger.error("OpenAI 모델 선택했으나 api_key 없음")
-        return None, {}
+    """OpenAI Responses API로 글 생성 -> (content, usage) 반환.
 
-    try:
-        import requests
-
-        response = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model_id,
-                "input": prompt,
-                "max_output_tokens": 8000,
-                "reasoning": {"effort": "low"},
-                "store": False,
-            },
-            timeout=180,
-        )
-        if response.status_code >= 400:
-            logger.error(f"OpenAI 글 생성 오류: HTTP {response.status_code} {response.text[:300]}")
-            return None, {}
-
-        data = response.json()
-        text = _extract_openai_text(data)
-        usage_data = data.get("usage") or {}
-        output_details = usage_data.get("output_tokens_details") or {}
-        usage = {
-            "input_tokens": usage_data.get("input_tokens") or 0,
-            "output_tokens": usage_data.get("output_tokens") or 0,
-            "thinking_tokens": output_details.get("reasoning_tokens") or 0,
-            "billable_output_tokens": usage_data.get("output_tokens") or 0,
-            "total_tokens": usage_data.get("total_tokens") or 0,
-        }
-        logger.info(f"OpenAI 글 생성 완료 [{model_id}] (in={usage['input_tokens']}, out={usage['output_tokens']})")
-        return text, usage
-    except Exception as e:
-        logger.error(f"OpenAI 글 생성 오류: {e}")
-    return None, {}
-
-
-def _generate_with_gemini(prompt, api_key, model_id="gemini-2.5-pro"):
-    """Gemini API로 글 생성 → (content, usage) 반환"""
+    실패 시 None 을 조용히 반환하지 않고 사용자에게 보여줄 오류를 raise 한다.
+    일시적 오류(5xx/timeout)는 최대 3회 재시도한다.
+    """
     import time
 
+    if not (api_key or "").strip():
+        raise AiGenerationError("OpenAI 모델을 선택했으나 API 키가 없습니다.")
+
+    import requests
+
+    max_attempts = 3
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model_id,
+                    "input": prompt,
+                    "max_output_tokens": 8000,
+                    "reasoning": {"effort": "low"},
+                    "store": False,
+                },
+                timeout=180,
+            )
+            if response.status_code >= 400:
+                raise _HttpStatusError(response.status_code, response.text[:300])
+
+            data = response.json()
+            text = _extract_openai_text(data)
+            usage_data = data.get("usage") or {}
+            output_details = usage_data.get("output_tokens_details") or {}
+            usage = {
+                "input_tokens": usage_data.get("input_tokens") or 0,
+                "output_tokens": usage_data.get("output_tokens") or 0,
+                "thinking_tokens": output_details.get("reasoning_tokens") or 0,
+                "billable_output_tokens": usage_data.get("output_tokens") or 0,
+                "total_tokens": usage_data.get("total_tokens") or 0,
+            }
+            if text:
+                logger.info(f"OpenAI 글 생성 완료 [{model_id}] (in={usage['input_tokens']}, out={usage['output_tokens']})")
+                return text, usage
+            last_error = AiGenerationError("OpenAI가 빈 본문을 반환했습니다. 잠시 후 다시 시도해주세요.")
+            break
+        except AiGenerationError:
+            raise
+        except Exception as e:
+            error, transient = _classify_provider_error("OpenAI", e)
+            last_error = error
+            if transient and attempt < max_attempts:
+                delay = min(20, 4 * attempt)
+                logger.warning(f"OpenAI 글 생성 재시도 {attempt}/{max_attempts - 1}: {str(e)[:160]} (대기 {delay}s)")
+                time.sleep(delay)
+                continue
+            raise error
+
+    raise last_error or AiGenerationError("OpenAI 글 생성 실패")
+
+
+def _generate_with_gemini(prompt, api_key, model_id="gemini-2.5-flash"):
+    """Gemini API로 글 생성 → (content, usage) 반환.
+
+    실패 시 None 을 조용히 반환하지 않고 사용자에게 보여줄 오류를 raise 한다.
+    일시적 오류(UNAVAILABLE/503/rate limit)는 백오프로 최대 3회 재시도한다.
+    """
+    import time
+
+    if not (api_key or "").strip():
+        raise AiGenerationError("Gemini 모델을 선택했으나 API 키가 없습니다.")
     try:
         from google import genai
     except Exception as e:
-        logger.error(f"Gemini SDK 로드 오류: {e}")
-        return None, {}
+        raise AiGenerationError(f"Gemini SDK 로드 실패: {e}")
 
     client = genai.Client(api_key=api_key)
     max_attempts = 3
+    last_error = None
 
     for attempt in range(1, max_attempts + 1):
         try:
@@ -484,16 +660,18 @@ def _generate_with_gemini(prompt, api_key, model_id="gemini-2.5-pro"):
                     pass
                 logger.info(f"Gemini 글 생성 완료 [{model_id}] (in={usage.get('input_tokens','?')}, out={usage.get('output_tokens','?')})")
                 return response.text, usage
+            last_error = AiGenerationError("Gemini가 빈 본문을 반환했습니다. 잠시 후 다시 시도해주세요.")
+            break
+        except AiGenerationError:
+            raise
         except Exception as e:
-            msg = str(e)
-            quota_exhausted = "RESOURCE_EXHAUSTED" in msg or "429" in msg
-            transient = "UNAVAILABLE" in msg or "503" in msg or "try again later" in msg
-            hard_quota = quota_exhausted and "limit: 0" in msg
-            if attempt < max_attempts and (transient or quota_exhausted) and not hard_quota:
+            error, transient = _classify_provider_error("Gemini", e)
+            last_error = error
+            if transient and attempt < max_attempts:
                 delay = min(20, 4 * attempt)
-                logger.warning(f"Gemini 글 생성 재시도 {attempt}/{max_attempts - 1}: {msg[:180]} (대기 {delay}s)")
+                logger.warning(f"Gemini 글 생성 재시도 {attempt}/{max_attempts - 1}: {str(e)[:180]} (대기 {delay}s)")
                 time.sleep(delay)
                 continue
-            logger.error(f"Gemini 글 생성 오류: {e}")
-            return None, {}
-    return None, {}
+            raise error
+
+    raise last_error or AiGenerationError("Gemini 글 생성 실패")

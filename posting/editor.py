@@ -368,6 +368,11 @@ def navigate_to_editor(driver, naver_id=None, naver_pw=None):
     # ── 에디터 DOM 디버그 로그 (셀렉터 확인용) ──
     _debug_editor_selectors(driver)
 
+    try:
+        _save_editor_debug(driver, "loaded")
+    except Exception:
+        pass
+
     logger.info("글쓰기 화면 준비 완료")
 
 
@@ -474,6 +479,7 @@ def _toolbar_button_is_active(button):
             "is-selected",
             "se-is-active",
             "se-selected",
+            "se-is-selected",
             "se-toolbar-item-active",
             "se-toolbar-item-selected",
         }
@@ -484,100 +490,341 @@ def _toolbar_button_is_active(button):
         return False
 
 
+def _focus_content_area(driver):
+    """에디터 본문 영역에 확실하게 포커스를 줍니다."""
+    logger.info("본문 영역 포커스 시도...")
+    content_selectors = [
+        ".se-content [contenteditable='true']",
+        "[contenteditable='true'].se-content",
+        ".se-text-paragraph [contenteditable='true']",
+        ".se-main-container [contenteditable='true']",
+        "[contenteditable='true']",
+    ]
+    for sel in content_selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el.is_displayed():
+                human_click(driver, el)
+                driver.execute_script("arguments[0].focus();", el)
+                wait_short()
+                logger.info(f"본문 영역 포커스 성공 ({sel})")
+                return el
+        except Exception:
+            continue
+    logger.warning("본문 영역 포커스 실패")
+    return None
+
+
 def _reset_inline_formatting(driver):
-    """이전 작성중 글의 인라인 서식이 남아 있으면 본문 입력 전 끈다."""
-    selectors = {
-        "취소선": [
-            ".se-toolbar-item-strikethrough button",
-            ".se-strikethrough-toolbar-button",
-            "button[class*='strikethrough']",
-        ],
-        "볼드": [
-            BOLD_BUTTON,
-            ".se-toolbar-item-bold button",
-            "button[class*='bold']",
-        ],
-        "기울임": [
-            ".se-toolbar-item-italic button",
-            "button[class*='italic']",
-        ],
-        "밑줄": [
-            ".se-toolbar-item-underline button",
-            "button[class*='underline']",
-        ],
-    }
-    for label, candidates in selectors.items():
-        disabled = False
-        for selector in candidates:
+    """이전 글쓰기 상태 등으로 인해 볼드, 취소선, 밑줄 등이 활성화되어 있으면 입력 전에 명시적으로 끕니다.
+    꺼져 있는 서식을 역활성화하여 켜는 부작용을 막기 위해, 실제 active 상태인 서식만 골라서 비활성화합니다.
+    """
+    logger.info("인라인 서식(볼드, 취소선, 밑줄 등) 상태 검사 및 정밀 초기화 시작...")
+
+    # 툴바 상태 동기화를 위해 본문 영역에 확실하게 포커스를 먼저 부여합니다.
+    _focus_content_area(driver)
+    time.sleep(0.5)
+
+    targets = [
+        ("볼드", [BOLD_BUTTON, "button[class*='bold']", ".se-toolbar-item-bold button"]),
+        ("취소선", ["button[class*='strikethrough']", ".se-toolbar-item-strikethrough button", ".se-strikethrough-toolbar-button"]),
+        ("밑줄", ["button[class*='underline']", ".se-toolbar-item-underline button", ".se-underline-toolbar-button"]),
+        ("기울임", ["button[class*='italic']", ".se-toolbar-item-italic button", ".se-italic-toolbar-button"]),
+    ]
+
+    for name, selectors in targets:
+        button = None
+        for sel in selectors:
             try:
-                buttons = driver.find_elements(By.CSS_SELECTOR, selector)
+                el = driver.find_element(By.CSS_SELECTOR, sel)
+                if el.is_displayed():
+                    button = el
+                    break
             except Exception:
                 continue
-            for button in buttons[:2]:
+
+        if button:
+            try:
+                # 디버그 로그 추가
+                parent_html = ""
                 try:
-                    if button.is_displayed() and _toolbar_button_is_active(button):
-                        driver.execute_script("arguments[0].click();", button)
-                        wait_short()
-                        logger.info(f"본문 입력 전 남아있는 {label} 서식 해제")
-                        disabled = True
-                        break
+                    parent_html = button.find_element(By.XPATH, "./..").get_attribute("outerHTML")
                 except Exception:
-                    continue
-            if disabled:
-                break
+                    pass
+                logger.info(f"[디버그] {name} 버튼 HTML: {button.get_attribute('outerHTML')}")
+                logger.info(f"[디버그] {name} 버튼 부모 HTML: {parent_html[:200]}")
+
+                is_active = _toolbar_button_is_active(button)
+                logger.info(f"[서식검사] {name} 버튼 감지됨 (활성화 상태: {is_active})")
+                if is_active:
+                    logger.info(f"[서식초기화] {name} 서식이 활성화되어 있어 클릭하여 비활성화 처리합니다.")
+                    driver.execute_script("arguments[0].click();", button)
+                    wait_short()
+            except Exception as e:
+                logger.debug(f"{name} 서식 상태 조회/비활성화 실패: {e}")
 
 
 def input_title(driver, title):
-    """제목 입력"""
+    """제목 입력 (먼저 제목 컨테이너를 클릭하여 React의 동적 contenteditable 생성을 유도한 뒤, 실제 에디터 알맹이에 100% 주입 보장)"""
     title = str(title or "").strip()
     if not title:
         raise RuntimeError("제목이 비어 있어 Smart Editor에 입력할 수 없습니다.")
-    logger.info(f"제목 입력: {title}")
-    title_element = driver.find_element(By.CSS_SELECTOR, TITLE_AREA)
-    human_click(driver, title_element)
-    wait_short()
+    logger.info(f"제목 입력 시도: {title}")
 
-    actions = ActionChains(driver)
-    actions.send_keys(title)
-    actions.send_keys(Keys.ENTER)
-    actions.perform()
-    wait_short()
-    actual = _read_title_text(driver)
-    if not actual:
-        logger.warning("제목 입력 검증 실패 - 제목 영역이 비어 있어 재입력합니다.")
-        human_click(driver, title_element)
-        ActionChains(driver).key_down(Keys.CONTROL).send_keys("a").key_up(Keys.CONTROL).send_keys(title).send_keys(Keys.ENTER).perform()
+    # 방어: 작성중 글 팝업이 아직 떠 있으면 Cmd/Ctrl+A(전체선택)가 허공으로 날아가
+    # 제목이 조용히 비워진다. 제목 입력 직전 한 번 더 정리한다.
+    if _draft_popup_visible(driver):
+        logger.info("제목 입력 직전 작성중 글 팝업 잔존 — 재정리 시도")
+        _dismiss_draft_popup(driver, timeout=5)
         wait_short()
-        actual = _read_title_text(driver)
-    if not actual:
-        raise RuntimeError("Smart Editor 제목 입력 후 제목 영역이 비어 있습니다.")
-    logger.info(f"제목 입력 확인: {actual[:80]}")
+
+    # 1. 제목 영역의 껍데기(컨테이너)를 먼저 확실히 클릭하여 React 편집 모드를 동적 활성화합니다.
+    title_container_selectors = [
+        ".se-section-documentTitle",
+        ".se-documentTitle",
+        ".se-title-text",
+        TITLE_AREA,
+    ]
+
+    container_element = None
+    for sel in title_container_selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el.is_displayed():
+                container_element = el
+                logger.info(f"제목 컨테이너 매칭 성공: {sel}")
+                break
+        except Exception:
+            continue
+
+    if container_element:
+        try:
+            human_click(driver, container_element)
+            logger.info("제목 컨테이너 클릭 완료 (React contenteditable 활성화 유도)")
+            time.sleep(0.5) # React가 DOM을 업데이트하여 진짜 입력 필드를 생성할 시간 부여
+        except Exception as e:
+            logger.warning(f"제목 컨테이너 클릭 실패: {e}")
+
+    # 2. 클릭 후 동적으로 렌더링된 진짜 제목 문단(p)을 우선 탐색한다.
+    # Smart Editor는 빈 span.__se-node 안에 placeholder를 함께 두는 경우가 있어
+    # span을 먼저 잡으면 입력/검증이 빈 값으로 남을 수 있다.
+    title_editable_selectors = [
+        ".se-title-text p.se-text-paragraph",
+        ".se-documentTitle p",
+        ".se-title-text span.__se-node",
+        ".se-documentTitle span.__se-node",
+        ".se-documentTitle [contenteditable='true']",
+        ".se-section-documentTitle [contenteditable='true']",
+        "[contenteditable='true'].se-title-text",
+        ".se-title-text [contenteditable='true']",
+        "[data-a11y-title='제목'] [contenteditable='true']",
+        "h3.se-title-text",
+        ".se-title-text",
+        TITLE_AREA,
+    ]
+
+    title_element = None
+    for sel in title_editable_selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el.is_displayed():
+                title_element = el
+                logger.info(f"실제 제목 입력 엘리먼트 매칭 성공: {sel}")
+                break
+        except Exception:
+            continue
+
+    if not title_element:
+        title_element = driver.find_element(By.CSS_SELECTOR, TITLE_AREA)
+        logger.warning(f"적합한 제목 입력 엘리먼트를 찾지 못해 기본 영역({TITLE_AREA})을 타겟팅합니다.")
+
+    try:
+        logger.info(f"[디버그] 매칭된 제목 엘리먼트 HTML: {title_element.get_attribute('outerHTML')}")
+    except Exception as e:
+        logger.debug(f"제목 엘리먼트 HTML 가져오기 실패: {e}")
+
+    ctrl_key = Keys.CONTROL if os.name == "nt" else Keys.META
+
+    def _fresh_title_element():
+        for selector in title_editable_selectors:
+            try:
+                el = driver.find_element(By.CSS_SELECTOR, selector)
+                if el.is_displayed():
+                    return el
+            except Exception:
+                continue
+        return title_element
+
+    def _click_title_target():
+        fresh = _fresh_title_element()
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", fresh)
+        try:
+            ActionChains(driver).move_to_element(fresh).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", fresh)
+        # 빈 제목 <p> 는 높이가 0이라 클릭만으로 캐럿이 안 들어가는 경우가 있어
+        # JS 로 포커스를 주고 캐럿을 내용 끝으로 옮겨 키 입력이 확실히 꽂히게 한다.
+        try:
+            driver.execute_script(
+                """
+                const el = arguments[0];
+                el.focus();
+                const sel = window.getSelection();
+                if (sel) {
+                    const range = document.createRange();
+                    range.selectNodeContents(el);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+                """,
+                fresh,
+            )
+        except Exception:
+            pass
+        wait_short()
+        return fresh
+
+    def _js_insert_title():
+        """키 입력이 에디터에 안 꽂힐 때의 폴백 — contenteditable 에 직접 execCommand 로 주입."""
+        fresh = _fresh_title_element()
+        driver.execute_script(
+            """
+            const el = arguments[0], text = arguments[1];
+            el.focus();
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            // 기존 내용 비우고 텍스트 삽입 (React/SmartEditor input 이벤트 동반)
+            document.execCommand('selectAll', false, null);
+            const ok = document.execCommand('insertText', false, text);
+            if (!ok) {
+                el.textContent = text;
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('keyup', { bubbles: true }));
+            """,
+            fresh,
+            title,
+        )
+        wait_short()
+
+    def _keyboard_paste_title():
+        pyperclip.copy(title)
+        _click_title_target()
+        actions = ActionChains(driver)
+        actions.key_down(ctrl_key).send_keys("a").key_up(ctrl_key)
+        actions.send_keys(Keys.BACKSPACE)
+        actions.key_down(ctrl_key).send_keys("v").key_up(ctrl_key)
+        actions.perform()
+        wait_short()
+
+    def _keyboard_type_title():
+        _click_title_target()
+        actions = ActionChains(driver)
+        actions.key_down(ctrl_key).send_keys("a").key_up(ctrl_key)
+        actions.send_keys(Keys.BACKSPACE)
+        actions.perform()
+        wait_short()
+        human_type(driver, title, avg_delay=0.015)
+        wait_short()
+
+    # 입력 전략 순서 (v1.0.44 의 '키보드=실사용자 입력' 결정을 유지):
+    #   1) 클립보드 붙여넣기 → 2) 직접 타이핑 → 3) JS execCommand 주입(폴백)
+    # 키보드 입력이 되는 환경은 기존 동작 그대로 유지하고, 빈 제목 <p>(높이 0)에 키 이벤트가
+    # 안 꽂히는 환경(Chrome 148 등)에서만 JS 주입이 구제한다. JS 주입 뒤에도 본문은
+    # input_content 의 본문 포커스 클릭으로 진입하므로 '본문이 제목에 써지는' 문제는 발생하지 않는다.
+    actual = ""
+    for attempt in range(1, 4):
+        try:
+            _keyboard_paste_title()
+            actual = _read_title_text(driver)
+            logger.info(f"제목 입력 검증 결과(붙여넣기 {attempt}/3): '{actual}'")
+            if actual and actual.strip():
+                break
+        except Exception as e:
+            logger.debug(f"클립보드 제목 붙여넣기 실패({attempt}/3): {e}")
+
+    if not actual or actual.strip() == "":
+        for attempt in range(1, 3):
+            try:
+                _keyboard_type_title()
+                actual = _read_title_text(driver)
+                logger.info(f"제목 입력 검증 결과(직접 타이핑 {attempt}/2): '{actual}'")
+                if actual and actual.strip():
+                    break
+            except Exception as e:
+                logger.debug(f"직접 제목 타이핑 실패({attempt}/2): {e}")
+
+    # 키보드 입력이 에디터에 닿지 않는 환경 대비 JS 직접 주입 폴백 (최후 수단)
+    if not actual or actual.strip() == "":
+        for attempt in range(1, 3):
+            try:
+                _click_title_target()
+                _js_insert_title()
+                actual = _read_title_text(driver)
+                logger.info(f"제목 입력 검증 결과(JS 주입 폴백 {attempt}/2): '{actual}'")
+                if actual and actual.strip():
+                    break
+            except Exception as e:
+                logger.debug(f"JS 제목 주입 실패({attempt}/2): {e}")
+
+    # 제목이 성공했을 때만 Enter로 본문으로 이동한다.
+    if actual and actual.strip():
+        try:
+            ActionChains(driver).send_keys(Keys.ENTER).perform()
+            wait_short()
+        except Exception as e:
+            logger.debug(f"제목 이후 본문 이동 Enter 실패: {e}")
+
+    # 최종 안전 차단 장치: 제목이 제대로 입력되지 않은 경우 저장을 진행하지 않고 예외 발생
+    if not actual or actual.strip() == "":
+        raise RuntimeError(f"Smart Editor 제목 입력에 실패했습니다. (입력 목표값: {title})")
+
+    logger.info(f"제목 입력 최종 성공 확인: {actual[:80]}")
 
 
 def _read_title_text(driver):
-    """Smart Editor 제목 영역의 현재 텍스트를 읽는다."""
+    """Smart Editor 제목 영역의 현재 텍스트를 읽는다 (플레이스홀더 텍스트는 원천 제외)."""
     try:
         return driver.execute_script("""
             const selectors = [
-              '.se-title-text',
-              '.se-title-text span',
-              '[data-a11y-title="제목"]',
+              '.se-title-text p.se-text-paragraph',
+              '.se-documentTitle p',
+              '.se-title-text span.__se-node',
+              '.se-documentTitle span.__se-node',
+              '.se-documentTitle [contenteditable="true"]',
+              '.se-section-documentTitle [contenteditable="true"]',
               '[contenteditable="true"].se-title-text',
+              '.se-title-text [contenteditable="true"]',
+              '[data-a11y-title="제목"] [contenteditable="true"]',
               'textarea[placeholder*="제목"]',
               'input[placeholder*="제목"]'
             ];
             for (const selector of selectors) {
               for (const el of document.querySelectorAll(selector)) {
-                const value = (el.value || el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
-                if (value) return value;
+                if (el.classList.contains('se-placeholder') || el.classList.contains('is-placeholder')) {
+                  continue;
+                }
+                const clone = el.cloneNode(true);
+                const placeholders = clone.querySelectorAll('.se-placeholder, [class*="placeholder"]');
+                placeholders.forEach(p => p.remove());
+                const value = (clone.value || clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim();
+                // 순수 플레이스홀더 문자열 자체이거나 빈 값이면 패스
+                if (value && value !== '제목' && value !== 'Title') return value;
               }
             }
             const editable = Array.from(document.querySelectorAll('[contenteditable="true"]'));
             for (const el of editable) {
               const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('data-placeholder') || ''} ${el.className || ''}`;
               if (!/제목|title/i.test(label)) continue;
-              const value = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
-              if (value) return value;
+              const clone = el.cloneNode(true);
+              const placeholders = clone.querySelectorAll('.se-placeholder, [class*="placeholder"]');
+              placeholders.forEach(p => p.remove());
+              const value = (clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim();
+              if (value && value !== '제목' && value !== 'Title') return value;
             }
             return '';
         """) or ""
@@ -705,14 +952,28 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
 
 def _input_text_block(driver, parts):
     """텍스트 블록 입력 (볼드 처리 + 링크 + 문단 구분 포함)"""
+    # 붙여넣기 단축키는 OS별로 다르다 (Windows: Ctrl, macOS: Cmd/Meta)
+    ctrl_key = Keys.CONTROL if os.name == "nt" else Keys.META
+
+    # 블록 사이 빈 줄은 input_content 의 블록 간 Enter(2회)로 일괄 관리한다.
+    # 텍스트 블록 앞뒤에 붙은 순수 줄바꿈 파트('\n', '\n\n')는 빈 줄을 중복으로 쌓아
+    # 글이 과도하게 벌어지게 하므로 블록 경계의 줄바꿈만 제거한다(블록 내부 줄바꿈은 보존).
+    def _is_newline_only(part):
+        return part[0] == 'text' and (part[1] or '').strip('\n') == ''
+
+    parts = list(parts)
+    while parts and _is_newline_only(parts[0]):
+        parts.pop(0)
+    while parts and _is_newline_only(parts[-1]):
+        parts.pop()
+
     for part_type, part_text in parts:
         if part_type == 'bold':
             if not _editor_bold_enabled():
                 human_type(driver, part_text)
                 wait_short()
                 continue
-            # 팝업 오버레이 제거 후 볼드 버튼 클릭
-            _dismiss_editor_popup(driver)
+            # 팝업 정리는 input_content 진입 시 1회 수행됨 — 볼드 파트마다 반복하지 않는다.
             bold_btn = driver.find_element(By.CSS_SELECTOR, BOLD_BUTTON)
             driver.execute_script("arguments[0].click();", bold_btn)
             wait_short()
@@ -727,7 +988,7 @@ def _input_text_block(driver, parts):
             # (pyautogui 대신 Selenium 레벨 — 에디터가 URL 자동 감지 → 하이퍼링크)
             pyperclip.copy(part_text)
             actions = ActionChains(driver)
-            actions.key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL)
+            actions.key_down(ctrl_key).send_keys('v').key_up(ctrl_key)
             actions.perform()
             wait_short()
         elif part_type == 'text':
@@ -1000,11 +1261,16 @@ def _try_upload_via_clipboard(driver, abs_path):
         if platform.system() == "Darwin":
             # macOS: osascript로 이미지 클립보드 복사
             script = f'set the clipboard to (read (POSIX file "{abs_path}") as TIFF picture)'
-            result = subprocess.run(["osascript", "-e", script],
-                                    capture_output=True, timeout=5)
+            try:
+                result = subprocess.run(["osascript", "-e", script],
+                                        capture_output=True, text=True, timeout=5)
+            except FileNotFoundError:
+                logger.debug("osascript 없음 - 클립보드 방식 스킵")
+                return False
             if result.returncode != 0:
-                raise Exception(f"osascript 실패: {result.stderr.decode()}")
-        else:
+                # stderr 가 None 이어도 AttributeError 없이 안전하게 메시지 구성
+                raise Exception(f"osascript 실패: {result.stderr or 'Unknown error'}")
+        elif platform.system() == "Windows":
             # Windows: PIL + win32clipboard
             try:
                 import win32clipboard
@@ -1021,6 +1287,10 @@ def _try_upload_via_clipboard(driver, abs_path):
             except ImportError:
                 logger.debug("win32clipboard 없음 - 클립보드 방식 스킵")
                 return False
+        else:
+            # 그 외 OS(Linux 등)는 클립보드 이미지 복사 미지원 - 조기 탈출
+            logger.debug(f"클립보드 이미지 복사 미지원 OS: {platform.system()} - 스킵")
+            return False
 
         time.sleep(0.5)
 

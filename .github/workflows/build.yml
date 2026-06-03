@@ -27,6 +27,13 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
+      # build.py 의 _build_agent_launcher() 가 Go 로 aimax-agent-launcher.exe 를 빌드한다.
+      # Go 가 없으면 RuntimeError 로 전체 빌드가 중단되므로 CI 러너에 Go 를 설치한다.
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -44,8 +51,9 @@ jobs:
       - name: Package into zip
         shell: pwsh
         run: |
-          $distFolder = "dist\NaverBlogAuto"
-          if (-not (Test-Path $distFolder)) { throw "dist\NaverBlogAuto 폴더 없음" }
+          # build.py 의 APP_NAME='AIMAX' → 산출물은 dist\AIMAX 폴더로 생성됨
+          $distFolder = "dist\AIMAX"
+          if (-not (Test-Path $distFolder)) { throw "dist\AIMAX 폴더 없음 (build.py APP_NAME=AIMAX 산출물 확인)" }
           Compress-Archive -Path "$distFolder\*" -DestinationPath "dist\NaverBlogAuto_windows.zip" -Force
           Write-Host "zip 생성 완료: dist\NaverBlogAuto_windows.zip"
 
@@ -100,13 +108,13 @@ jobs:
 
       - name: Package into zip
         run: |
-          # .app 번들이 생성된 경우 우선 패키징
-          if [ -d "dist/NaverBlogAuto.app" ]; then
-            cd dist && zip -r ../NaverBlogAuto_mac.zip NaverBlogAuto.app
-          elif [ -d "dist/NaverBlogAuto" ]; then
-            cd dist && zip -r ../NaverBlogAuto_mac.zip NaverBlogAuto
+          # build.py 의 APP_NAME='AIMAX' → .app 번들이 생성된 경우 우선 패키징
+          if [ -d "dist/AIMAX.app" ]; then
+            cd dist && zip -r ../NaverBlogAuto_mac.zip AIMAX.app
+          elif [ -d "dist/AIMAX" ]; then
+            cd dist && zip -r ../NaverBlogAuto_mac.zip AIMAX
           else
-            echo "ERROR: dist 산출물 없음" && exit 1
+            echo "ERROR: dist 산출물 없음 (dist/AIMAX.app 또는 dist/AIMAX)" && exit 1
           fi
           echo "zip 생성 완료: NaverBlogAuto_mac.zip"
 
