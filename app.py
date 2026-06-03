@@ -2010,6 +2010,11 @@ class NaverBlogApp:
             self.queue.put(("log", f"[웹앱 연결] 초기 확인 실패: {e}"))
 
         self.queue.put(("web_agent_status", ("웹앱 연결됨. 작업 대기 중입니다.", "#198754")))
+        # 연결 직후 1회: 로컬 AI/API 키를 웹 보안 저장소로 조용히 자동 이전(웹에 없는 것만).
+        try:
+            self._auto_migrate_local_secrets_to_web(client)
+        except Exception:
+            pass
         next_heartbeat_at = 0.0
         next_version_check_at = time.monotonic() + version_check_seconds
         while not self.web_agent_stop_event.is_set():
@@ -2174,6 +2179,50 @@ class NaverBlogApp:
             "openai": (self.openai_key_var.get() or "").strip(),
             "claude": (self.claude_key_var.get() or "").strip(),
         }
+
+    def _auto_migrate_local_secrets_to_web(self, client):
+        """연결 시 1회: 로컬에 저장된 AI/API 키 중 웹(서버)에 아직 없는 것만 자동으로 웹 보안
+        저장소에 올린다. 사용자 확인/버튼 없이 조용히 수행한다(전부 웹 사용 목표).
+
+        안전 규칙:
+        - 웹 상태 조회에 '성공'했을 때만 진행한다. 실패(예외) 시 보류하여 기존 웹키를 덮어쓰지 않는다.
+        - 웹에 이미 있는 provider 는 건너뛴다(빈 자리만 채움, 절대 덮어쓰기 안 함).
+        - 로컬에 실제 값이 있는 키만 올린다.
+        """
+        if getattr(self, "_auto_secret_migration_done", False) or not client:
+            return
+        try:
+            data = client.get_user_secrets()
+        except Exception:
+            return  # 웹 상태 조회 실패 → 이번 연결엔 보류(플래그 미설정 → 다음 연결 재시도)
+        providers = data.get("providers") if isinstance(data, dict) else {}
+        if not isinstance(providers, dict) and isinstance(data, dict) and isinstance(data.get("secrets"), dict):
+            providers = data["secrets"].get("providers")
+        if not isinstance(providers, dict):
+            providers = {}
+        web_has = set()
+        for provider, info in providers.items():
+            key = str(provider or "").strip().lower()
+            if not key:
+                continue
+            present = bool(info.get("configured") or info.get("present") or info.get("has_value")) if isinstance(info, dict) else bool(info)
+            if present:
+                web_has.add(key)
+        # 여기까지 왔으면 웹 상태를 신뢰할 수 있으므로 1회 수행으로 확정한다.
+        self._auto_secret_migration_done = True
+        local = self._local_provider_secret_values()
+        moved = 0
+        for provider in ("gemini", "openai", "claude", "apify"):
+            value = local.get(provider, "")
+            if not _is_real_secret(value) or provider in web_has:
+                continue
+            try:
+                client.put_user_secret(provider, value)
+                moved += 1
+            except Exception:
+                continue
+        if moved:
+            self.queue.put(("log", f"[자동 연결] 로컬 AI/API 키 {moved}개를 웹 보안 저장소로 자동 이전했습니다."))
 
     def _import_local_provider_secrets(self, client, command):
         allowed = ("gemini", "apify", "openai", "claude")
