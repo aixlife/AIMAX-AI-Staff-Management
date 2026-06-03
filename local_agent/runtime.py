@@ -128,6 +128,9 @@ class HeadlessAgentMixin:
         self.web_agent_stop_event = threading.Event()
         self.web_agent_active_job_id = None
         self.web_agent_active_job_claimed_at = 0.0
+        self.web_agent_active_job_kind = ""
+        self.web_agent_active_job_stage = ""
+        self.web_agent_active_job_latest_stage_error = ""
         self._shown_update_popup_keys = set()
         self._headless_last_status = ""
         self._headless_tk_root = None
@@ -568,7 +571,13 @@ class HeadlessAgentMixin:
                 elif msg_type == "web_agent_command":
                     self._handle_web_agent_command(msg_data)
                 elif msg_type == "remote_job":
-                    self._start_remote_job(msg_data)
+                    try:
+                        self._start_remote_job(msg_data)
+                    except Exception as error:
+                        if hasattr(self, "_fail_remote_job_dispatch"):
+                            self._fail_remote_job_dispatch(msg_data, error)
+                        else:
+                            raise
                 elif msg_type == "ai_ment_done":
                     self._headless_print("[AI 멘트] headless mode에서는 화면 반영을 건너뜁니다.")
                 elif msg_type == "ai_ment_error":
@@ -579,8 +588,14 @@ class HeadlessAgentMixin:
     def _stop_headless_agent(self) -> None:
         self.running = False
         self.web_agent_stop_event.set()
-        self.web_agent_active_job_id = None
-        self.web_agent_active_job_claimed_at = 0.0
+        if hasattr(self, "_reset_web_agent_active_job"):
+            self._reset_web_agent_active_job()
+        else:
+            self.web_agent_active_job_id = None
+            self.web_agent_active_job_claimed_at = 0.0
+            self.web_agent_active_job_kind = ""
+            self.web_agent_active_job_stage = ""
+            self.web_agent_active_job_latest_stage_error = ""
         if self.driver:
             try:
                 self.driver.quit()
@@ -679,6 +694,44 @@ class HeadlessAgentMixin:
                     self.queue.put(("log", f"[웹앱 연결] 명령 상태 전송 오류: {update_error}"))
 
             threading.Thread(target=_worker, daemon=True).start()
+
+        if command_type in ("stop_agent", "quit_runner", "shutdown_agent", "stop_runner"):
+            payload = command.get("payload") if isinstance(command.get("payload"), dict) else {}
+            reason = str(payload.get("reason") or "manual").strip() or "manual"
+            busy = bool(getattr(self, "running", False))
+            if reason == "update":
+                message = "새 버전 설치를 위해 실행기를 종료합니다. 잠시 후 최신 버전으로 다시 실행해주세요."
+            elif busy:
+                message = "진행 중이던 작업을 멈추고 실행기를 종료합니다."
+            else:
+                message = "요청에 따라 실행기를 종료합니다."
+            self._log(f"[웹앱 연결] 실행기 종료 요청 수신 (reason={reason}, busy={busy}). {message}")
+            _send_command_update("done", message, {"type": "agent_stopped", "reason": reason})
+
+            def _shutdown() -> None:
+                import time as _t
+                import os as _os
+                import sys as _sys
+                try:
+                    self._stop_headless_agent()
+                except Exception:
+                    pass
+                _t.sleep(1.5)  # done 응답 전송 시간 확보
+                if _sys.platform.startswith("win"):
+                    # 업데이트 파일 잠금 해제를 위해 윈도우 런처도 종료 (best-effort)
+                    try:
+                        import subprocess as _sp
+                        _sp.run(
+                            ["taskkill", "/f", "/im", "aimax-agent-launcher.exe"],
+                            capture_output=True, timeout=5,
+                            creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0),
+                        )
+                    except Exception:
+                        pass
+                _os._exit(0)
+
+            threading.Thread(target=_shutdown, daemon=True).start()
+            return
 
         if command_type == "import_local_provider_secrets":
             result, log = self._import_local_provider_secrets(client, command)

@@ -11,7 +11,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-yunmi-alpha-smoke-"));
 const port = 19700 + Math.floor(Math.random() * 500);
 const baseUrl = `http://127.0.0.1:${port}`;
-const email = "demo@aimax.ai.kr";
+const email = "yunmi-smoke@example.test";
 const password = "SmokePassword123!";
 const fakeGeminiSecret = "smoke-yunmi-gemini-key-1234567890";
 const yunmiRequestId = "yunmi-smoke-request-20260523";
@@ -32,7 +32,7 @@ writeJson(path.join(tmpDir, "users.json"), {
   users: [{
     id: "yunmi-smoke-user-id",
     email,
-    name: "AIMAX Demo",
+    name: "Yunmi Smoke User",
     status: "active",
     must_change_password: false,
     password_hash: hashPassword(password),
@@ -59,6 +59,7 @@ const child = childProcess.spawn(process.execPath, ["oracle/aimax-reports-api/se
     AIMAX_KEYCHAIN_ACCOUNT: "smoke-no-keychain-account",
     AIMAX_KEYRING_SERVICE: "smoke-no-keyring-service",
     AIMAX_LEGACY_KEYRING_SERVICE: "smoke-no-legacy-keyring",
+    AIMAX_YUNMI_PUBLIC_ENABLED: "1",
     GEMINI_API_KEY: "",
     AIMAX_GEMINI_API_KEY: "",
   },
@@ -197,10 +198,10 @@ try {
         payload: {
           mode: "ai_beta",
           confirm_paid: true,
-          request_id: "yunmi-smoke-missing-key",
+          request_id: "yunmi-smoke-key-missing-20260523",
           ai_model: "gemini-2.5-pro",
-          topic: "AI 베타 키 없는 요청",
-          reference_text: "확인은 했지만 provider key가 없으면 막혀야 합니다.",
+          topic: "AI 베타 키 누락 요청",
+          reference_text: "provider key 없이 paid-ready 경로가 열리면 안 됩니다.",
         },
       }),
     });
@@ -277,14 +278,15 @@ try {
     throw new Error("raw Gemini key leaked into Yunmi jobs persistence");
   }
 
-  let playwright = null;
+  let chromium = null;
   try {
-    playwright = await import("playwright");
-  } catch (_error) {
+    ({ chromium } = await import("playwright"));
+  } catch (error) {
+    if (error?.code !== "ERR_MODULE_NOT_FOUND") throw error;
     console.log("YUNMI_UI_BROWSER_SMOKE_SKIPPED_NO_PLAYWRIGHT");
   }
-  if (playwright?.chromium) {
-    const browser = await playwright.chromium.launch({ headless: true });
+  if (chromium) {
+    const browser = await chromium.launch({ headless: true });
     try {
       const page = await browser.newPage({ viewport: { width: 1280, height: 920 } });
       await page.addInitScript(() => {

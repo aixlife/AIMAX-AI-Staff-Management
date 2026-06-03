@@ -8,14 +8,12 @@ if __name__ == "__main__":
 os.environ.setdefault("APP_MODE", "engage")
 os.environ.setdefault("INIT_PANEL", "engage")
 
-from app import HeadlessNaverBlogAgent, NaverBlogApp, _EARLY_AGENT_LOCK, _parse_runtime_args, _run_diagnostics_probe
+from app import HeadlessNaverBlogAgent, NaverBlogApp, _EARLY_AGENT_LOCK, _parse_runtime_args
 from local_agent.runtime import agent_mode_requested
 
 
 if __name__ == "__main__":
     args = _parse_runtime_args()
-    if _run_diagnostics_probe(args):
-        raise SystemExit(0)
     app = HeadlessNaverBlogAgent("engage") if agent_mode_requested(args) else NaverBlogApp("engage")
     if _EARLY_AGENT_LOCK is not None and agent_mode_requested(args):
         app._single_instance_lock = _EARLY_AGENT_LOCK

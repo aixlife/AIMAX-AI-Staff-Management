@@ -1,2 +1,2 @@
-"""AIMAX diagnostics helpers."""
+"""AIMAX diagnostics package."""
 

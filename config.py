@@ -32,6 +32,14 @@ BROWSER_EXECUTABLE_PATH = os.getenv(
     "BROWSER_EXECUTABLE_PATH",
     BROWSER.get("executable_path", ""),
 ).strip()
+BROWSER_DRIVER_PATH = os.getenv(
+    "CHROMEDRIVER_PATH",
+    BROWSER.get("driver_path", ""),
+).strip()
+BROWSER_DRIVER_MODE = os.getenv(
+    "BROWSER_DRIVER_MODE",
+    BROWSER.get("driver_mode", "auto"),
+).strip().lower()
 VIEWPORT_MIN = tuple(BROWSER.get("viewport_min", [1280, 720]))
 VIEWPORT_MAX = tuple(BROWSER.get("viewport_max", [1920, 1080]))
 

@@ -1614,61 +1614,6 @@ class NaverBlogApp:
     def _web_agent_status_value(self, ready):
         return "ready" if ready else "missing"
 
-    def _fetch_web_secret_statuses(self):
-        client = getattr(self, "web_agent_client", None)
-        if not client or not getattr(client, "session_token", ""):
-            return {}
-        now = time.monotonic()
-        cache = getattr(self, "_web_secret_status_cache", {})
-        if isinstance(cache, dict) and now < float(cache.get("expires_at") or 0.0):
-            cached_statuses = cache.get("statuses")
-            return dict(cached_statuses) if isinstance(cached_statuses, dict) else {}
-        try:
-            data = client.get_user_secrets()
-        except Exception:
-            self._web_secret_status_cache = {"expires_at": now + 15, "statuses": {}}
-            return {}
-        providers = data.get("providers") if isinstance(data, dict) else {}
-        if not isinstance(providers, dict) and isinstance(data, dict):
-            secrets = data.get("secrets")
-            if isinstance(secrets, dict):
-                providers = secrets.get("providers")
-        if not isinstance(providers, dict):
-            providers = {}
-        statuses = {}
-        for provider, info in providers.items():
-            provider_key = str(provider or "").strip().lower()
-            if not provider_key:
-                continue
-            if isinstance(info, dict):
-                statuses[provider_key] = bool(
-                    info.get("configured")
-                    or info.get("web_configured")
-                    or info.get("server_configured")
-                )
-            else:
-                statuses[provider_key] = bool(info)
-        self._web_secret_status_cache = {"expires_at": now + 15, "statuses": dict(statuses)}
-        return statuses
-
-    def _has_local_or_web_ai_key(self, ai_model=None, web_secrets=None):
-        model = _normalize_ai_model(ai_model or self.ai_model_var.get() or _DEFAULT_AI_MODEL)
-        secrets = web_secrets if isinstance(web_secrets, dict) else self._fetch_web_secret_statuses()
-        if model == "claude":
-            return bool((self.claude_key_var.get() or "").strip()) or bool(secrets.get("claude"))
-        if _is_openai_model(model):
-            return bool((self.openai_key_var.get() or "").strip()) or bool(secrets.get("openai"))
-        return bool((self.api_key_var.get() or "").strip()) or bool(secrets.get("gemini"))
-
-    def _has_local_or_web_image_key(self, web_secrets=None):
-        secrets = web_secrets if isinstance(web_secrets, dict) else self._fetch_web_secret_statuses()
-        return (
-            bool((self.api_key_var.get() or "").strip())
-            or bool((self.openai_key_var.get() or "").strip())
-            or bool(secrets.get("gemini"))
-            or bool(secrets.get("openai"))
-        )
-
     def _web_agent_tool_candidates(self, command, env_path=""):
         candidates = []
         configured = (os.environ.get(env_path) or "").strip() if env_path else ""
@@ -1848,11 +1793,12 @@ class NaverBlogApp:
         apify_key = (self.apify_key_var.get() or "").strip()
         ai_model = _normalize_ai_model(self.ai_model_var.get() or _DEFAULT_AI_MODEL)
         naver_ready = bool(naver_id and naver_pw)
-        web_secrets = self._fetch_web_secret_statuses()
-        has_gemini = bool(gemini_key) or bool(web_secrets.get("gemini"))
-        has_claude = bool(claude_key) or bool(web_secrets.get("claude"))
-        has_openai = bool(openai_key) or bool(web_secrets.get("openai"))
-        selected_ai_ready = self._has_local_or_web_ai_key(ai_model, web_secrets)
+        if ai_model == "claude":
+            selected_ai_ready = bool(claude_key)
+        elif _is_openai_model(ai_model):
+            selected_ai_ready = bool(openai_key)
+        else:
+            selected_ai_ready = bool(gemini_key)
 
         try:
             neighbor_messages = load_neighbor_messages(naver_id)
@@ -1877,9 +1823,9 @@ class NaverBlogApp:
                 "has_password": bool(naver_pw),
             },
             "ai_keys": {
-                "gemini": self._web_agent_status_value(has_gemini),
-                "claude": self._web_agent_status_value(has_claude),
-                "openai": self._web_agent_status_value(has_openai),
+                "gemini": self._web_agent_status_value(bool(gemini_key)),
+                "claude": self._web_agent_status_value(bool(claude_key)),
+                "openai": self._web_agent_status_value(bool(openai_key)),
                 "apify": self._web_agent_status_value(bool(apify_key)),
                 "selected_model": ai_model,
                 "selected_model_ready": self._web_agent_status_value(selected_ai_ready),
@@ -2700,19 +2646,14 @@ class NaverBlogApp:
         artifact = self._remote_job_artifact(job) if kind == "yeri_write" else None
         worker_started = False
         try:
-            if not self._validate_credentials(need_api=False):
-                raise ValueError("로컬 실행기의 네이버 계정 설정이 필요합니다.")
-            web_secrets = self._fetch_web_secret_statuses()
-            if kind == "yeri_write" and not artifact:
-                ai_model = _normalize_ai_model(payload.get("ai_model") or payload.get("model") or self.ai_model_var.get() or _DEFAULT_AI_MODEL)
-                if not self._has_local_or_web_ai_key(ai_model, web_secrets):
-                    raise ValueError("AI API 키가 없습니다. 웹 설정 또는 로컬 실행기에서 키를 추가해주세요.")
+            if not self._validate_credentials(need_api=(kind == "yeri_write" and not artifact)):
+                raise ValueError("로컬 실행기의 네이버 계정 또는 AI API Key 설정이 필요합니다.")
             artifact_image_count = 0
             if artifact:
                 requested_images = _normalize_image_count(payload.get("image_count") or payload.get("images") or 3)
                 artifact_image_count = min(self._remote_artifact_image_count(artifact), requested_images)
-            if artifact_image_count > 0 and not self._has_local_or_web_image_key(web_secrets):
-                raise ValueError("서버에서 글은 생성되었지만 이미지 생성을 위한 Gemini 또는 OpenAI API Key가 없습니다.")
+            if artifact_image_count > 0 and not (self.api_key_var.get() or self.openai_key_var.get()):
+                raise ValueError("서버에서 글은 생성되었지만 이미지 생성을 위한 Gemini 또는 OpenAI API Key가 로컬 실행기에 없습니다.")
 
             client.update_job(job_id, "running", "로컬 실행기가 작업을 시작했습니다.")
             if kind == "yeri_write":

@@ -38,7 +38,7 @@
 #endif
 
 #ifndef AppVersion
-#define AppVersion "1.0.33"
+#define AppVersion "1.0.35"
 #endif
 
 [Setup]
@@ -80,6 +80,22 @@ Name: "{autodesktop}\{#AppDisplayName}"; Filename: "{app}\{#LauncherExeName}"; I
 
 [Tasks]
 Name: "desktopicon"; Description: "바탕화면 바로가기 만들기"; GroupDescription: "추가 아이콘:"; Flags: unchecked
+
+[Code]
+procedure KillProcessByName(ProcessName: String);
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM ' + ProcessName, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  KillProcessByName('{#LauncherExeName}');
+  KillProcessByName('{#AppExeName}');
+  Sleep(1200);
+  Result := '';
+end;
 
 [Run]
 Filename: "{app}\{#LauncherExeName}"; Parameters: "aimax://agent/connect"; Description: "{#AppDisplayName} 실행기 연결 상태 열기"; StatusMsg: "{#AppDisplayName} 실행기를 여는 중입니다..."; Flags: nowait postinstall skipifsilent

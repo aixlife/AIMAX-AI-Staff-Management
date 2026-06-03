@@ -153,7 +153,7 @@ def sync_pc_blog_login(driver):
         time.sleep(4)
 
         current = driver.current_url
-        # 호스트명으로만 확인 — URL 쿼리파라미터 ?url=https://blog.naver.com 을 오탐하지 않기 위함
+        # 호스트명으로만 확인 - URL 쿼리파라미터 ?url=https://blog.naver.com 을 오탐하지 않기 위함
         current_host = urlparse(current).hostname or ""
         if current_host == "blog.naver.com" or current_host.endswith(".blog.naver.com"):
             # blog.naver.com에 도착 → 로그인 상태 재확인
@@ -165,7 +165,7 @@ def sync_pc_blog_login(driver):
             return True
 
         if current_host == "nid.naver.com" or current_host.endswith(".nid.naver.com"):
-            logger.warning("NID 세션 미인식 — blog.naver.com 동기화 실패 (재로그인 필요)")
+            logger.warning("NID 세션 미인식 - blog.naver.com 동기화 실패 (재로그인 필요)")
             return False
 
         logger.info(f"NID 리다이렉트 결과 URL: {current[:80]}")

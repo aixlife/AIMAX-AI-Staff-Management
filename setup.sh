@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIMAX - Mac/Linux 초기 설정 및 실행 스크립트
+# 네이버 블로그 자동화 툴 - Mac/Linux 초기 설정 및 실행 스크립트
 
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,7 +8,7 @@ cd "$SCRIPT_DIR"
 OS="$(uname -s)"
 
 echo "==================================================="
-echo "  AIMAX - 초기 설정 및 실행 스크립트"
+echo "  NaverBlogAuto - 초기 설정 및 실행 스크립트"
 echo "==================================================="
 echo ""
 
@@ -52,8 +52,7 @@ _find_python() {
 }
 
 _runtime_deps_ok() {
-    local py_cmd="${1:-python}"
-    "$py_cmd" - <<'PY'
+    python - <<'PY'
 modules = [
     "ttkbootstrap",
     "selenium",
@@ -97,10 +96,11 @@ if [ -d "$SCRIPT_DIR/venv" ] && [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
     echo "$VENV_REAL" | grep -q "CommandLineTools" && IS_CMDLINE=true
 
     if [ "$IS_CMDLINE" = false ]; then
-        if _runtime_deps_ok "$VENV_PY"; then
+        source "$SCRIPT_DIR/venv/bin/activate"
+        if _runtime_deps_ok; then
             echo "✓ 이미 설정 완료 — 프로그램을 바로 실행합니다."
             echo ""
-            TK_SILENCE_DEPRECATION=1 "$VENV_PY" "$SCRIPT_DIR/app.py"
+            TK_SILENCE_DEPRECATION=1 python "$SCRIPT_DIR/app.py"
             exit 0
         else
             echo "- 필수 패키지가 일부 없거나 깨져 있어 설치를 보강합니다..."
@@ -201,10 +201,10 @@ echo ""
 
 # ── 4. 패키지 설치 ──────────────────────────────────────────────
 echo "[4/5] 필수 패키지 설치 중... (인터넷 연결 필요, 2~5분 소요)"
-VENV_PY="$SCRIPT_DIR/venv/bin/python"
-"$VENV_PY" -m pip install --upgrade pip --quiet
+source "$SCRIPT_DIR/venv/bin/activate"
+python -m pip install --upgrade pip --quiet
 
-if ! "$VENV_PY" -m pip install -r "$SCRIPT_DIR/requirements.txt"; then
+if ! pip install -r "$SCRIPT_DIR/requirements.txt"; then
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "[오류] 패키지 설치 실패."
@@ -245,7 +245,7 @@ echo "  설정 완료! 프로그램을 실행합니다..."
 echo "==================================================="
 sleep 1
 
-TK_SILENCE_DEPRECATION=1 "$VENV_PY" "$SCRIPT_DIR/app.py" 2>&1
+TK_SILENCE_DEPRECATION=1 python "$SCRIPT_DIR/app.py" 2>&1
 EXIT_CODE=$?
 if [ "$EXIT_CODE" -ne 0 ]; then
     echo ""
