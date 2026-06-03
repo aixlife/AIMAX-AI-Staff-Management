@@ -15,7 +15,6 @@ import (
 )
 
 const (
-	launcherVersion    = "v1.0.35"
 	mutexName          = `Local\AIMAX.LocalAgent`
 	requestDirName     = "NaverBlogAuto"
 	requestFileName    = "aimax-local-agent-request.json"
@@ -23,7 +22,12 @@ const (
 	diagnosticsDirName = "AIMAX"
 	errorAlreadyExists = 183
 	stillActive        = 259
+	processTerminate   = 0x0001
 )
+
+// launcherVersion is the installed version. Overridden at build time via
+// -ldflags "-X main.launcherVersion=<APP_VERSION>" (build.py injects APP_VERSION).
+var launcherVersion = "v1.0.46"
 
 var (
 	kernel32                      = syscall.NewLazyDLL("kernel32.dll")
@@ -32,6 +36,7 @@ var (
 	procReleaseMutex              = kernel32.NewProc("ReleaseMutex")
 	procCloseHandle               = kernel32.NewProc("CloseHandle")
 	procOpenProcess               = kernel32.NewProc("OpenProcess")
+	procTerminateProcess          = kernel32.NewProc("TerminateProcess")
 	procGetExitCodeProcess        = kernel32.NewProc("GetExitCodeProcess")
 	procQueryFullProcessImageName = kernel32.NewProc("QueryFullProcessImageNameW")
 	procMessageBox                = user32.NewProc("MessageBoxW")
@@ -62,11 +67,25 @@ func main() {
 	url := protocolURL(args)
 	writeDiagnostic("launcher_started", kind, url != "", "", "")
 
-	if running, pid, exePath := existingCoreFromLock(); running {
-		_ = writeRequest(kind, url)
-		writeDiagnostic("core_already_running_lock", kind, url != "", filepath.Base(exePath), fmt.Sprintf("pid=%d", pid))
-		showAlreadyRunningMessage()
-		return
+	if running, pid, exePath, version := existingCoreFromLock(); running {
+		// 업데이트 후 옛 코어가 살아있는 경우: 실행 중인 코어의 버전이 설치된
+		// 런처 버전과 다르면, 그 옛 코어를 종료하고 새로 설치된 코어로 다시 시작한다.
+		// (version 이 비어 있으면 옛 lock 포맷 = 알 수 없음 → 안전하게 기존 재사용)
+		if version != "" && version != launcherVersion {
+			killed := terminateProcess(pid)
+			if p, e := lockPath(); e == nil {
+				_ = os.Remove(p)
+			}
+			time.Sleep(700 * time.Millisecond) // 뮤텍스/락 해제 대기
+			writeDiagnostic("old_core_version_mismatch_killed", kind, url != "", filepath.Base(exePath),
+				fmt.Sprintf("pid=%d running_version=%s installed_version=%s killed=%t", pid, version, launcherVersion, killed))
+			// 아래로 진행하여 새 코어를 시작한다 (return 하지 않음).
+		} else {
+			_ = writeRequest(kind, url)
+			writeDiagnostic("core_already_running_lock", kind, url != "", filepath.Base(exePath), fmt.Sprintf("pid=%d version=%s", pid, version))
+			showAlreadyRunningMessage()
+			return
+		}
 	}
 
 	mutex, alreadyRunning, err := acquireAgentMutex()
@@ -181,24 +200,64 @@ func detectCoreExe() (string, error) {
 	return "", fmt.Errorf("AIMAX core executable not found in %s", appDir)
 }
 
-func existingCoreFromLock() (bool, int, string) {
+func existingCoreFromLock() (bool, int, string, string) {
 	path, err := lockPath()
 	if err != nil {
-		return false, 0, ""
+		return false, 0, "", ""
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return false, 0, ""
+		return false, 0, "", ""
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil || pid <= 0 || pid == os.Getpid() {
-		return false, 0, ""
+	pid, version := parseLock(data)
+	if pid <= 0 || pid == os.Getpid() {
+		return false, 0, "", version
 	}
 	running, exePath := processRunning(pid)
 	if !running || !isCoreExeName(filepath.Base(exePath)) {
-		return false, pid, exePath
+		// 죽은 PID 또는 코어 아닌 PID 의 lock 잔재 → 정리해서 다음 실행을 막지 않게 한다.
+		_ = os.Remove(path)
+		return false, pid, exePath, version
 	}
-	return true, pid, exePath
+	return true, pid, exePath, version
+}
+
+// parseLock 은 레거시(PID 단독)와 신규 JSON({"pid":N,"version":"vX"}) 둘 다 읽는다.
+// version 을 알 수 없으면 "" 를 반환한다.
+func parseLock(data []byte) (int, string) {
+	s := strings.TrimSpace(string(data))
+	if s == "" {
+		return 0, ""
+	}
+	if strings.HasPrefix(s, "{") {
+		var obj struct {
+			PID     int    `json:"pid"`
+			Version string `json:"version"`
+		}
+		if err := json.Unmarshal([]byte(s), &obj); err != nil {
+			return 0, ""
+		}
+		return obj.PID, strings.TrimSpace(obj.Version)
+	}
+	pid, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, ""
+	}
+	return pid, ""
+}
+
+// terminateProcess 는 PID 로 프로세스를 강제 종료한다(업데이트 후 옛 코어 제거용).
+func terminateProcess(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	handle, _, _ := procOpenProcess.Call(processTerminate, 0, uintptr(uint32(pid)))
+	if handle == 0 {
+		return false
+	}
+	defer closeHandle(syscall.Handle(handle))
+	ok, _, _ := procTerminateProcess.Call(handle, 1)
+	return ok != 0
 }
 
 func processRunning(pid int) (bool, string) {

@@ -56,10 +56,13 @@ def _build_agent_launcher(dist_app_dir: Path) -> Path | None:
     go_cache.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env.setdefault("GOCACHE", str(go_cache))
+    # 런처에 설치 버전을 주입한다(main.launcherVersion). 런처는 실행 중인 옛 코어의
+    # 버전(lock 기록)과 이 값을 비교해 버전 불일치 시 옛 코어를 종료한다.
+    from aimax_compliance import APP_VERSION
     cmd = [
         go,
         "build",
-        "-ldflags=-s -w -H=windowsgui",
+        f"-ldflags=-s -w -H=windowsgui -X main.launcherVersion={APP_VERSION}",
         "-o",
         str(output),
         str(src),
