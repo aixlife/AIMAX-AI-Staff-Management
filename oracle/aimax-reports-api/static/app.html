@@ -3114,7 +3114,7 @@
             <button id="importLocalSecretsBtn" class="btn" type="button">기존 실행기 키 가져오기</button>
             <span id="localSecretImportStatus" class="pill">실행기 연결 필요</span>
           </div>
-          <p class="small muted">Gemini, Apify, OpenAI, Claude 키만 실행기에서 가져오며 네이버 비밀번호와 브라우저 세션은 옮기지 않습니다. YouTube 키는 선택 고급 커넥터용이며 기본 쇼츠 후보 찾기는 로컬 실행기로 처리합니다. 예리 글쓰기의 AI/API 키는 이 섹션에서 관리하고, 네이버 로그인과 임시저장은 로컬 실행기가 담당합니다.</p>
+          <p class="small muted">Gemini, Apify, OpenAI, Claude 키만 실행기에서 가져오며 네이버 비밀번호와 브라우저 세션은 옮기지 않습니다. YouTube 키는 선택 고급 커넥터용이며 기본 쇼츠 후보 찾기는 로컬 실행기로 처리합니다. 예리 Windows 글쓰기는 현재 로컬 실행기 보안 설정의 선택 모델 키 상태도 확인합니다.</p>
           <div class="api-secret-list">
             <div class="api-secret-item">
               <div class="api-secret-meta">
@@ -3368,34 +3368,6 @@
       </div>
     </div>
   </div>
-  <div id="serviceNoticePrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="serviceNoticeTitle" aria-describedby="serviceNoticeBody">
-    <div class="install-guide-card">
-      <p class="small muted">AIMAX 공지</p>
-      <h2 id="serviceNoticeTitle">예리/현주 안정화 작업 안내</h2>
-      <div id="serviceNoticeBody" class="report-checklist small">
-        <div class="report-checkitem">
-          <span class="step-index warn">1</span>
-          <span>현재 일부 사용자 환경에서 예리/현주 실행기 연결, 네이버 입력, 임시저장 과정이 정상적으로 완료되지 않는 오류를 수정하고 있습니다.</span>
-        </div>
-        <div class="report-checkitem">
-          <span class="step-index warn">2</span>
-          <span><strong>2026년 6월 1일까지 오류 수정 및 안정화 업데이트를 완료할 예정입니다.</strong><br>조금만 기다려주시면 안정화 완료 후 다시 안내드리겠습니다.</span>
-        </div>
-        <div class="report-checkitem">
-          <span class="step-index ok">3</span>
-          <span>6월 1일 이후에는 최신 설치 파일을 다시 다운로드하신 뒤 이용을 시도해주세요. 기존 구매자는 추가 결제 없이 그대로 사용하실 수 있습니다.</span>
-        </div>
-        <div class="report-checkitem">
-          <span class="step-index ok">4</span>
-          <span>송이/윤미 같은 웹기반 직원은 계속 웹에서 이용하실 수 있으며, 운영팀은 예리/현주를 Mac과 Windows에서 누구나 사용할 수 있도록 실제 배포 링크 기준으로 확인하고 있습니다.</span>
-        </div>
-      </div>
-      <div class="actions">
-        <button id="serviceNoticeUpdatesBtn" class="btn primary" type="button">다운로드/업데이트 보기</button>
-        <button id="serviceNoticeCloseBtn" class="btn" type="button">확인했습니다</button>
-      </div>
-    </div>
-  </div>
   <div id="reportAttentionPrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="reportAttentionTitle" aria-describedby="reportAttentionBody">
     <div class="install-guide-card report-attention-card">
       <p id="reportAttentionMeta" class="small muted">오류 보고 확인</p>
@@ -3422,11 +3394,11 @@
       <div id="webSecretNoticeBody" class="report-checklist small">
         <div class="report-checkitem">
           <span class="step-index ok">1</span>
-          <span>예리 글 생성과 송이/윤미 같은 웹 기반 AI 작업은 웹 설정을 통해 더 안정적으로 사용할 수 있도록 개선되었습니다.</span>
+          <span>송이 자료조사원은 이제 실행기 없이 웹에서 바로 사용할 수 있도록 개선되었습니다.</span>
         </div>
         <div class="report-checkitem">
           <span class="step-index warn">2</span>
-          <span><strong>Gemini, Claude, OpenAI, Apify 같은 AI/API 키는</strong><br><strong>설정 &gt; AI/API 연결</strong>에서 저장해주세요.</span>
+          <span><strong>송이에서 사용하는 Gemini API Key와 Apify API Token은</strong><br><strong>설정 &gt; AI/API 연결</strong>에서 저장해주세요.</span>
         </div>
         <div class="report-checkitem">
           <span class="step-index warn">3</span>
@@ -3438,7 +3410,7 @@
         </div>
         <div class="report-checkitem">
           <span class="step-index ok">5</span>
-          <span>예리 서버 글 생성, Apify 수집, Gemini 분석처럼 외부 API 비용이 생길 수 있는 작업은 실행 전 확인창을 보여드린 뒤에만 진행됩니다.</span>
+          <span>Apify 수집이나 Gemini 분석처럼 외부 API 비용이 생길 수 있는 작업은 실행 전 확인창을 보여드린 뒤에만 진행됩니다.</span>
         </div>
       </div>
       <div class="actions">
@@ -3454,7 +3426,6 @@
     const WEB_SETTINGS_STORAGE_KEY = "aimax_web_work_settings";
     const UPDATE_NOTICE_DISMISS_PREFIX = "aimax_update_notice_dismissed";
     const REPORT_ATTENTION_SEEN_PREFIX = "aimax_report_attention_seen";
-    const SERVICE_NOTICE_KEY = "aimax_service_notice_20260530_yeri_hyunju_june1";
     const WEB_SECRET_NOTICE_KEY = "aimax_web_secret_notice_20260522";
     const NEW_SONGI_PROJECT_VALUE = "__new_project__";
     const DEFAULT_AI_MODEL = "gemini-2.5-pro";
@@ -3586,7 +3557,6 @@
       agentWatchTimer: null,
       agentWatchUntil: 0,
       requiredUpdatePromptKey: "",
-      serviceNoticeDismissed: storageGet("localStorage", SERVICE_NOTICE_KEY) === "1",
       reportAttentionPromptKey: "",
       secretImportBusy: false,
       webSecretNoticeDismissed: storageGet("localStorage", WEB_SECRET_NOTICE_KEY) === "1",
@@ -5084,30 +5054,17 @@
       return { available: true, config, needsFallback };
     }
 
-    function aiKeyOperationalState(model = selectedAiModel()) {
+    function aiKeySettingDetail(model = selectedAiModel()) {
       const provider = aiProviderForModel(model);
       const localStatus = localAiKeyStatusForModel(model);
-      const config = yeriServerGenerationConfig();
-      if (localStatus === "ready") {
-        return { status: "ready", detail: `${aiModelLabel(model)} · 로컬 준비됨` };
+      const detail = [aiModelLabel(model)];
+      if (webSecretReady(provider) && localStatus !== "ready") {
+        detail.push("웹 저장됨", "로컬 저장 필요");
       }
-      if (config?.enabled && webSecretReady("gemini")) {
-        return { status: "ready", detail: "Gemini 웹 저장됨 · 예리 서버 글 생성 가능" };
+      if (localStatus !== "ready" && yeriServerGenerationFallbackState().available) {
+        detail.push("Gemini 서버 생성 가능");
       }
-      if (webSecretReady(provider)) {
-        return {
-          status: "missing",
-          detail: `${aiModelLabel(model)} 웹 저장됨 · 예리 서버 글 생성용 Gemini 연결 필요`,
-        };
-      }
-      return {
-        status: localStatus === "unknown" ? "missing" : localStatus,
-        detail: `${aiModelLabel(model)} · 웹 AI/API 연결 필요`,
-      };
-    }
-
-    function aiKeySettingDetail(model = selectedAiModel()) {
-      return aiKeyOperationalState(model).detail;
+      return detail.join(" · ");
     }
 
     function settingState(setting) {
@@ -5122,12 +5079,12 @@
       }
       if (setting === "ai_key") {
         const model = selectedAiModel();
-        const aiState = aiKeyOperationalState(model);
+        const modelReady = localAiKeyStatusForModel(model);
         return {
           label: settingLabels.ai_key,
-          status: aiState.status,
-          detail: aiState.detail,
-          action: "AI/API 연결",
+          status: modelReady,
+          detail: aiKeySettingDetail(model),
+          action: "웹/로컬 설정",
         };
       }
       if (setting === "neighbor_messages") {
@@ -5333,7 +5290,7 @@
           if (fallback.available) return "";
           if (fallback.reason) return fallback.reason;
           if (modelReady !== "ready" && webSecretReady(provider)) {
-            return "웹 AI/API 키는 저장되어 있습니다. 실행기를 최신 버전으로 업데이트하면 자동으로 인식됩니다.";
+            return `웹 AI/API 키는 저장되어 있지만 현재 예리 Windows 실행기는 로컬 보안 설정의 선택 모델 키도 필요합니다. 로컬 설정 열기에서 ${aiModelLabel(model)} 키를 저장해주세요.`;
           }
         }
         if (kind === "hyunju_find" && r.naver_account?.status === "ready" && webNeighborMessages().length) {
@@ -5686,47 +5643,9 @@
       return Boolean(prompt && !prompt.classList.contains("hidden"));
     }
 
-    function hasVisibleServiceNoticePrompt() {
-      const prompt = $("#serviceNoticePrompt");
-      return Boolean(prompt && !prompt.classList.contains("hidden"));
-    }
-
-    function markServiceNoticeSeen() {
-      state.serviceNoticeDismissed = true;
-      storageSet("localStorage", SERVICE_NOTICE_KEY, "1");
-    }
-
-    function hideServiceNoticePrompt(markSeen = false) {
-      if (markSeen) markServiceNoticeSeen();
-      $("#serviceNoticePrompt")?.classList.add("hidden");
-      if (markSeen) setTimeout(() => renderWebSecretNoticePrompt(), 0);
-    }
-
-    function shouldShowServiceNoticePrompt() {
-      if (!state.token) return false;
-      if (state.serviceNoticeDismissed) return false;
-      if (effectiveVersionInfo().update_required) return false;
-      if (hasVisibleReportAttentionPrompt()) return false;
-      return true;
-    }
-
-    function renderServiceNoticePrompt() {
-      const prompt = $("#serviceNoticePrompt");
-      if (!prompt) return;
-      if (!shouldShowServiceNoticePrompt()) {
-        hideServiceNoticePrompt(false);
-        return;
-      }
-      prompt.classList.remove("hidden");
-    }
-
     function hasWebSecretNoticeAudience() {
       const products = new Set(productsForUser());
-      return products.has("bundle")
-        || products.has("songi")
-        || products.has("blog_team")
-        || products.has("yeri")
-        || products.has("hyunju");
+      return products.has("bundle") || products.has("songi");
     }
 
     function markWebSecretNoticeSeen() {
@@ -5744,7 +5663,6 @@
       if (state.webSecretNoticeDismissed) return false;
       if (effectiveVersionInfo().update_required) return false;
       if (hasVisibleReportAttentionPrompt()) return false;
-      if (hasVisibleServiceNoticePrompt()) return false;
       return hasWebSecretNoticeAudience();
     }
 
@@ -5911,6 +5829,11 @@
       return runnableEntitledEmployees().some(({ employee }) => (employee.requiredSettings || []).includes("ai_key"));
     }
 
+    function selectedAiKeyStatus() {
+      const model = selectedAiModel();
+      return localAiKeyStatusForModel(model);
+    }
+
     function onboardingGuideItems() {
       const agent = state.agent?.agent;
       const r = readiness();
@@ -5918,11 +5841,13 @@
       const needsAi = needsAiKeyForEntitlement();
       const needsLocalAgent = needsLocalAgentForEntitlement();
       const naverReady = r.naver_account?.status === "ready";
+      const aiReady = !needsAi || selectedAiKeyStatus() === "ready";
+      const settingsReady = !needsLocalAgent || (Boolean(agent?.connected) && naverReady && aiReady);
       const model = selectedAiModel();
-      const aiState = aiKeyOperationalState(model);
-      const aiReady = !needsAi || isReady(aiState.status);
-      const settingsReady = !needsLocalAgent || (Boolean(agent?.connected) && naverReady);
-      const localSettingsBody = "로컬 보안 설정 창에는 네이버 ID와 비밀번호만 저장합니다. AI/API 키는 웹 설정 탭의 AI/API 연결에서 관리합니다.";
+      const modelKeyName = model === "claude" ? "Claude API Key" : isOpenAiModel(model) ? "OpenAI API Key" : "Gemini API Key";
+      const localSettingsBody = needsAi
+        ? `로컬 보안 설정 창에 네이버 ID/비밀번호와 ${modelKeyName}를 입력하고 저장합니다. 현재 선택 모델은 ${aiModelLabel(model)}입니다.`
+        : "로컬 보안 설정 창에 네이버 ID와 비밀번호를 입력하고 저장합니다.";
       const webMessages = webNeighborMessages();
       const webSettings = state.webSettings || defaultWebSettings();
       const needsBlogProfile = runnableEntitledEmployees().some(({ employee }) => employee.jobKind === "yeri_write");
@@ -5972,7 +5897,7 @@
           {
             label: "로컬 보안 설정",
             status: settingsReady ? "ready" : agent?.connected ? "missing" : "unknown",
-            title: "네이버 계정을 내 PC에 저장합니다",
+            title: "네이버 계정과 API 키를 내 PC에 저장합니다",
             body: localSettingsBody,
             detail: settingsReady ? "저장 완료" : agent?.connected ? "설정 필요" : "실행기 연결 후 가능",
             action: "settings",
@@ -6001,17 +5926,6 @@
           detail: webSettingsDetail,
           action: "settings-tab",
           button: "설정 탭 보기",
-        });
-      }
-      if (needsAi) {
-        items.push({
-          label: "AI/API 연결",
-          status: aiReady ? "ready" : "missing",
-          title: "글 생성에 사용할 API 키를 웹에 연결합니다",
-          body: "설정 탭의 AI/API 연결에서 Gemini API Key를 저장하면 예리가 서버에서 글 초안을 만든 뒤 실행기가 네이버 임시저장을 이어갑니다.",
-          detail: aiState.detail,
-          action: "settings-tab",
-          button: "AI/API 연결 열기",
         });
       }
       if (researchApi) {
@@ -7810,7 +7724,6 @@
       renderReportResult();
       renderReportsList();
       renderReportAttentionPrompt();
-      renderServiceNoticePrompt();
       renderWebSecretNoticePrompt();
       renderOnboardingGuide();
     }
@@ -8762,17 +8675,13 @@
         const command = await waitForAgentCommand(created.command?.id, 60000, { returnOnDelivered: false });
         if (command?.status === "failed") {
           const message = command.logs?.slice(-1)[0]?.message || "로컬 설정 창을 열지 못했습니다.";
-          if (message.includes("저장을 취소")) {
-            showToast("로컬 보안 설정 저장이 취소되었습니다. 필요하면 다시 열어 저장해주세요.");
-          } else {
-            showToast(message);
-            submitOperationalErrorReportOnce(
-              "local_settings_failed",
-              "로컬 설정 열기",
-              message,
-              `command_id=${created.command?.id || ""}`
-            ).catch(() => {});
-          }
+          showToast(message);
+          submitOperationalErrorReportOnce(
+            "local_settings_failed",
+            "로컬 설정 열기",
+            message,
+            `command_id=${created.command?.id || ""}`
+          ).catch(() => {});
           return;
         }
         if (command?.status === "done") {
@@ -8780,12 +8689,25 @@
           return;
         }
         if (command?.assigned_at || command?.status === "delivered") {
-          showToast("로컬 실행기가 설정 요청을 받았습니다. 설정 창이 보이지 않으면 작업 표시줄의 AIMAX를 확인해주세요.");
+          const message = "로컬 실행기가 설정 열기 요청을 받았지만 완료 응답이 늦습니다. 설정 창이 뒤에 숨어 있으면 작업 표시줄의 AIMAX를 확인해주세요.";
+          showToast(message);
+          submitOperationalErrorReportOnce(
+            "local_settings_slow_after_delivered",
+            "로컬 설정 열기",
+            message,
+            `command_id=${created.command?.id || ""}; command_status=${command?.status || ""}`
+          ).catch(() => {});
           return;
         }
         launchLocalAgent("open_settings");
         const message = "실행기 응답이 늦어 직접 설정 창 열기를 다시 요청했습니다.";
         showToast(message);
+        submitOperationalErrorReportOnce(
+          "local_settings_command_timeout",
+          "로컬 설정 열기",
+          message,
+          `command_id=${created.command?.id || ""}`
+        ).catch(() => {});
       } catch (error) {
         showToast(error.body?.error || "로컬 설정 열기 요청에 실패했습니다.");
       } finally {
@@ -9463,11 +9385,6 @@
     });
     $("#requiredUpdateDetailsBtn").addEventListener("click", () => {
       hideRequiredUpdatePrompt();
-      runUiAction("updates-tab");
-    });
-    $("#serviceNoticeCloseBtn").addEventListener("click", () => hideServiceNoticePrompt(true));
-    $("#serviceNoticeUpdatesBtn").addEventListener("click", () => {
-      hideServiceNoticePrompt(true);
       runUiAction("updates-tab");
     });
     $("#openLocalSettingsBtn").addEventListener("click", openLocalSettings);

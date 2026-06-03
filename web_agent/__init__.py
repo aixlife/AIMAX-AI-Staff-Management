@@ -1,2 +1,2 @@
-"""AIMAX web app connection helpers."""
+"""AIMAX web-app agent integration."""
 

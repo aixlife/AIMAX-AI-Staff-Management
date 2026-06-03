@@ -3,7 +3,7 @@
 로컬 빌드: python build_nuitka.py
 CI 빌드: GitHub Actions (windows-latest) 에서 동일 명령 실행
 
-산출물: dist/AIMAX.dist/ 폴더 → CI에서 zip으로 묶어 배포
+산출물: dist/NaverBlogAuto.dist/ 폴더 → CI에서 zip으로 묶어 배포
 (--onefile 대신 --standalone 사용: 빌드 시간 70% 단축)
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ENTRY = ROOT / "app.py"
 OUTPUT_DIR = ROOT / "dist"
-APP_NAME = "AIMAX"
+APP_NAME = "NaverBlogAuto"
 
 # Nuitka 공통 플래그
 COMMON = [
@@ -44,14 +44,13 @@ COMMON = [
     "--include-package=dotenv",
     "--include-package=requests",
     # 프로젝트 리소스
-    "--include-module=aimax_compliance",
     "--include-data-file=" + str(ROOT / "config.yaml") + "=config.yaml",
     # 메타데이터
     "--company-name=MakeFamily",
-    "--product-name=AIMAX",
-    "--file-version=1.0.0.0",
-    "--product-version=1.0.0.0",
-    "--file-description=AIMAX",
+    "--product-name=NaverBlogAuto",
+    "--file-version=2.2.0.0",
+    "--product-version=2.2.0.0",
+    "--file-description=네이버 블로그 자동화",
     "--copyright=Copyright (c) 2026 MakeFamily",
     str(ENTRY),
 ]

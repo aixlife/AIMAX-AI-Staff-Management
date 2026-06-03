@@ -67,13 +67,10 @@ def collect_driver_state(driver: Any = None) -> dict[str, Any]:
 
 
 def collect_system_info(driver: Any = None) -> dict[str, Any]:
-    consent = aimax.load_consent_record()
-    try:
-        from local_agent.state_repair import collect_local_state_diagnostics
-
-        local_state = collect_local_state_diagnostics()
-    except Exception as exc:
-        local_state = {"available": False, "error": str(exc)[:300]}
+    if hasattr(aimax, "load_consent_record"):
+        consent = aimax.load_consent_record()
+    else:
+        consent = aimax.load_compliance_record()
     return {
         "app": {
             "name": aimax.APP_NAME,
@@ -95,7 +92,6 @@ def collect_system_info(driver: Any = None) -> dict[str, Any]:
             "logs_dir": str(LOGS_DIR),
             "debug_dir": str(DEBUG_DIR),
         },
-        "local_state": local_state,
         "license": {
             "license_id": consent.get("license_id") or "",
             "terms_version": consent.get("terms_version") or "",

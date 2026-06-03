@@ -4,11 +4,13 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('config.yaml', '.'), ('assets', 'assets')]
 binaries = []
-hiddenimports = ['aimax_compliance', 'auth', 'browser', 'bulk', 'content', 'content.neighbor_message_ai', 'content.ai_text', 'content.gemini_text', 'content.gemini_image', 'content.prompts', 'content.markdown_parser', 'engagement', 'engagement.neighbor_quota', 'engagement.auto_neighbor', 'posting', 'scraper', 'scraper.follower_scraper', 'utils', 'ttkbootstrap', 'ttkbootstrap.themes', 'selenium_stealth', 'google.genai', 'google.genai.types', 'anthropic', 'PIL._tkinter_finder', 'keyring.backends', 'undetected_chromedriver', 'undetected_chromedriver.patcher', 'setuptools', 'setuptools._distutils', 'packaging', 'keyring.backends.Windows']
+hiddenimports = ['auth', 'browser', 'bulk', 'content', 'content.neighbor_message_ai', 'content.ai_text', 'content.gemini_text', 'content.gemini_image', 'content.prompts', 'content.markdown_parser', 'engagement', 'engagement.neighbor_quota', 'engagement.auto_neighbor', 'posting', 'scraper', 'scraper.follower_scraper', 'utils', 'ttkbootstrap', 'ttkbootstrap.themes', 'selenium_stealth', 'selenium.webdriver', 'selenium.webdriver.chrome', 'selenium.webdriver.chrome.service', 'google.genai', 'google.genai.types', 'anthropic', 'PIL._tkinter_finder', 'keyring.backends', 'undetected_chromedriver', 'undetected_chromedriver.patcher', 'setuptools', 'setuptools._distutils', 'packaging', 'keyring.backends.Windows']
 hiddenimports += collect_submodules('content')
 hiddenimports += collect_submodules('engagement')
 hiddenimports += collect_submodules('scraper')
 tmp_ret = collect_all('ttkbootstrap')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('selenium')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('selenium_stealth')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
@@ -21,7 +23,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
-    ['app.py'],
+    ['C:\\Users\\likim\\Desktop\\NaverBlogAuto-main-wincheck\\app.py'],
     pathex=[],
     binaries=binaries,
     datas=datas,
@@ -29,7 +31,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['google.genai.tests', 'pytest'],
     noarchive=False,
     optimize=0,
 )
@@ -40,7 +42,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='AIMAX',
+    name='NaverBlogAuto',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -59,5 +61,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='AIMAX',
+    name='NaverBlogAuto',
 )

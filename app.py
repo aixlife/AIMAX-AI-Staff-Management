@@ -139,7 +139,7 @@ _SECRET_ENV_KEYS = {
     "openai_api_key": ("AIMAX_OPENAI_API_KEY", "OPENAI_API_KEY", "openai_api_key"),
     "apify_api_token": ("AIMAX_APIFY_API_TOKEN", "APIFY_API_TOKEN", "apify_api_token"),
 }
-_DEFAULT_AI_MODEL = "gemini-2.5-pro"
+_DEFAULT_AI_MODEL = "gemini-3.1-pro"
 API_KEY_GUIDE_URL = os.environ.get(
     "AIMAX_API_KEY_GUIDE_URL",
     "https://www.notion.so/367b31f1da5581ed9b11f23757476cd2",
@@ -150,6 +150,8 @@ _USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot"
 _GEMINI_IMAGE_PRICE_USD = 0.039
 _OPENAI_IMAGE_PRICE_USD = 0.042
 _AI_TEXT_PRICE_USD_PER_1M = {
+    # gemini-3.1-pro 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
+    "gemini-3.1-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 3.1 Pro"},
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 2.5 Pro"},
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50, "label": "Gemini 2.5 Flash"},
     "claude": {"input": 3.00, "output": 15.00, "label": "Claude Sonnet"},
@@ -158,9 +160,11 @@ _AI_TEXT_PRICE_USD_PER_1M = {
 }
 _LEGACY_AI_MODEL_MAP = {
     "gemini": _DEFAULT_AI_MODEL,
-    "gemini-pro": "gemini-2.5-pro",
+    "gemini-pro": "gemini-3.1-pro",
     "gemini-flash": "gemini-2.5-flash",
-    "gemini-3.1-pro-preview": _DEFAULT_AI_MODEL,
+    # 구버전 기본값/프리뷰 선택은 현행 3.1 Pro 로 자동 마이그레이션
+    "gemini-2.5-pro": "gemini-3.1-pro",
+    "gemini-3.1-pro-preview": "gemini-3.1-pro",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -185,13 +189,35 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-2.5-flash", "gemini-2.5-pro", "gpt-5.4-mini", "gpt-5-mini"):
+    if value in ("claude", "gemini-3.1-pro", "gemini-2.5-flash", "gpt-5.4-mini", "gpt-5-mini"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 
 
 def _is_openai_model(value):
     return str(value or "").startswith("gpt-")
+
+
+def _persist_generated_markdown(source, markdown):
+    """AI가 생성한(과금된) 원고를 네이버 입력 전에 파일로 보관한다.
+
+    발행/네이버 입력이 나중에 실패해도 이미 만든 원고를 잃지 않도록 따로 저장한다.
+    저장 경로(str)를 반환하고, 실패하면 None 을 반환한다(저장 실패가 발행을 막지 않음).
+    """
+    text = str(markdown or "").strip()
+    if not text:
+        return None
+    try:
+        from datetime import datetime as _dt
+        from paths import GENERATED_DIR
+        GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+        safe = re.sub(r"[^0-9A-Za-z가-힣 _-]", "", str(source or "post")).strip()[:40] or "post"
+        stamp = _dt.now().strftime("%Y%m%d-%H%M%S")
+        path = GENERATED_DIR / f"{stamp}_{safe}.md"
+        path.write_text(text, encoding="utf-8")
+        return str(path)
+    except Exception:
+        return None
 
 
 def _normalize_image_count(value):
@@ -979,6 +1005,10 @@ class NaverBlogApp:
         self.web_agent_active_job_stage = ""
         self.web_agent_active_job_latest_stage_error = ""
         self._shown_update_popup_keys = set()
+        # 웹앱 명령 재진입/중복 처리 방지: open_settings 가 done 처리되기 전 폴링마다
+        # 재전달되어 설정창이 중첩되며 무한 로딩되는 문제를 막는다.
+        self._local_settings_dialog_open = False
+        self._handled_command_ids = set()
 
         # 패널 관리
         self.panels = {}
@@ -1478,63 +1508,6 @@ class NaverBlogApp:
         self._set_web_agent_status("웹앱 연결 해제됨", COLORS["text_muted"])
         self._log("[웹앱 연결] 연결을 해제했습니다.")
 
-    def _reset_web_agent_active_job(self):
-        self.web_agent_active_job_id = None
-        self.web_agent_active_job_claimed_at = 0.0
-        self.web_agent_active_job_kind = ""
-        self.web_agent_active_job_stage = ""
-        self.web_agent_active_job_latest_stage_error = ""
-
-    def _set_web_agent_active_job_stage(self, stage, job_id=None, kind=None, error=""):
-        if job_id is not None:
-            self.web_agent_active_job_id = job_id
-        if kind is not None:
-            self.web_agent_active_job_kind = str(kind or "")[:80]
-        self.web_agent_active_job_stage = str(stage or "")[:80]
-        if error:
-            self.web_agent_active_job_latest_stage_error = str(error)[:200]
-
-    def _web_agent_active_job_diagnostics(self):
-        job_id = str(getattr(self, "web_agent_active_job_id", "") or "")[:80]
-        claimed_at = float(getattr(self, "web_agent_active_job_claimed_at", 0.0) or 0.0)
-        age_seconds = 0
-        if job_id and claimed_at:
-            age_seconds = max(0, int(time.monotonic() - claimed_at))
-        return {
-            "active_job_id": job_id,
-            "active_job_kind": str(getattr(self, "web_agent_active_job_kind", "") or "")[:80],
-            "active_job_stage": str(getattr(self, "web_agent_active_job_stage", "") or "")[:80],
-            "active_job_age_seconds": age_seconds,
-            "active_job_latest_stage_error": str(getattr(self, "web_agent_active_job_latest_stage_error", "") or "")[:200],
-        }
-
-    def _fail_remote_job_dispatch(self, data, error):
-        data = data if isinstance(data, dict) else {}
-        client = data.get("client")
-        job = data.get("job") if isinstance(data.get("job"), dict) else {}
-        job_id = job.get("id") or getattr(self, "web_agent_active_job_id", None) or "-"
-        kind = job.get("kind") or getattr(self, "web_agent_active_job_kind", "") or "-"
-        self._set_web_agent_active_job_stage("ui_dispatch_error", job_id=job_id, kind=kind, error=error)
-        if client and job_id != "-":
-            try:
-                client.update_job(
-                    job_id,
-                    "failed",
-                    "로컬 실행기가 작업을 받았지만 UI 큐 처리 중 오류가 발생했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.",
-                    "error",
-                    result={
-                        "ok": False,
-                        "stage": "ui_dispatch_error",
-                        "error": "local_ui_dispatch_error",
-                        "detail": str(error)[:200],
-                        "active_job": self._web_agent_active_job_diagnostics(),
-                    },
-                )
-            except Exception as update_error:
-                self.queue.put(("log", f"[웹앱 작업] UI 큐 오류 상태 전송 실패: {update_error}"))
-        self.queue.put(("log", f"[웹앱 작업] UI 큐 처리 오류로 작업을 실패 처리했습니다: {job_id} ({error})"))
-        self._reset_web_agent_active_job()
-
     def _start_web_agent_polling(self, client):
         if self.web_agent_thread and self.web_agent_thread.is_alive():
             self.web_agent_client = client
@@ -1769,6 +1742,7 @@ class NaverBlogApp:
                 "active_job_stage": active_job["active_job_stage"],
                 "active_job_age_seconds": active_job["active_job_age_seconds"],
                 "active_job_latest_stage_error": active_job["active_job_latest_stage_error"],
+                "active_job_error": active_job["active_job_latest_stage_error"],
                 "last_next_job_at": str(getattr(self, "web_agent_last_next_job_at", "") or "")[:40],
                 "last_next_job_result": str(getattr(self, "web_agent_last_next_job_result", "") or "")[:120],
                 "last_next_job_error": str(getattr(self, "web_agent_last_next_job_error", "") or "")[:200],
@@ -1790,6 +1764,85 @@ class NaverBlogApp:
                 "active_job_latest_stage_error": active_job["active_job_latest_stage_error"],
             },
         }
+
+    def _reset_web_agent_active_job(self):
+        self.web_agent_active_job_id = None
+        self.web_agent_active_job_claimed_at = 0.0
+        self.web_agent_active_job_kind = ""
+        self.web_agent_active_job_stage = ""
+        self.web_agent_active_job_latest_stage_error = ""
+
+    def _clear_web_agent_active_job(self):
+        self._reset_web_agent_active_job()
+
+    def _set_web_agent_active_job_stage(self, stage, job_id=None, kind=None, error=""):
+        if job_id is not None:
+            self.web_agent_active_job_id = job_id
+        if kind is not None:
+            self.web_agent_active_job_kind = str(kind or "")[:80]
+        self.web_agent_active_job_stage = str(stage or "")[:80]
+        if error:
+            self.web_agent_active_job_latest_stage_error = str(error)[:200]
+
+    def _web_agent_active_job_diagnostics(self):
+        job_id = str(getattr(self, "web_agent_active_job_id", "") or "")[:80]
+        claimed_at = float(getattr(self, "web_agent_active_job_claimed_at", 0.0) or 0.0)
+        age_seconds = 0
+        if job_id and claimed_at:
+            age_seconds = max(0, int(time.monotonic() - claimed_at))
+        return {
+            "active_job_id": job_id,
+            "active_job_kind": str(getattr(self, "web_agent_active_job_kind", "") or "")[:80],
+            "active_job_stage": str(getattr(self, "web_agent_active_job_stage", "") or "")[:80],
+            "active_job_age_seconds": age_seconds,
+            "active_job_latest_stage_error": str(getattr(self, "web_agent_active_job_latest_stage_error", "") or "")[:200],
+        }
+
+    def _fail_web_agent_job(self, client, job_id, message, stage, error, level="error"):
+        if not client or not job_id:
+            return
+        try:
+            client.update_job(
+                job_id,
+                "failed",
+                message,
+                level,
+                result={
+                    "ok": False,
+                    "stage": str(stage or "local_runner_error")[:80],
+                    "error": str(error or "local_runner_error")[:120],
+                    "active_job": self._web_agent_active_job_diagnostics(),
+                },
+            )
+        except Exception as update_error:
+            self._log(f"[웹앱 작업] 실패 상태 전송 오류: {update_error}")
+
+    def _fail_remote_job_dispatch(self, data, error):
+        data = data if isinstance(data, dict) else {}
+        client = data.get("client")
+        job = data.get("job") if isinstance(data.get("job"), dict) else {}
+        job_id = job.get("id") or getattr(self, "web_agent_active_job_id", None) or "-"
+        kind = job.get("kind") or getattr(self, "web_agent_active_job_kind", "") or "-"
+        self._set_web_agent_active_job_stage("ui_dispatch_error", job_id=job_id, kind=kind, error=error)
+        if client and job_id != "-":
+            try:
+                client.update_job(
+                    job_id,
+                    "failed",
+                    "로컬 실행기가 작업을 받았지만 UI 큐 처리 중 오류가 발생했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.",
+                    "error",
+                    result={
+                        "ok": False,
+                        "stage": "ui_dispatch_error",
+                        "error": "local_ui_dispatch_error",
+                        "detail": str(error)[:200],
+                        "active_job": self._web_agent_active_job_diagnostics(),
+                    },
+                )
+            except Exception as update_error:
+                self.queue.put(("log", f"[웹앱 작업] UI 큐 오류 상태 전송 실패: {update_error}"))
+        self.queue.put(("log", f"[웹앱 작업] UI 큐 처리 오류로 작업을 실패 처리했습니다: {job_id} ({error})"))
+        self._reset_web_agent_active_job()
 
     def _queue_update_popup_if_needed(self, version_info):
         info = version_info if isinstance(version_info, dict) else {}
@@ -1942,24 +1995,24 @@ class NaverBlogApp:
                     if claimed_at and now - claimed_at >= runner_start_timeout_seconds:
                         stuck_job_id = self.web_agent_active_job_id
                         active_job = self._web_agent_active_job_diagnostics()
-                        stuck_stage = active_job.get("active_job_stage") or "claimed"
-                        if stuck_stage in {"claimed", "queued_to_ui"}:
-                            timeout_error = "local_ui_queue_not_processed_after_claim"
-                            timeout_message = "로컬 실행기가 작업을 받았지만 내부 UI 큐가 작업을 처리하지 못했습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
-                        else:
-                            timeout_error = "local_worker_not_started_after_claim"
-                            timeout_message = "로컬 실행기가 작업을 받았지만 내부 실행 워커가 시작되지 않았습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
+                        stage = active_job.get("active_job_stage") or "claimed"
+                        error = "local_ui_queue_not_processed_after_claim" if stage in {"claimed", "queued_to_ui"} else "local_worker_not_started_after_claim"
+                        message = (
+                            "로컬 실행기가 작업을 받았지만 내부 UI 큐가 작업 시작을 처리하지 못했습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
+                            if error == "local_ui_queue_not_processed_after_claim"
+                            else "로컬 실행기가 작업을 받았지만 내부 실행 워커가 시작되지 않았습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
+                        )
                         try:
                             client.update_job(
                                 stuck_job_id,
                                 "failed",
-                                timeout_message,
+                                message,
                                 "error",
                                 result={
                                     "ok": False,
                                     "stage": "runner_start_timeout",
-                                    "active_job_stage": stuck_stage,
-                                    "error": timeout_error,
+                                    "active_job_stage": stage,
+                                    "error": error,
                                     "active_job": active_job,
                                 },
                             )
@@ -2028,6 +2081,7 @@ class NaverBlogApp:
                             job_id = job.get("id")
                             job_kind = job.get("kind") or ""
                             self.web_agent_active_job_id = job_id
+                            self.web_agent_active_job_kind = str(job_kind or "")[:80]
                             self.web_agent_active_job_claimed_at = time.monotonic()
                             self._set_web_agent_active_job_stage("claimed", job_id=job_id, kind=job_kind)
                             try:
@@ -2550,11 +2604,72 @@ class NaverBlogApp:
         self.root.wait_window(dlg)
         return result["saved"]
 
+    def _terminate_windows_launcher(self):
+        """업데이트 시 파일 잠금이 풀리도록 윈도우 런처(aimax-agent-launcher.exe)를 함께 종료한다(best-effort)."""
+        if not sys.platform.startswith("win"):
+            return
+        try:
+            import subprocess
+            subprocess.run(
+                ["taskkill", "/f", "/im", "aimax-agent-launcher.exe"],
+                capture_output=True, timeout=5,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except Exception:
+            pass
+
+    def _handle_stop_agent_command(self, command, send_command_update):
+        """웹에서 보낸 '실행기 종료' 명령 처리 — 사용자가 작업관리자 없이 러너를 끄고 업데이트할 수 있게 한다."""
+        payload = command.get("payload") if isinstance(command.get("payload"), dict) else {}
+        reason = str(payload.get("reason") or "manual").strip() or "manual"
+        busy = bool(getattr(self, "running", False))
+        if reason == "update":
+            message = "새 버전 설치를 위해 실행기를 종료합니다. 잠시 후 최신 버전으로 다시 실행해주세요."
+        elif busy:
+            message = "진행 중이던 작업을 멈추고 실행기를 종료합니다."
+        else:
+            message = "요청에 따라 실행기를 종료합니다."
+        self._log(f"[웹앱 연결] 실행기 종료 요청 수신 (reason={reason}, busy={busy}). {message}")
+        send_command_update("done", message, {"type": "agent_stopped", "reason": reason})
+
+        def _shutdown():
+            import time as _t
+            import os as _os
+            try:
+                self.stop_event.set()
+                self.running = False
+                self.web_agent_stop_event.set()
+            except Exception:
+                pass
+            if getattr(self, "driver", None):
+                try:
+                    self.driver.quit()
+                except Exception:
+                    pass
+            _t.sleep(1.5)  # done 응답이 서버로 전송될 시간 확보
+            self._terminate_windows_launcher()
+            _os._exit(0)  # tkinter mainloop/데몬 스레드와 무관하게 프로세스를 확실히 종료
+
+        threading.Thread(target=_shutdown, daemon=True).start()
+
     def _handle_web_agent_command(self, data):
         client = data.get("client")
         command = data.get("command") or {}
         command_id = command.get("id") or ""
         command_type = command.get("type") or ""
+
+        # open_settings 는 모달 설정창을 띄우므로, done 처리 전 폴링으로 재전달되면
+        # 설정창이 중첩되며 무한 로딩된다. (1) 같은 command_id 재처리 차단,
+        # (2) 설정창이 이미 열려 있으면 추가로 띄우지 않는다.
+        if command_type == "open_settings":
+            if command_id and command_id in self._handled_command_ids:
+                return
+            if self._local_settings_dialog_open:
+                return
+            if command_id:
+                self._handled_command_ids.add(command_id)
+                if len(self._handled_command_ids) > 200:
+                    self._handled_command_ids = set(list(self._handled_command_ids)[-100:])
 
         def _send_command_update(status, log, result=None):
             if not client or not command_id:
@@ -2567,6 +2682,9 @@ class NaverBlogApp:
             threading.Thread(target=_worker, daemon=True).start()
 
         try:
+            if command_type in ("stop_agent", "quit_runner", "shutdown_agent", "stop_runner"):
+                self._handle_stop_agent_command(command, _send_command_update)
+                return
             if command_type == "import_local_provider_secrets":
                 result, log = self._import_local_provider_secrets(client, command)
                 self._log(f"[웹앱 연결] {log}")
@@ -2595,7 +2713,11 @@ class NaverBlogApp:
                 return
             if command_type != "open_settings":
                 raise ValueError(f"지원하지 않는 웹앱 명령입니다: {command_type}")
-            saved = self._open_web_requested_local_settings_dialog()
+            self._local_settings_dialog_open = True
+            try:
+                saved = self._open_web_requested_local_settings_dialog()
+            finally:
+                self._local_settings_dialog_open = False
             self.root.lift()
             self.root.focus_force()
             if saved:
@@ -2646,22 +2768,15 @@ class NaverBlogApp:
         kind = job.get("kind") or "-"
         self._set_web_agent_active_job_stage("ui_received", job_id=job_id, kind=kind)
         if self.running:
-            try:
-                client.update_job(
-                    job_id,
-                    "failed",
-                    "로컬 실행기가 이미 다른 작업을 처리 중입니다.",
-                    "warning",
-                    result={
-                        "ok": False,
-                        "stage": "ui_received",
-                        "error": "local_worker_busy",
-                        "active_job": self._web_agent_active_job_diagnostics(),
-                    },
-                )
-            except Exception:
-                pass
-            self._reset_web_agent_active_job()
+            self._fail_web_agent_job(
+                client,
+                job_id,
+                "로컬 실행기가 이미 다른 작업을 처리 중입니다.",
+                "local_worker_busy",
+                "local_agent_busy",
+                "warning",
+            )
+            self._clear_web_agent_active_job()
             self._log(f"[웹앱 작업] 이미 실행 중이라 작업을 건너뜁니다: {job_id}")
             return
         self._log(f"[웹앱 작업] 수신: {kind} ({job_id})")
@@ -2670,44 +2785,26 @@ class NaverBlogApp:
             started = self._start_worker(self._run_remote_job_worker, client=client, job=job)
         except Exception as error:
             self._set_web_agent_active_job_stage("worker_start_requested", job_id=job_id, kind=kind, error=error)
-            try:
-                client.update_job(
-                    job_id,
-                    "failed",
-                    "로컬 실행기 워커 시작 요청 중 오류가 발생했습니다.",
-                    "error",
-                    result={
-                        "ok": False,
-                        "stage": "worker_start_requested",
-                        "error": "local_worker_start_exception",
-                        "detail": str(error)[:200],
-                        "active_job": self._web_agent_active_job_diagnostics(),
-                    },
-                )
-            except Exception:
-                pass
+            self._fail_web_agent_job(
+                client,
+                job_id,
+                "로컬 실행기 워커 시작 요청 중 오류가 발생했습니다.",
+                "worker_start_requested",
+                "local_worker_start_exception",
+            )
             self._reset_web_agent_active_job()
             self._log(f"[웹앱 작업] 워커 시작 요청 오류: {error}")
             return
         if started is False:
-            try:
-                client.update_job(
-                    job_id,
-                    "failed",
-                    "로컬 실행기 워커를 시작하지 못했습니다.",
-                    "error",
-                    result={
-                        "ok": False,
-                        "stage": "worker_start_requested",
-                        "error": "local_worker_start_failed",
-                        "active_job": self._web_agent_active_job_diagnostics(),
-                    },
-                )
-            except Exception:
-                pass
+            self._fail_web_agent_job(
+                client,
+                job_id,
+                "로컬 실행기 워커를 시작하지 못했습니다.",
+                "local_worker_start_failed",
+                "local_worker_start_failed",
+            )
             self._reset_web_agent_active_job()
             return
-        return
 
     def _run_remote_job_worker(self, client, job):
         job_id = job.get("id") or ""
@@ -3749,7 +3846,7 @@ class NaverBlogApp:
             bg=COLORS["card_bg"], fg=COLORS["text_secondary"], anchor="w",
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
-            ("gemini-2.5-pro",         "Gemini 2.5 Pro  (~44원/글)  ★ 기본"),
+            ("gemini-3.1-pro",         "Gemini 3.1 Pro  (~44원/글)  ★ 기본"),
             ("gemini-2.5-flash",       "Gemini 2.5 Flash  (~11원/글)"),
             ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
             ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),
@@ -5200,7 +5297,7 @@ class NaverBlogApp:
             post_results = []
             failed_posts = []
 
-            def _record_failed(post, post_stage, error, title="", char_count=0, images=None, draft_save_confirmed=None):
+            def _record_failed(post, post_stage, error, title="", char_count=0, images=None, draft_save_confirmed=None, recovery_path=None):
                 failed = {
                     "source": post.get("source", ""),
                     "keyword": post.get("source", ""),
@@ -5216,6 +5313,8 @@ class NaverBlogApp:
                     failed["images"] = images
                 if draft_save_confirmed is not None:
                     failed["draft_save_confirmed"] = bool(draft_save_confirmed)
+                if recovery_path:
+                    failed["recovery_markdown_path"] = recovery_path
                 failed_posts.append(failed)
 
             def _reset_driver(reason=None):
@@ -5291,6 +5390,7 @@ class NaverBlogApp:
                 image_inserted = 0
                 image_failures = []
                 draft_save_confirmed = None
+                saved_md_path = None
 
                 try:
                     post_stage = "content_generation"
@@ -5309,6 +5409,9 @@ class NaverBlogApp:
                         parsed_title, content_list = parse_markdown(content)
                         title = str(post_artifact.get("title") or parsed_title or post["source"]).strip()
                         self._log(f"서버 생성 글 사용: {title} (모델: {post_artifact.get('text_model') or ai_model}, 글자 수: {visible_char_count}자)")
+                        saved_md_path = _persist_generated_markdown(title or post["source"], content)
+                        if saved_md_path:
+                            self._log(f"생성 원고 백업 저장: {saved_md_path}")
                     elif post["type"] == "keyword":
                         keyword = post["source"]
                         cta_info = f", CTA: {cta_link}" if cta_link else ""
@@ -5329,6 +5432,10 @@ class NaverBlogApp:
                         visible_char_count = measure_visible_char_count(content)
                         self._log(f"생성 글자 수 확인: {visible_char_count}자 (요청 {word_count}자)")
                         title, content_list = parse_markdown(content)
+                        # 과금된 원고를 네이버 입력 전에 따로 보관 (이후 단계 실패 시 재사용)
+                        saved_md_path = _persist_generated_markdown(keyword, content)
+                        if saved_md_path:
+                            self._log(f"생성 원고 백업 저장: {saved_md_path}")
                     else:
                         post_usage = {}
                         self._log(f"마크다운 파일 로드: {post['source']}")
@@ -5470,6 +5577,8 @@ class NaverBlogApp:
                     stage = post_stage if "post_stage" in locals() else stage
                     failed_keyword = post["source"]
                     self._log(f"[오류] {last_error}")
+                    if saved_md_path:
+                        self._log(f"이미 생성된 원고는 버리지 않고 저장해 뒀어요: {saved_md_path} (다시 시도하면 재사용 가능)")
                     _record_failed(
                         post,
                         stage,
@@ -5484,6 +5593,7 @@ class NaverBlogApp:
                             "failures": image_failures,
                         },
                         draft_save_confirmed=draft_save_confirmed,
+                        recovery_path=saved_md_path,
                     )
 
                 # 다음 글까지 대기 (마지막 제외)

@@ -6,18 +6,23 @@ import shutil
 import subprocess
 import time
 from glob import glob
+from pathlib import Path
 
 import undetected_chromedriver as uc
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium_stealth import stealth
 
 from config import (
+    BROWSER_DRIVER_MODE,
+    BROWSER_DRIVER_PATH,
     BROWSER_EXECUTABLE_PATH,
     HEADLESS,
     PROXY,
     VIEWPORT_MIN,
     VIEWPORT_MAX,
 )
-from paths import BROWSER_PROFILES_DIR
+from paths import APP_DATA_DIR, BROWSER_PROFILES_DIR, BUNDLE_DIR
 from utils.logger import get_logger
 
 try:
@@ -31,6 +36,11 @@ logger = get_logger(__name__)
 
 _OS = platform.system()
 _FALLBACK_HEADLESS_UA_VERSION = 124
+_APP_CONTROL_MARKERS = (
+    "winerror 4551",
+    "application control policy",
+    "애플리케이션 제어 정책",
+)
 
 
 def _iter_browser_candidates():
@@ -112,11 +122,99 @@ def _find_browser_executable():
     return None
 
 
+def _exception_text(error):
+    parts = [str(error)]
+    for attr in ("__cause__", "__context__"):
+        nested = getattr(error, attr, None)
+        if nested:
+            parts.append(str(nested))
+    return " ".join(parts)
+
+
+def _is_application_control_block(error):
+    text = _exception_text(error).lower()
+    return any(marker in text for marker in _APP_CONTROL_MARKERS)
+
+
+def _is_writable_dir(path):
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_test"
+        probe.write_text("ok", encoding="utf-8")
+        try:
+            probe.unlink()
+        except OSError:
+            pass
+        return True
+    except OSError as e:
+        logger.debug(f"드라이버 캐시 디렉토리 쓰기 불가 ({path}): {e}")
+        return False
+
+
+def _iter_driver_cache_dirs():
+    env_cache_dir = os.getenv("CHROMEDRIVER_CACHE_DIR", "").strip()
+    if env_cache_dir:
+        yield Path(os.path.expandvars(env_cache_dir))
+    yield APP_DATA_DIR / "driver_cache"
+    yield BUNDLE_DIR / "driver_cache"
+
+
+def _get_uc_driver_cache_dir():
+    """undetected-chromedriver가 기본 %APPDATA% 캐시를 쓰지 않도록 경로 지정."""
+    for cache_dir in _iter_driver_cache_dirs():
+        if _is_writable_dir(cache_dir):
+            logger.info(f"undetected 드라이버 캐시 사용: {cache_dir}")
+            return cache_dir
+    logger.warning("undetected 드라이버 캐시 디렉토리를 준비하지 못해 기본 캐시를 사용합니다.")
+    return None
+
+
+def _configure_uc_driver_cache_dir():
+    cache_dir = _get_uc_driver_cache_dir()
+    if not cache_dir:
+        return
+    try:
+        import undetected_chromedriver.patcher as uc_patcher
+
+        uc_patcher.Patcher.data_path = str(cache_dir)
+    except Exception as e:
+        logger.debug(f"undetected 드라이버 캐시 경로 설정 실패: {e}")
+
+
+def _iter_chromedriver_candidates():
+    exe_name = "chromedriver.exe" if _OS == "Windows" else "chromedriver"
+    configured = BROWSER_DRIVER_PATH
+    if configured:
+        yield configured
+
+    for base in (BUNDLE_DIR, BUNDLE_DIR / "drivers", BUNDLE_DIR / "driver_cache"):
+        yield str(base / exe_name)
+
+    resolved = shutil.which("chromedriver")
+    if resolved:
+        yield resolved
+
+
+def _find_chromedriver_executable():
+    seen = set()
+    for candidate in _iter_chromedriver_candidates():
+        expanded = os.path.expandvars(candidate)
+        norm = os.path.normcase(os.path.abspath(expanded))
+        if norm in seen:
+            continue
+        seen.add(norm)
+        if os.path.exists(expanded):
+            logger.info(f"공식 ChromeDriver 실행 파일 감지: {expanded}")
+            return expanded
+        if candidate == BROWSER_DRIVER_PATH:
+            logger.warning(f"설정된 chromedriver 경로를 찾지 못했습니다: {expanded}")
+    return None
+
+
 def _get_chrome_major_version(browser_path=None):
     """설치된 Chromium 계열 브라우저의 메이저 버전 번호 반환."""
     commands = []
     if browser_path:
-        commands.append([browser_path, "--version"])
         if _OS == "Windows":
             escaped = browser_path.replace("'", "''")
             commands.append([
@@ -125,10 +223,18 @@ def _get_chrome_major_version(browser_path=None):
                 "-Command",
                 f"[System.Diagnostics.FileVersionInfo]::GetVersionInfo('{escaped}').FileVersion",
             ])
+        commands.append([browser_path, "--version"])
 
     for cmd in commands:
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=10,
+            )
             output = (result.stdout or result.stderr or "").strip()
             if result.returncode == 0 and output:
                 match = re.search(r"(\d+)\.\d+\.\d+", output)
@@ -173,7 +279,8 @@ def _profile_process_pids(profile_dir):
             "Get-CimInstance Win32_Process | Where-Object {\n"
             "  $_.CommandLine -and $_.CommandLine.ToLower().Contains($profile) -and\n"
             "  ($_.Name -match 'chrome|chromedriver')\n"
-            "} | Select-Object -ExpandProperty ProcessId"
+            "} | "
+            "Select-Object -ExpandProperty ProcessId"
         )
         try:
             result = subprocess.run(
@@ -273,21 +380,6 @@ def _prepare_profile_dir(profile_dir):
     _clear_profile_locks(profile_dir)
 
 
-def _is_chrome_launch_error(error):
-    text = str(error or "").lower()
-    return any(
-        marker in text
-        for marker in (
-            "chrome not reachable",
-            "cannot connect to chrome",
-            "session not created",
-            "devtools",
-            "target frame detached",
-            "browser has closed",
-        )
-    )
-
-
 def _reset_profile_dir(profile_dir):
     _stop_profile_processes(profile_dir)
     _clear_profile_locks(profile_dir)
@@ -304,8 +396,9 @@ def _reset_profile_dir(profile_dir):
     os.makedirs(profile_dir, exist_ok=True)
 
 
-def _build_chrome_options(proxy=None, headless=None, chrome_ver=None):
-    options = uc.ChromeOptions()
+def _build_chrome_options(proxy=None, headless=None, chrome_ver=None, options_cls=None):
+    options_cls = options_cls or uc.ChromeOptions
+    options = options_cls()
 
     width = random.randint(VIEWPORT_MIN[0], VIEWPORT_MAX[0])
     height = random.randint(VIEWPORT_MIN[1], VIEWPORT_MAX[1])
@@ -333,8 +426,154 @@ def _build_chrome_options(proxy=None, headless=None, chrome_ver=None):
     return options
 
 
+def _attach_profile_options(options, profile_dir):
+    options.add_argument(f"--user-data-dir={profile_dir}")
+    options.add_argument("--profile-directory=Default")
+    return options
+
+
+def _create_undetected_driver(browser_path, proxy, headless, chrome_ver, profile_dir):
+    _configure_uc_driver_cache_dir()
+    options = _build_chrome_options(proxy=proxy, headless=headless, chrome_ver=chrome_ver)
+    _attach_profile_options(options, profile_dir)
+
+    launch_kwargs = {"browser_executable_path": browser_path}
+    if chrome_ver:
+        launch_kwargs["version_main"] = chrome_ver
+
+    logger.info("스텔스 브라우저 시작 중...")
+    try:
+        return uc.Chrome(options=options, **launch_kwargs)
+    except Exception as e:
+        if _is_application_control_block(e) or not chrome_ver:
+            raise
+        logger.warning(f"브라우저 시작 실패 ({e}), version_main 없이 재시도...")
+        retry_options = _build_chrome_options(proxy=proxy, headless=headless, chrome_ver=chrome_ver)
+        _attach_profile_options(retry_options, profile_dir)
+        retry_kwargs = {"browser_executable_path": browser_path}
+        return uc.Chrome(options=retry_options, **retry_kwargs)
+
+
+def _create_selenium_driver(browser_path, proxy, headless, chrome_ver, profile_dir):
+    options = _build_chrome_options(
+        proxy=proxy,
+        headless=headless,
+        chrome_ver=chrome_ver,
+        options_cls=webdriver.ChromeOptions,
+    )
+    if browser_path:
+        options.binary_location = browser_path
+    _attach_profile_options(options, profile_dir)
+    try:
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+    except Exception:
+        pass
+
+    driver_path = _find_chromedriver_executable()
+    if driver_path:
+        service = ChromeService(executable_path=driver_path)
+    else:
+        logger.info("공식 ChromeDriver 경로 미지정 - Selenium Manager 자동 탐지/다운로드 사용")
+        service = ChromeService()
+
+    logger.info("일반 Selenium 브라우저 시작 중...")
+    return webdriver.Chrome(service=service, options=options)
+
+
+def _policy_block_message():
+    return (
+        "Windows 애플리케이션 제어 정책이 브라우저 드라이버 실행을 차단했습니다. "
+        "config.yaml의 browser.driver_mode를 \"selenium\"으로 두고, "
+        "Chrome 버전에 맞는 공식 chromedriver.exe를 허용된 폴더에 둔 뒤 "
+        "browser.driver_path에 전체 경로를 지정해 주세요. "
+        "환경변수 CHROMEDRIVER_PATH로도 지정할 수 있습니다."
+    )
+
+
+def _is_browser_start_failure(error):
+    text = _exception_text(error).lower()
+    markers = (
+        "chrome not reachable",
+        "cannot connect to chrome",
+        "connectionreseterror",
+        "connection aborted",
+        "devtoolsactiveport",
+        "user data directory is already in use",
+        "session not created",
+        "target frame detached",
+        "browser has closed",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _browser_start_failure_message(error, browser_path=None, profile_dir=None):
+    lines = [
+        "브라우저 시작 실패: Chrome 프로필/디버그 연결 복구 후에도 시작할 수 없습니다.",
+        "Chrome은 감지됐지만 실행 직후 닫혔거나, 드라이버가 Chrome에 연결하기 전에 연결이 끊겼습니다.",
+    ]
+    if browser_path:
+        lines.append(f"- 감지된 Chrome: {browser_path}")
+    if profile_dir:
+        lines.append(f"- 사용한 브라우저 프로필: {profile_dir}")
+    lines.extend([
+        "",
+        "지금 해볼 순서:",
+        "1. 열려 있는 Chrome 창을 모두 닫고 프로그램을 다시 실행합니다.",
+        "2. Ctrl + Shift + Esc를 눌러 작업 관리자를 엽니다.",
+        "3. chrome.exe, chromedriver.exe, undetected_chromedriver.exe가 보이면 각각 선택 후 [작업 끝내기]를 누릅니다.",
+        "4. Chrome을 열어 오른쪽 위 점 3개 > 도움말 > Chrome 정보에서 최신 버전으로 업데이트합니다.",
+        "5. 프로그램 폴더가 OneDrive, 바탕 화면, 다운로드 폴더에 있다면 C:\\NaverBlogAuto 같은 일반 로컬 폴더로 옮긴 뒤 실행합니다.",
+        "6. Windows 보안 > 보호 기록에서 NaverBlogAuto, chromedriver, undetected_chromedriver 차단 내역이 있으면 허용 또는 복원합니다.",
+        "7. 계속 실패하면 Windows 키 + R을 누르고 %APPDATA%\\NaverBlogAuto 를 입력한 뒤 browser_profiles 폴더를 삭제하고 다시 실행합니다.",
+        "   이 경우 브라우저 로그인 세션은 초기화되어 다시 로그인해야 할 수 있습니다.",
+    ])
+    logger.debug(f"browser start raw error: {_exception_text(error)}")
+    return "\n".join(lines)
+
+
+def _get_recovery_profile_dir(profile_key=None):
+    profile_name = _sanitize_profile_key(profile_key)
+    recovery_name = f"{profile_name}_recovery_{int(time.time())}"
+    profile_dir = BROWSER_PROFILES_DIR / recovery_name
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    return str(profile_dir)
+
+
+def _create_driver_for_mode(driver_mode, browser_path, proxy, headless, chrome_ver, profile_dir):
+    if driver_mode == "selenium":
+        try:
+            return _create_selenium_driver(browser_path, proxy, headless, chrome_ver, profile_dir)
+        except Exception as e:
+            if _is_application_control_block(e):
+                raise RuntimeError(_policy_block_message()) from e
+            raise
+
+    try:
+        return _create_undetected_driver(browser_path, proxy, headless, chrome_ver, profile_dir)
+    except Exception as e:
+        if driver_mode == "undetected":
+            if _is_application_control_block(e):
+                raise RuntimeError(_policy_block_message()) from e
+            raise
+
+        if _is_application_control_block(e):
+            logger.warning("undetected 드라이버가 Windows 정책에 차단되어 일반 Selenium으로 전환합니다.")
+        else:
+            logger.warning(f"undetected 드라이버 시작 실패 ({e}); 일반 Selenium으로 전환합니다.")
+        try:
+            return _create_selenium_driver(browser_path, proxy, headless, chrome_ver, profile_dir)
+        except Exception as fallback_error:
+            if _is_application_control_block(e) or _is_application_control_block(fallback_error):
+                raise RuntimeError(_policy_block_message()) from fallback_error
+            raise RuntimeError(
+                "브라우저 드라이버 시작 실패: "
+                f"undetected={e}; selenium fallback={fallback_error}"
+            ) from fallback_error
+
+
 def create_stealth_driver(proxy=None, headless=None, profile_key=None):
-    """undetected-chromedriver + selenium-stealth로 탐지 우회 브라우저 생성"""
+    """정책 차단 환경을 고려해 undetected/공식 Selenium 드라이버로 브라우저 생성."""
     if headless is None:
         headless = HEADLESS
     if proxy is None:
@@ -349,56 +588,46 @@ def create_stealth_driver(proxy=None, headless=None, profile_key=None):
         )
 
     chrome_ver = _get_chrome_major_version(browser_path)
-    options = _build_chrome_options(proxy=proxy, headless=headless, chrome_ver=chrome_ver)
 
     profile_dir = _get_profile_dir(profile_key)
     _prepare_profile_dir(profile_dir)
-    options.add_argument(f"--user-data-dir={profile_dir}")
-    options.add_argument("--profile-directory=Default")
     logger.info(f"브라우저 프로필 사용: {profile_dir}")
 
-    launch_kwargs = {
-        "browser_executable_path": browser_path,
-        # PyInstaller macOS 번들에서는 multiprocessing 기반 detached launch가
-        # 앱 본체를 한 번 더 띄우는 현상을 만들 수 있어 subprocess 경로를 명시한다.
-        "use_subprocess": True,
-    }
-    if chrome_ver:
-        launch_kwargs["version_main"] = chrome_ver
+    driver_mode = BROWSER_DRIVER_MODE or "auto"
+    if driver_mode not in {"auto", "undetected", "selenium"}:
+        logger.warning(f"알 수 없는 browser.driver_mode={driver_mode!r}; auto 모드로 진행합니다.")
+        driver_mode = "auto"
 
-    logger.info("스텔스 브라우저 시작 중...")
     try:
-        driver = uc.Chrome(options=options, **launch_kwargs)
+        driver = _create_driver_for_mode(driver_mode, browser_path, proxy, headless, chrome_ver, profile_dir)
     except Exception as e:
-        logger.warning(f"브라우저 시작 실패 ({e}), version_main 없이 재시도...")
-        retry_options = _build_chrome_options(proxy=proxy, headless=headless, chrome_ver=chrome_ver)
-        retry_options.add_argument(f"--user-data-dir={profile_dir}")
-        retry_options.add_argument("--profile-directory=Default")
+        if _is_application_control_block(e):
+            raise
+        if not _is_browser_start_failure(e):
+            raise
+
+        logger.warning("브라우저 시작 실패 - Chrome 프로필/디버그 연결 복구 후 1회 재시도합니다.")
+        _reset_profile_dir(profile_dir)
+        logger.info(f"복구 후 브라우저 프로필 사용: {profile_dir}")
         try:
-            driver = uc.Chrome(
-                options=retry_options,
-                browser_executable_path=browser_path,
-                use_subprocess=True,
+            driver = _create_driver_for_mode(
+                driver_mode,
+                browser_path,
+                proxy,
+                headless,
+                chrome_ver,
+                profile_dir,
             )
-        except Exception as retry_error:
-            if not (_is_chrome_launch_error(e) or _is_chrome_launch_error(retry_error)):
-                raise
-            logger.warning("브라우저 프로필/디버그 연결 복구 후 한 번 더 재시도합니다.")
-            _reset_profile_dir(profile_dir)
-            recovery_options = _build_chrome_options(proxy=proxy, headless=headless, chrome_ver=chrome_ver)
-            recovery_options.add_argument(f"--user-data-dir={profile_dir}")
-            recovery_options.add_argument("--profile-directory=Default")
-            try:
-                driver = uc.Chrome(
-                    options=recovery_options,
-                    browser_executable_path=browser_path,
-                    use_subprocess=True,
+        except Exception as recovery_error:
+            if _is_application_control_block(recovery_error):
+                raise RuntimeError(_policy_block_message()) from recovery_error
+            raise RuntimeError(
+                _browser_start_failure_message(
+                    recovery_error,
+                    browser_path=browser_path,
+                    profile_dir=profile_dir,
                 )
-            except Exception as recovery_error:
-                raise RuntimeError(
-                    "브라우저 시작 실패: Chrome 프로필/디버그 연결 복구 후에도 시작할 수 없습니다. "
-                    f"원인: {recovery_error}"
-                ) from recovery_error
+            ) from recovery_error
 
     stealth_platform = {"Darwin": "MacIntel", "Linux": "Linux x86_64"}.get(_OS, "Win32")
     try:

@@ -6,14 +6,14 @@
 
 윤미/송이 다음 기능을 더 붙이기 전에 `AI/API 연결`의 기존 로컬 키 가져오기 브릿지를 선행 게이트로 추가한다. 이 기능은 Windows 사용자가 핵심 대상이므로 Mac/server/web만으로 완료 처리하지 않는다.
 
-## 초기 확인
+## 현재 확인
 
 - 웹 `AI/API 연결`에는 저장/삭제만 있고 가져오기 버튼은 없다.
 - 웹 안내 팝업에는 `AI/API 연결 열기`, `나중에 하기`만 있다.
 - 서버 `/api/agent/commands`는 현재 `open_settings`만 허용한다.
 - Mac 실행기와 Windows 실행기는 `open_settings` 외 command를 지원하지 않는 구조다.
 - 로컬 실행기는 `gemini_api_key`, `claude_api_key`, `openai_api_key`, `apify_api_token`을 읽을 수 있지만 웹 보안 저장소로 업로드하는 contract가 없다.
-- 따라서 “팝업에서 원하는 사용자가 바로 기존 실행기 키를 가져오기”는 Phase 1 전에는 동작하지 않았다.
+- 따라서 “팝업에서 원하는 사용자가 바로 기존 실행기 키를 가져오기”는 현재 동작하지 않는다.
 
 ## Phase 0. Fast Boot And Yunmi Alpha
 
@@ -158,20 +158,13 @@ Gate:
 
 상태:
 - Mac/server/web 구현 완료.
-- 실제 사용자 공개는 allowlist로 제한한다. 기본 허용 대상은 `demo@aimax.ai.kr`, `AIMAX Demo`, `메이크패밀리 1`, `메이크패밀리 2`이며 일반 bundle 사용자는 `/api/workers`, 작업 생성, 기존 윤미 작업 목록에서 윤미가 숨겨진다.
-- 운영자가 전체 공개 테스트를 해야 할 때만 `AIMAX_YUNMI_PUBLIC_ENABLED=1`로 override할 수 있다.
-- Admin catalog에는 윤미 feature flag/허용 기본 목록을 반환하고, 구매자 목록에는 허용 사용자만 `윤미 허용` pill을 표시한다. Admin 오류 보고/리포트는 기존 공통 흐름으로 윤미 보고를 받는다.
 - 기본 `no_paid_alpha`는 유지하고, `AI 베타 준비` 모드에서만 비용 확인과 `confirm_paid`를 요구한다.
 - `request_id`/`idempotency_key`로 중복 요청 시 기존 job을 반환한다.
 - provider key가 없으면 `yunmi_ai_key_missing`으로 차단한다.
 - 현재 베타 검증 경로는 `paid_ready_mock`이며 실제 유료 AI 호출은 실행하지 않는다.
 - 윤미 실패 job에서 웹 오류 보고로 `failed_stage`, `request_id`, `idempotency_key`, provider/model, paid call 실행 여부를 sanitized 전송한다.
-- no-paid/access smoke 통과: `YUNMI_ACCESS_GATE_SMOKE_OK`, `YUNMI_ALPHA_SMOKE_OK`, `YUNMI_PAID_READY_SMOKE_OK`, `LOCAL_SECRET_IMPORT_SMOKE_OK`, `APIFY_LOCAL_READINESS_SMOKE_OK`, `USER_SECRETS_SMOKE_OK`.
-- Windows rebuild/검증 완료. `YUNMI_ALPHA_SMOKE_OK`, `YUNMI_PAID_READY_SMOKE_OK`, `LOCAL_SECRET_IMPORT_SMOKE_OK` 확인.
-- Windows 설치본: `aimax-bundle-windows.exe`, size `136638187`, sha256 `1aa21356ac425e1eb0588ca4c6fa6e32b29b3f2bf81b4df73a0f08346289bb46`.
-- Windows release ZIP: `AIMAX-yunmi-paid-ready-windows-20260523.zip`, size `181692770`, sha256 `4711f6a081a33eacfb694385476dbe81b5065a38cd55d93e6ebcc20400fc5418`.
-- Windows에서 확인한 smoke portability 보강을 Mac source의 `scripts/smoke_yunmi_alpha.mjs`에도 반영했다.
-- Live 서버 설치본 교체와 업데이트 메타데이터 반영은 별도 배포 단계로 남긴다.
+- no-paid smoke 통과: `YUNMI_ALPHA_SMOKE_OK`, `YUNMI_PAID_READY_SMOKE_OK`, `LOCAL_SECRET_IMPORT_SMOKE_OK`, `APIFY_LOCAL_READINESS_SMOKE_OK`, `USER_SECRETS_SMOKE_OK`.
+- Windows local command handler 변경은 없지만 Windows 설치본에 web/server payload가 포함되므로 rebuild/검증 handoff를 진행한다.
 
 ## Phase 4. Windows Release Lane
 
@@ -195,12 +188,6 @@ Gate:
 - old agent fallback 확인
 - installer hash/size 기록
 - no paid API/Apify/Naver publish tests
-
-상태:
-- Phase 1 local key import Windows installer rebuilt/verified.
-- Phase 3 Yunmi paid-ready Windows installer rebuilt/verified.
-- Windows-side checks confirmed no paid API/Apify/Naver publish tests were run.
-- Live Oracle download replacement and update metadata remain an explicit deployment gate, not completed in this phase note.
 
 ## Phase 5. Next Staff Expansion
 

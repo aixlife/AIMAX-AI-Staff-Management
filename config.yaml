@@ -2,6 +2,8 @@ browser:
   headless: false
   proxy: null
   executable_path: ""   # 비워두면 Chrome/Chromium/Brave/Playwright Chromium 자동 탐지
+  driver_mode: "auto"   # auto: undetected 실패 시 selenium fallback, selenium: 공식 ChromeDriver만 사용
+  driver_path: ""       # 공식 chromedriver.exe 경로가 있으면 지정 (예: C:\Tools\chromedriver.exe)
   viewport_min: [1280, 720]
   viewport_max: [1920, 1080]
 

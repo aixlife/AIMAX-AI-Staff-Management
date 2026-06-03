@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	launcherVersion    = "v1.0.33"
+	launcherVersion    = "v1.0.35"
 	mutexName          = `Local\AIMAX.LocalAgent`
 	requestDirName     = "NaverBlogAuto"
 	requestFileName    = "aimax-local-agent-request.json"

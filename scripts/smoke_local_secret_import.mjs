@@ -262,8 +262,8 @@ try {
     }
   }
 
-  const commandsFile = fs.existsSync(path.join(tmpDir, "commands.json"))
-    ? fs.readFileSync(path.join(tmpDir, "commands.json"), "utf8")
+  const commandsFile = fs.existsSync(path.join(tmpDir, "agent-commands.json"))
+    ? fs.readFileSync(path.join(tmpDir, "agent-commands.json"), "utf8")
     : "";
   const secretsFile = fs.existsSync(path.join(tmpDir, "user-secrets.json"))
     ? fs.readFileSync(path.join(tmpDir, "user-secrets.json"), "utf8")
@@ -271,6 +271,9 @@ try {
   const persisted = `${commandsFile}\n${secretsFile}`;
   if (persisted.includes(geminiSecret) || persisted.includes(apifySecret)) {
     throw new Error("raw provider secret leaked into persisted command/secret files");
+  }
+  if (`${stdout}\n${stderr}`.includes(geminiSecret) || `${stdout}\n${stderr}`.includes(apifySecret)) {
+    throw new Error("raw provider secret leaked into server output");
   }
 
   console.log("LOCAL_SECRET_IMPORT_SMOKE_OK");

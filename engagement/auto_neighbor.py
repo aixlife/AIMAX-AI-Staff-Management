@@ -88,7 +88,7 @@ def _normalize_messages(message_or_list):
         raw = message_or_list.splitlines() if "\n" in message_or_list else [message_or_list]
     else:
         raw = list(message_or_list)
-    return [m.strip() for m in raw if m and m.strip() and len(m.strip()) <= 400]
+    return [m.strip() for m in raw if m and m.strip()]
 
 
 def _render_message(template: str, blog_id: str) -> str:
@@ -302,13 +302,14 @@ _RESERVED_BLOG_IDS = {
     'login', 'logout', 'api', 'static', 'CommentList', 'TagList',
     'SympathyList', 'VisitBlog',
 }
+_RESERVED_BLOG_IDS_LOWER = {bid.lower() for bid in _RESERVED_BLOG_IDS}
 
 def extract_blog_id(url):
     """블로그 URL에서 블로거 ID 추출"""
     match = re.search(r'blog\.naver\.com/([a-zA-Z0-9_]+)', url)
     if match:
         blog_id = match.group(1)
-        if blog_id not in _RESERVED_BLOG_IDS and len(blog_id) >= 4:
+        if blog_id.lower() not in _RESERVED_BLOG_IDS_LOWER and len(blog_id) >= 4:
             return blog_id
     return None
 
@@ -321,7 +322,7 @@ def _extract_ids_from_source(page_source: str) -> list:
     """
     found = []
     for bid in re.findall(r'blog\.naver\.com/([a-zA-Z0-9_]{4,20})', page_source):
-        if bid not in _RESERVED_BLOG_IDS and bid not in found:
+        if bid.lower() not in _RESERVED_BLOG_IDS_LOWER and bid not in found:
             found.append(bid)
     return found
 
@@ -573,7 +574,7 @@ def send_neighbor_request(driver, blog_id, message=None, naver_id=None, naver_pw
 def auto_neighbor(driver, keywords, max_per_keyword=10, message=None,
                   naver_id=None, naver_pw=None, stop_event=None,
                   messages=None, speed_mode="normal",
-                  cooldown_every=10, daily_limit=50):
+                  cooldown_every=10, daily_limit=80):
     """키워드 목록으로 서로이웃 자동 추가
 
     Args:
@@ -585,7 +586,7 @@ def auto_neighbor(driver, keywords, max_per_keyword=10, message=None,
                   '{닉네임}'이 있으면 블로그 ID로 치환.
         speed_mode: "safe" | "normal" | "fast" — SPEED_PROFILES 참조
         cooldown_every: N명마다 60~180초 Cool-down (0이면 비활성화)
-        daily_limit: 하루 총 신청 상한 (AIMAX 권장 50명 이하. 0이면 무제한)
+        daily_limit: 하루 총 신청 상한 (네이버 공식 100명 대비 버퍼 권장. 0이면 무제한)
         naver_id: NID 로그인 리다이렉트 시 사용할 아이디. quota 집계 키로도 사용.
         naver_pw: NID 로그인 리다이렉트 시 사용할 비밀번호
     Returns:
@@ -717,43 +718,46 @@ def auto_neighbor(driver, keywords, max_per_keyword=10, message=None,
     return total_sent
 
 
-def _normalize_blog_id_list(blog_ids):
-    """사용자가 준/크롤러가 수집한 blog_id 목록을 순서 유지하며 정리."""
-    result = []
-    seen = set()
-    reserved = {blog_id.lower() for blog_id in _RESERVED_BLOG_IDS}
-    for raw in blog_ids or []:
-        blog_id = (raw or "").strip()
-        if not re.fullmatch(r"[a-zA-Z0-9_]{4,30}", blog_id):
-            continue
-        blog_id_key = blog_id.lower()
-        if blog_id_key in reserved or blog_id_key in seen:
-            continue
-        seen.add(blog_id_key)
-        result.append(blog_id)
-    return result
-
-
-def auto_neighbor_to_blog_ids(driver, blog_ids, max_requests=10, message=None,
-                              naver_id=None, naver_pw=None, stop_event=None,
-                              messages=None, speed_mode="normal",
-                              cooldown_every=10, daily_limit=50,
-                              source_label="특정 블로거"):
-    """이미 수집된 블로거 ID 목록에 서로이웃 신청.
-
-    특정 블로거 링크 탭처럼 검색 과정 없이 후보 ID가 준비된 흐름에서 사용한다.
-    성공 건수가 max_requests에 도달하면 종료하고, 신청 불가/이미 이웃인 ID는 건너뛴다.
-    """
+def auto_neighbor_to_blog_ids(
+    driver,
+    blog_ids,
+    max_requests=10,
+    message=None,
+    naver_id=None,
+    naver_pw=None,
+    stop_event=None,
+    messages=None,
+    speed_mode="normal",
+    cooldown_every=10,
+    daily_limit=80,
+    source_label="특정 블로거",
+):
+    """이미 수집된 blog_id 목록에 서로이웃 신청."""
     msg_pool = _normalize_messages(messages)
     if not msg_pool and message:
         msg_pool = _normalize_messages(message)
 
-    candidates = _normalize_blog_id_list(blog_ids)
-    if not candidates:
-        logger.warning("서로이웃 신청 후보가 없습니다")
+    normalized_ids = []
+    seen = set()
+    for raw_blog_id in blog_ids or []:
+        blog_id = str(raw_blog_id or "").strip()
+        if not blog_id:
+            continue
+        if "/" in blog_id:
+            blog_id = extract_blog_id(blog_id) or blog_id
+        if blog_id.lower() in _RESERVED_BLOG_IDS_LOWER or blog_id in seen:
+            continue
+        seen.add(blog_id)
+        normalized_ids.append(blog_id)
+
+    max_requests = max(0, int(max_requests or 0))
+    if max_requests <= 0:
+        logger.info("서로이웃 신청 수가 0명이라 작업을 건너뜁니다.")
+        return 0
+    if not normalized_ids:
+        logger.warning(f"{source_label}에서 신청할 blog_id 후보가 없습니다.")
         return 0
 
-    max_requests = max(1, int(max_requests or 1))
     profile = SPEED_PROFILES.get(speed_mode, SPEED_PROFILES["normal"])
     req_delay = profile["between_requests"]
 
@@ -765,27 +769,23 @@ def auto_neighbor_to_blog_ids(driver, blog_ids, max_requests=10, message=None,
                 f"오늘 이미 {today_count}명 신청(상한 {daily_limit}). 내일 다시 실행하세요."
             )
             return 0
-        max_requests = min(max_requests, remaining_today)
         logger.info(
-            f"일일 상한: {daily_limit}명 / 오늘 이미 {today_count}명 / 이번 실행 최대 {max_requests}명"
+            f"일일 상한: {daily_limit}명 / 오늘 이미 {today_count}명 / 남은 가능 {remaining_today}명"
         )
 
     logger.info(
-        f"서로이웃 자동 추가 시작 "
-        f"({source_label}, 후보 {len(candidates)}명, 최대 신청 {max_requests}명, "
+        f"{source_label} 기반 서로이웃 신청 시작 "
+        f"(후보 {len(normalized_ids)}명, 성공 목표 {max_requests}명, "
         f"속도={profile['label']}, 멘트 {len(msg_pool)}종, "
         f"Cool-down={cooldown_every}명마다)"
     )
 
     total_sent = 0
-    should_stop = False
-
-    for blog_id in candidates:
+    for blog_id in normalized_ids:
         if is_stop_requested(stop_event):
             break
         if total_sent >= max_requests:
             break
-
         if not _is_session_alive(driver):
             logger.error("브라우저 세션이 끊어져 서로이웃 추가를 중단합니다")
             break
@@ -799,15 +799,15 @@ def auto_neighbor_to_blog_ids(driver, blog_ids, max_requests=10, message=None,
             driver, blog_id, message=picked_message,
             naver_id=naver_id, naver_pw=naver_pw, stop_event=stop_event,
         )
+
         if result is None:
             if not is_stop_requested(stop_event):
                 logger.error("세션이 끊어져 남은 블로거를 건너뜁니다")
-            should_stop = True
             break
-        elif result:
+        if result:
             total_sent += 1
             new_count = neighbor_quota.increment(naver_id)
-            logger.info(f"서로이웃 신청 성공: {blog_id} ({total_sent}/{max_requests})")
+            logger.info(f"{source_label}: {total_sent}/{max_requests}명 신청 성공")
 
             if cooldown_every > 0 and new_count > 0 and new_count % cooldown_every == 0:
                 cool_secs = random.uniform(*COOLDOWN_RANGE)
@@ -816,24 +816,20 @@ def auto_neighbor_to_blog_ids(driver, blog_ids, max_requests=10, message=None,
                     f"(봇 탐지 회피)"
                 )
                 if not sleep_interruptible(cool_secs, stop_event=stop_event):
-                    should_stop = True
                     break
 
-        if total_sent < max_requests and not should_stop:
-            if not sleep_interruptible(
-                random_delay(*req_delay),
-                stop_event=stop_event,
-            ):
+        if total_sent < max_requests:
+            if not sleep_interruptible(random_delay(*req_delay), stop_event=stop_event):
                 break
 
     final_today = neighbor_quota.get_today_count(naver_id)
     if is_stop_requested(stop_event):
         logger.info(
-            f"서로이웃 자동 추가 중지: 이번 실행 {total_sent}명 / 오늘 누적 {final_today}명"
+            f"{source_label} 기반 서로이웃 신청 중지: 이번 실행 {total_sent}명 / 오늘 누적 {final_today}명"
         )
     else:
         logger.info(
-            f"서로이웃 자동 추가 완료: 이번 실행 {total_sent}명 / 오늘 누적 {final_today}명"
+            f"{source_label} 기반 서로이웃 신청 완료: 이번 실행 {total_sent}명 / 오늘 누적 {final_today}명"
             + (f" / 일일 상한 {daily_limit}명" if daily_limit > 0 else "")
         )
     return total_sent

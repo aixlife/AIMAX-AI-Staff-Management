@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "AIMAX"
+APP_NAME = "NaverBlogAuto"
 
 
 def _is_frozen() -> bool:
@@ -44,6 +44,8 @@ APP_DATA_DIR: Path = _app_data_dir()
 SESSIONS_DIR: Path = APP_DATA_DIR / "sessions"
 DEBUG_DIR: Path = APP_DATA_DIR / "debug"
 LOGS_DIR: Path = APP_DATA_DIR / "logs"
+# AI가 생성한(과금된) 원고를 네이버 입력 전에 따로 보관 — 발행 실패 시에도 재사용 가능
+GENERATED_DIR: Path = APP_DATA_DIR / "generated"
 BROWSER_PROFILES_DIR: Path = APP_DATA_DIR / "browser_profiles"
 REPORTS_DIR: Path = APP_DATA_DIR / "reports"
 PENDING_REPORTS_DIR: Path = REPORTS_DIR / "pending"
@@ -54,18 +56,48 @@ USER_CONFIG_PATH: Path = APP_DATA_DIR / "config.yaml"
 BUNDLED_CONFIG_PATH: Path = BUNDLE_DIR / "config.yaml"
 
 
+def _safe_dir(path: Path) -> Path:
+    if path.exists() and not path.is_dir():
+        return path.with_name(f"{path.name}_data")
+    return path
+
+
+SESSIONS_DIR = _safe_dir(SESSIONS_DIR)
+DEBUG_DIR = _safe_dir(DEBUG_DIR)
+LOGS_DIR = _safe_dir(LOGS_DIR)
+BROWSER_PROFILES_DIR = _safe_dir(BROWSER_PROFILES_DIR)
+REPORTS_DIR = _safe_dir(REPORTS_DIR)
+PENDING_REPORTS_DIR = _safe_dir(PENDING_REPORTS_DIR)
+SENT_REPORTS_DIR = _safe_dir(SENT_REPORTS_DIR)
+
+
 def ensure_dirs() -> None:
-    for d in (
-        APP_DATA_DIR,
-        SESSIONS_DIR,
-        DEBUG_DIR,
-        LOGS_DIR,
-        BROWSER_PROFILES_DIR,
-        REPORTS_DIR,
-        PENDING_REPORTS_DIR,
-        SENT_REPORTS_DIR,
+    try:
+        APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    for name in (
+        "SESSIONS_DIR",
+        "DEBUG_DIR",
+        "LOGS_DIR",
+        "GENERATED_DIR",
+        "BROWSER_PROFILES_DIR",
+        "REPORTS_DIR",
+        "PENDING_REPORTS_DIR",
+        "SENT_REPORTS_DIR",
     ):
-        d.mkdir(parents=True, exist_ok=True)
+        d = globals()[name]
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except FileExistsError:
+            d = d.with_name(f"{d.name}_data")
+            globals()[name] = d
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+        except OSError:
+            pass
 
 
 ensure_dirs()

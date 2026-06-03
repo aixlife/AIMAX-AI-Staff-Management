@@ -35,30 +35,11 @@ def human_type_with_enter(driver, text, avg_delay=None):
 
 def human_click(driver, element):
     """요소에 마우스를 이동한 후 클릭 (hover → 짧은 대기 → 클릭)"""
-    try:
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
-            element,
-        )
-        time.sleep(random.uniform(0.05, 0.15))
-    except Exception:
-        pass
-
-    try:
-        actions = ActionChains(driver)
-        actions.move_to_element(element)
-        actions.pause(random.uniform(0.1, 0.3))
-        actions.click()
-        actions.perform()
-        return
-    except Exception:
-        pass
-
-    try:
-        element.click()
-        return
-    except Exception:
-        driver.execute_script("arguments[0].click();", element)
+    actions = ActionChains(driver)
+    actions.move_to_element(element)
+    actions.pause(random.uniform(0.1, 0.3))
+    actions.click()
+    actions.perform()
 
 
 def human_scroll(driver, pixels=None):

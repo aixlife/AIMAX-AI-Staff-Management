@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 
 
 def _inject_credentials(driver, naver_id, naver_pw):
-    """JS 직접 주입으로 ID/PW 설정 — 키보드 이벤트 없이 CAPTCHA 우회"""
+    """JS 직접 주입으로 ID/PW 설정 - 키보드 이벤트 없이 CAPTCHA 우회"""
     id_js = json.dumps(naver_id)
     pw_js = json.dumps(naver_pw)
     # input 이벤트 발화: React controlled component 환경에서 상태 동기화
@@ -117,7 +117,7 @@ def login_on_current_nid_page(driver, naver_id, naver_pw, wait_seconds=4):
     if "nidlogin.login" not in driver.current_url:
         return True
 
-    logger.info("NID 로그인 리다이렉트 — 현재 페이지에서 직접 로그인 시도")
+    logger.info("NID 로그인 리다이렉트 - 현재 페이지에서 직접 로그인 시도")
     original_nid_url = driver.current_url
 
     # 1차: JS 주입 방식
@@ -125,11 +125,11 @@ def login_on_current_nid_page(driver, naver_id, naver_pw, wait_seconds=4):
         _inject_credentials(driver, naver_id, naver_pw)
         _click_login_button(driver)
     except Exception as e:
-        logger.warning(f"NID JS 로그인 시도 실패 — 붙여넣기 방식으로 전환: {e}")
+        logger.warning(f"NID JS 로그인 시도 실패 - 붙여넣기 방식으로 전환: {e}")
 
     if not _wait_until_leave_nid(driver, timeout=wait_seconds):
         # 2차: 실제 붙여넣기 입력 방식
-        logger.info("NID 페이지에 그대로 머묾 — 붙여넣기 방식 재시도")
+        logger.info("NID 페이지에 그대로 머묾 - 붙여넣기 방식 재시도")
         driver.get(original_nid_url)
         wait_short()
         _clipboard_login(driver, naver_id, naver_pw)
@@ -137,12 +137,12 @@ def login_on_current_nid_page(driver, naver_id, naver_pw, wait_seconds=4):
     if not _wait_until_leave_nid(driver, timeout=max(wait_seconds + 4, 8)):
         # 3차: 로그인 쿠키는 살아있는데 리다이렉트만 꼬인 경우가 있어
         # blog.naver.com 세션 동기화를 한 번 더 시도한다.
-        logger.info("NID 리다이렉트 지연 — PC 블로그 세션 재동기화 시도")
+        logger.info("NID 리다이렉트 지연 - PC 블로그 세션 재동기화 시도")
         if sync_pc_blog_login(driver):
             current_url = driver.current_url
             # 방어: sync가 True를 반환해도 여전히 NID 페이지면 세션 만료
             if "nidlogin.login" in current_url:
-                logger.warning("sync_pc_blog_login 우회 후에도 NID 페이지 — 세션 만료, 재로그인 필요")
+                logger.warning("sync_pc_blog_login 우회 후에도 NID 페이지 - 세션 만료, 재로그인 필요")
             else:
                 save_session(driver, naver_id)
                 logger.info(f"NID 로그인 우회 성공 → {current_url[:80]}")
@@ -175,7 +175,7 @@ def login(driver, naver_id, naver_pw):
             logger.info("저장된 세션으로 로그인 성공 (PC 블로그 동기화 완료)")
             return True
         else:
-            logger.info("PC 블로그 동기화 실패 — 재로그인 진행...")
+            logger.info("PC 블로그 동기화 실패 - 재로그인 진행...")
             # fall through to fresh login
 
     # 직접 로그인

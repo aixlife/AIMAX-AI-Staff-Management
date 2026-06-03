@@ -107,9 +107,6 @@ def generate_image(prompt, api_key, max_retries=3):
         except Exception as e:
             last_error = str(e)
             logger.warning(f"이미지 생성 시도 실패 ({attempt}/{max_retries}): {e}")
-            if "RESOURCE_EXHAUSTED" in last_error and "limit: 0" in last_error:
-                logger.warning("이미지 모델 쿼터가 없어 이번 이미지 생성을 건너뜁니다.")
-                break
 
         if attempt < max_retries:
             time.sleep(1.2 * attempt)

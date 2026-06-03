@@ -389,7 +389,7 @@ def ensure_cbox_logged_in(driver, naver_id=None, stop_event=None):
 
 
 def generate_comment(body_text, api_key, tone="friendly", custom_instruction=None, model="gemini-3.1-pro-preview"):
-    """포스팅 본문을 읽고 AI로 맞춤 댓글 생성 (Claude / Gemini / OpenAI 선택 가능)"""
+    """포스팅 본문을 읽고 AI로 맞춤 댓글 생성 (Claude / Gemini 선택 가능)"""
     if custom_instruction:
         tone_guide = custom_instruction
     else:
@@ -416,42 +416,6 @@ def generate_comment(body_text, api_key, tone="friendly", custom_instruction=Non
                 return response.content[0].text.strip()
         except Exception as e:
             logger.error(f"Claude 댓글 생성 오류: {e}")
-        return None
-
-    if str(model or "").startswith("gpt-"):
-        try:
-            import requests
-            response = requests.post(
-                "https://api.openai.com/v1/responses",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "input": prompt,
-                    "max_output_tokens": 400,
-                    "reasoning": {"effort": "minimal"},
-                    "store": False,
-                },
-                timeout=120,
-            )
-            if response.status_code >= 400:
-                logger.error(f"OpenAI 댓글 생성 오류: HTTP {response.status_code} {response.text[:300]}")
-                return None
-            data = response.json()
-            if data.get("output_text"):
-                return str(data.get("output_text") or "").strip()
-            chunks = []
-            for item in data.get("output") or []:
-                if not isinstance(item, dict):
-                    continue
-                for content in item.get("content") or []:
-                    if isinstance(content, dict) and content.get("type") == "output_text" and content.get("text"):
-                        chunks.append(str(content.get("text")))
-            return "\n".join(chunks).strip() or None
-        except Exception as e:
-            logger.error(f"OpenAI 댓글 생성 오류: {e}")
         return None
 
     try:
