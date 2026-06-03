@@ -162,10 +162,12 @@ _LEGACY_AI_MODEL_MAP = {
     "gemini": _DEFAULT_AI_MODEL,
     "gemini-pro": "gemini-3.1-pro-preview",
     "gemini-flash": "gemini-2.5-flash",
-    # 구버전 기본값(2.5 Pro 등)은 무료 등급에서 동작하는 기본값(2.5 Flash)으로 마이그레이션한다.
-    # 명시적 3.1 Pro 선택만 유료 프리뷰로 유지 — 무료 키 사용자가 기본값으로 대량 실패하던 문제 방지.
+    # 구버전 기본값/접미사 없는 레거시값(2.5 Pro, 3.1 Pro 등)은 무료 등급에서 동작하는
+    # 기본값(2.5 Flash)으로 매핑한다. UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)이므로
+    # 접미사 없는 "gemini-3.1-pro"는 사용자의 명시 선택이 아니라 자동/레거시값 → flash 가 안전.
+    # (무료 키 사용자가 기본값/레거시값으로 대량 실패하던 문제 방지)
     "gemini-2.5-pro": "gemini-2.5-flash",
-    "gemini-3.1-pro": "gemini-3.1-pro-preview",
+    "gemini-3.1-pro": "gemini-2.5-flash",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -883,7 +885,8 @@ def migrate_forced_pro_preview_default():
     data = _load_settings_data()
     if not data or data.get("forced_pro_preview_default_migrated"):
         return False
-    migrated = data.get("ai_model") == "gemini-3.1-pro-preview"
+    # 접미사 있는 pro-preview, 접미사 없는 레거시 gemini-3.1-pro / gemini-2.5-pro 모두 무료 flash 로 복귀.
+    migrated = data.get("ai_model") in ("gemini-3.1-pro-preview", "gemini-3.1-pro", "gemini-2.5-pro")
     if migrated:
         data["ai_model"] = "gemini-2.5-flash"
     data["forced_pro_preview_default_migrated"] = True

@@ -244,7 +244,7 @@ def _normalize_gemini_model_id(model):
         "gemini": "gemini-2.5-flash",
         "gemini-pro": "gemini-3.1-pro-preview",
         "gemini-2.5-pro": "gemini-2.5-flash",
-        "gemini-3.1-pro": "gemini-3.1-pro-preview",
+        "gemini-3.1-pro": "gemini-2.5-flash",
     }
     if value in aliases:
         return aliases[value]
