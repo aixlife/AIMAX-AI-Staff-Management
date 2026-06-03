@@ -28,7 +28,7 @@ const YERI_GENERATING_STALE_MS = Number(process.env.AIMAX_YERI_GENERATING_STALE_
 const YERI_RETRY_LIMIT = Number(process.env.AIMAX_YERI_RETRY_LIMIT || 3);
 const YERI_SERVER_GENERATION_ENABLED = envFlag("AIMAX_YERI_SERVER_GENERATION_ENABLED");
 const YERI_SERVER_GENERATION_MOCK = envFlag("AIMAX_YERI_SERVER_GENERATION_MOCK");
-const YERI_SERVER_GENERATION_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_MODEL || "gemini-3.1-pro-preview").trim();
+const YERI_SERVER_GENERATION_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash").trim();
 const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-4-6").trim();
 const YERI_SERVER_GENERATION_TIMEOUT_MS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_TIMEOUT_MS || 60000);
 const YERI_SERVER_GENERATION_MAX_ATTEMPTS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
@@ -1426,13 +1426,15 @@ function yeriSelectedModel(payload = {}) {
 
 function normalizeYeriGeminiModel(model) {
   const value = String(model || "").trim();
+  // 기본/제네릭/구버전 기본값(2.5 Pro)은 무료 등급에서 동작하는 2.5 Flash 로 통일.
+  // 명시적 3.1 Pro 선택만 유료 프리뷰로 유지 (runner app.py/_LEGACY_AI_MODEL_MAP 과 일치).
   const aliases = {
-    gemini: YERI_SERVER_GENERATION_MODEL || "gemini-3.1-pro-preview",
+    gemini: YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
     "gemini-pro": "gemini-3.1-pro-preview",
-    "gemini-2.5-pro": "gemini-3.1-pro-preview",
+    "gemini-2.5-pro": "gemini-2.5-flash",
     "gemini-3.1-pro": "gemini-3.1-pro-preview",
   };
-  return aliases[value] || (value.startsWith("gemini-") ? value : (YERI_SERVER_GENERATION_MODEL || "gemini-3.1-pro-preview"));
+  return aliases[value] || (value.startsWith("gemini-") ? value : (YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash"));
 }
 
 function yeriServerGenerationProviderIssue(payload = {}, mode = yeriServerGenerationMode()) {
