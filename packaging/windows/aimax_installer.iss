@@ -91,9 +91,20 @@ end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
+  // 업데이트 시 옛 런처/코어를 모두 확실히 종료한 뒤 파일을 교체한다.
+  // (옛 코어가 살아남아 "업데이트해도 연결 안 됨"을 만드는 문제 해소)
   KillProcessByName('{#LauncherExeName}');
   KillProcessByName('{#AppExeName}');
-  Sleep(1200);
+  KillProcessByName('AIMAX-EngageWrite.exe');
+  KillProcessByName('AIMAX-Find.exe');
+  Sleep(1500);
+  // 한 번 더(첫 종료 직후 재기동/잔존 대비)
+  KillProcessByName('{#AppExeName}');
+  KillProcessByName('{#LauncherExeName}');
+  // 죽은 코어가 남긴 single-instance 락 잔재 정리(다음 실행을 막지 않게).
+  DeleteFile(ExpandConstant('{userappdata}\NaverBlogAuto\aimax-local-agent.lock'));
+  DeleteFile(ExpandConstant('{userappdata}\NaverBlogAuto\aimax-agent-launch.lock'));
+  Sleep(500);
   Result := '';
 end;
 
