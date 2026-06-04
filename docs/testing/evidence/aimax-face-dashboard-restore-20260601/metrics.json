@@ -1,0 +1,71 @@
+{
+  "desktop": {
+    "viewport": {
+      "width": 1365,
+      "height": 900
+    },
+    "floor": {
+      "width": 971,
+      "height": 546,
+      "ratio": 1.78
+    },
+    "faceCount": 4,
+    "allFacesLoaded": true,
+    "pixelCount": 0,
+    "hasPixelAssetRefs": false,
+    "hasMyStaffHeading": false,
+    "hasCheckItemsHeading": false,
+    "brainVisible": true,
+    "firstFaceMotion": {
+      "first": {
+        "x": 494.3,
+        "y": 349,
+        "width": 109,
+        "animationName": "faceFloat"
+      },
+      "second": {
+        "x": 497.8,
+        "y": 346.8,
+        "width": 109,
+        "animationName": "faceFloat"
+      },
+      "deltaX": 3.5,
+      "deltaY": -2.2
+    }
+  },
+  "mobile": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "floor": {
+      "width": 373,
+      "height": 210,
+      "ratio": 1.78
+    },
+    "faceCount": 4,
+    "allFacesLoaded": true,
+    "pixelCount": 0,
+    "hasPixelAssetRefs": false,
+    "hasMyStaffHeading": false,
+    "hasCheckItemsHeading": false,
+    "brainVisible": true,
+    "firstFaceMotion": {
+      "first": {
+        "x": 102.9,
+        "y": 659.6,
+        "width": 66,
+        "animationName": "faceFloat"
+      },
+      "second": {
+        "x": 106.1,
+        "y": 657.4,
+        "width": 66,
+        "animationName": "faceFloat"
+      },
+      "deltaX": 3.2,
+      "deltaY": -2.2
+    }
+  },
+  "errors": []
+}

@@ -5,9 +5,12 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const { __yunmiTest } = require("../oracle/aimax-reports-api/server.js");
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-yunmi-alpha-smoke-"));
 const port = 19700 + Math.floor(Math.random() * 500);
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -110,6 +113,43 @@ async function waitForServer() {
 }
 
 try {
+  const yunmiPrompt = __yunmiTest.buildYunmiGenerationPrompt(__yunmiTest.normalizeYunmiScriptPayload({
+    topic: "학부모 설명회 오프닝",
+    target_audience: "처음 참석한 학부모",
+    objective: "긴장감을 낮추고 오늘 들을 내용을 기대하게 만들기",
+    reference_text: "처음 10초에 분위기를 풀고, 오늘 얻어갈 수 있는 결과를 먼저 말한다.",
+    cta: "설명회 자료가 필요하면 댓글에 자료라고 남겨주세요.",
+  }), "gemini-2.5-flash");
+  for (const phrase of [
+    "첫 2~3초",
+    "오늘은 ~에 대해 알아보겠습니다",
+    "CTA 전에 반드시 공감",
+    "0~3초: 훅",
+    "후킹 방식은 아래 중",
+    "최종 추천은 첫 3초 정지력",
+  ]) {
+    if (!yunmiPrompt.includes(phrase)) {
+      throw new Error(`Yunmi generation prompt missing meta prompt phrase: ${phrase}`);
+    }
+  }
+  const noPaidPreview = __yunmiTest.buildYunmiScriptResult({
+    topic: "학부모 설명회 오프닝",
+    target_audience: "처음 참석한 학부모",
+    objective: "긴장감을 낮추고 오늘 들을 내용을 기대하게 만들기",
+    reference_text: "처음 10초에 분위기를 풀고, 오늘 얻어갈 수 있는 결과를 먼저 말한다.",
+    cta: "설명회 자료가 필요하면 댓글에 자료라고 남겨주세요.",
+  });
+  const noPaidDialogue = (noPaidPreview.variants || [])
+    .flatMap((variant) => variant.rows || [])
+    .map((row) => row.dialogue || "")
+    .join("\n");
+  if (/오늘은|알아보겠습니다/.test(noPaidDialogue)) {
+    throw new Error("Yunmi no-paid script uses banned explanatory intro");
+  }
+  if (!noPaidDialogue.includes("그냥 넘기는 순간은") || !noPaidDialogue.includes("지금 막막한 게 정상입니다")) {
+    throw new Error("Yunmi no-paid script does not use the revised spoken flow");
+  }
+
   await waitForServer();
   const login = await request("/api/auth/login", {
     method: "POST",
@@ -123,8 +163,8 @@ try {
     throw new Error("Yunmi worker is not exposed as a web_module job");
   }
   const jobKind = workers.job_kinds.find((item) => item.kind === "yunmi_script");
-  if (!jobKind || jobKind.required_product !== "bundle") {
-    throw new Error("Yunmi job kind is missing bundle entitlement");
+  if (!jobKind || jobKind.required_product !== "yunmi") {
+    throw new Error("Yunmi job kind is missing yunmi entitlement");
   }
 
   let emptyFailed = false;
