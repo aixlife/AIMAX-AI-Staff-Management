@@ -17,3 +17,6 @@ setuptools>=70.0.0
 packaging>=23.0
 # Windows 전용 — 클립보드 이미지 업로드(win32clipboard)에 필요. macOS/Linux 에서는 설치 안 함.
 pywin32>=306; sys_platform == "win32"
+# macOS 전용 — aimax:// (GetURL Apple Event) 수신용 NSAppleEventManager 후킹에 필요.
+# Tk ::tk::mac::OpenURL 은 Tk9/PyInstaller 에서 미발화하므로 PyObjC 로 직접 후킹한다.
+pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"
