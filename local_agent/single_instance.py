@@ -8,8 +8,35 @@ from pathlib import Path
 
 from paths import APP_DATA_DIR
 
+try:
+    from aimax_compliance import APP_VERSION as _APP_VERSION
+except Exception:
+    _APP_VERSION = ""
+
 REQUEST_PATH = APP_DATA_DIR / "aimax-local-agent.request.json"
 LAUNCH_GUARD_PATH = APP_DATA_DIR / "aimax-agent-launch.lock"
+
+
+def _lock_payload() -> str:
+    """락 파일 기록 내용: 런처가 실행 중 코어 버전을 알 수 있게 JSON{pid,version} 기록."""
+    return json.dumps({"pid": os.getpid(), "version": _APP_VERSION})
+
+
+def _pid_from_lock_text(raw: str):
+    """락 텍스트에서 PID 추출. JSON{pid,version} 우선, 레거시 PID-단독 폴백. 실패 시 None."""
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and "pid" in data:
+            return int(data["pid"])
+    except Exception:
+        pass
+    try:
+        return int(raw)
+    except Exception:
+        return None
 
 
 class SingleInstanceError(RuntimeError):
@@ -29,7 +56,7 @@ class SingleInstanceLock:
             if os.name == "nt" and self.mode == "sentinel":
                 self.handle.close()
                 try:
-                    if self.path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                    if _pid_from_lock_text(self.path.read_text(encoding="utf-8")) == os.getpid():
                         self.path.unlink()
                 except FileNotFoundError:
                     pass
@@ -76,7 +103,7 @@ def acquire_single_instance_lock(name: str = "aimax-local-agent") -> SingleInsta
         except FileExistsError as exc:
             raise SingleInstanceError("이미 실행 중인 AIMAX Local Agent가 있습니다.") from exc
         handle = os.fdopen(fd, "w", encoding="utf-8")
-        handle.write(str(os.getpid()))
+        handle.write(_lock_payload())
         handle.flush()
         return SingleInstanceLock(lock_path, handle, mode="sentinel")
 
@@ -95,7 +122,7 @@ def acquire_single_instance_lock(name: str = "aimax-local-agent") -> SingleInsta
     try:
         handle.seek(0)
         handle.truncate()
-        handle.write(str(os.getpid()))
+        handle.write(_lock_payload())
         handle.flush()
     except Exception:
         pass
@@ -167,9 +194,8 @@ def _lock_file_has_running_owner(lock_path: Path) -> bool:
             return time.time() - lock_path.stat().st_mtime < 30
         except Exception:
             return True
-    try:
-        pid = int(raw)
-    except Exception:
+    pid = _pid_from_lock_text(raw)
+    if pid is None:
         try:
             return time.time() - lock_path.stat().st_mtime < 30
         except Exception:
