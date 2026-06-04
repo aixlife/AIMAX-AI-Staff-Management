@@ -2188,6 +2188,8 @@ class NaverBlogApp:
         - 웹 상태 조회에 '성공'했을 때만 진행한다. 실패(예외) 시 보류하여 기존 웹키를 덮어쓰지 않는다.
         - 웹에 이미 있는 provider 는 건너뛴다(빈 자리만 채움, 절대 덮어쓰기 안 함).
         - 로컬에 실제 값이 있는 키만 올린다.
+        - 무효/만료 키는 웹에 올리지 않는다(Gemini 는 무료 사전검증으로 '인증 실패' 확인 시 제외).
+          무효 키가 웹으로 승격되면 서버사이드 생성/리서치가 그 키로 실패하기 때문이다.
         """
         if getattr(self, "_auto_secret_migration_done", False) or not client:
             return
@@ -2212,10 +2214,26 @@ class NaverBlogApp:
         self._auto_secret_migration_done = True
         local = self._local_provider_secret_values()
         moved = 0
+        skipped_invalid = 0
         for provider in ("gemini", "openai", "claude", "apify"):
             value = local.get(provider, "")
             if not _is_real_secret(value) or provider in web_has:
                 continue
+            # 무효/만료 키를 웹에 올리지 않는다. Gemini 는 무료 ListModels 로 사전검증 가능 —
+            # '인증 실패(무효 키)'가 확인될 때만 제외한다. 네트워크/쿼터/SDK 오류는 차단하지 않아
+            # 유효 키가 일시적 장애로 오스킵되는 일을 막는다.
+            if provider == "gemini":
+                try:
+                    from content.ai_text import precheck_gemini_key
+                    pre_err = precheck_gemini_key(value)
+                except Exception:
+                    pre_err = None  # 사전검증 자체 실패 → 차단하지 않음(기존 동작 유지)
+                if pre_err is not None and re.search(
+                    r"api[_ ]?key[_ ]?invalid|api key not valid|invalid api key|인증 실패",
+                    str(pre_err), re.I,
+                ):
+                    skipped_invalid += 1
+                    continue
             try:
                 client.put_user_secret(provider, value)
                 moved += 1
@@ -2223,6 +2241,8 @@ class NaverBlogApp:
                 continue
         if moved:
             self.queue.put(("log", f"[자동 연결] 로컬 AI/API 키 {moved}개를 웹 보안 저장소로 자동 이전했습니다."))
+        if skipped_invalid:
+            self.queue.put(("log", f"[자동 연결] 무효 Gemini 키 {skipped_invalid}개는 웹 이전에서 제외했습니다. 설정에서 유효한 키를 새로 저장해주세요."))
 
     def _import_local_provider_secrets(self, client, command):
         allowed = ("gemini", "apify", "openai", "claude")
