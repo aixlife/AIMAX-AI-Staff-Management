@@ -79,11 +79,37 @@ add_file() {
   LABELS+=("$label")
 }
 
+preflight_web_guard() {
+  if [[ "${AIMAX_DEPLOY_SKIP_GUARD:-}" == "1" ]]; then
+    echo "[DEPLOY][WARN] AIMAX_DEPLOY_SKIP_GUARD=1 — 웹 배포 가드를 건너뜁니다. 카탈로그 회귀 위험 직접 확인." >&2
+    return 0
+  fi
+  local server_js="$ROOT_DIR/oracle/aimax-reports-api/server.js"
+  require_file "$server_js"
+  # 라이브 카탈로그/모델 마커 — 옛/분기 브랜치의 server.js 를 배포하면 직원 카탈로그가 회귀한다.
+  local missing=()
+  grep -q "jieun_office_support" "$server_js" || missing+=("jieun_office_support 직원")
+  grep -q "sangsu_quote" "$server_js" || missing+=("sangsu_quote 상수견적 잡")
+  grep -q "normalizeYeriGeminiModel" "$server_js" || missing+=("flash 모델 정규화 함수")
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "[DEPLOY][ABORT] server.js 에 라이브 마커 누락 — 옛/분기 브랜치를 배포 중일 수 있습니다:" >&2
+    local m; for m in "${missing[@]}"; do echo "  - $m" >&2; done
+    echo "  통합 정본 브랜치를 체크아웃하세요. (긴급 우회: AIMAX_DEPLOY_SKIP_GUARD=1)" >&2
+    exit 3
+  fi
+  if command -v node >/dev/null 2>&1; then
+    node --check "$server_js" || { echo "[DEPLOY][ABORT] server.js 문법 오류 — 배포 중단" >&2; exit 3; }
+  fi
+  local br; br="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  echo "[DEPLOY] web preflight OK — 브랜치=$br, 라이브 카탈로그/모델 마커 + 문법 확인."
+}
+
 SOURCES=()
 TARGETS=()
 LABELS=()
 
 if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
+  preflight_web_guard
   add_file \
     "$ROOT_DIR/oracle/aimax-reports-api/server.js" \
     "$REMOTE_APP_DIR/server.js" \
