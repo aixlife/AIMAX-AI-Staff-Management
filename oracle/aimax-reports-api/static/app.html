@@ -9945,7 +9945,11 @@
       }, 15000);
       renderAgent();
       const protocolPath = kind === "open_settings" ? "open-settings" : "connect";
-      window.location.href = `aimax://agent/${protocolPath}`;
+      // 콘솔 로그인 계정을 실행기에 전달한다. 실행기에 다른 계정 토큰이 저장돼 있으면
+      // (예: 설치/테스트용 공용 계정) 코어가 이를 감지해 본인 계정으로 재로그인을 유도한다.
+      const acctEmail = (state.me?.user?.email || "").trim();
+      const protocolQuery = acctEmail ? `?account=${encodeURIComponent(acctEmail)}` : "";
+      window.location.href = `aimax://agent/${protocolPath}${protocolQuery}`;
       showToast(kind === "open_settings"
         ? "로컬 설정 창 열기를 요청했습니다. 브라우저 확인 창이 뜨면 열기를 눌러주세요."
         : "실행기 연결을 요청했습니다. 브라우저 확인 창이 뜨면 열기를 눌러주세요.");
