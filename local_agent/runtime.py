@@ -71,6 +71,35 @@ def agent_start_request_kind() -> str:
     return ""
 
 
+def _account_from_url(url: str) -> str:
+    """aimax:// URL 의 account 쿼리 파라미터(콘솔 로그인 계정)를 소문자 이메일로 반환."""
+    if not url:
+        return ""
+    try:
+        from urllib.parse import urlparse, parse_qs
+
+        query = parse_qs(urlparse(str(url)).query)
+        values = query.get("account") or query.get("u") or []
+        return (values[0] if values else "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _account_from_args(args) -> str:
+    for item in args or []:
+        text = str(item)
+        if "account=" in text and "aimax" in text:
+            account = _account_from_url(text)
+            if account:
+                return account
+    return ""
+
+
+def agent_start_account() -> str:
+    """시작 인자(aimax:// URL)에서 콘솔 로그인 계정을 추출한다. 없으면 빈 문자열."""
+    return _account_from_args(sys.argv[1:])
+
+
 class HeadlessAgentMixin:
     """Mixin layered before NaverBlogApp to avoid creating any Tk window."""
 
@@ -165,10 +194,11 @@ class HeadlessAgentMixin:
         self._reset_single_instance_request_cursor()
         self._restore_web_agent_session()
         startup_request = agent_start_request_kind()
+        startup_account = agent_start_account()
         if startup_request == "open_settings":
-            self._handle_agent_open_settings_request()
+            self._handle_agent_open_settings_request(expected_account=startup_account)
         elif startup_request in {"connect", "status"}:
-            self._handle_agent_connect_request()
+            self._handle_agent_connect_request(expected_account=startup_account)
         elif not self.web_agent_client:
             if self._should_open_first_run_connection_dialog():
                 login_result = self._open_first_run_connection_dialog()
@@ -279,12 +309,13 @@ class HeadlessAgentMixin:
             return
         self._single_instance_request_mtime_ns = mtime_ns
         kind = str(request.get("kind") or "")
+        expected_account = _account_from_url(str(request.get("url") or ""))
         if kind == "connect":
-            self._handle_agent_connect_request()
+            self._handle_agent_connect_request(expected_account=expected_account)
         elif kind == "status":
-            self._handle_agent_connect_request()
+            self._handle_agent_connect_request(expected_account=expected_account)
         elif kind == "open_settings":
-            self._handle_agent_open_settings_request()
+            self._handle_agent_open_settings_request(expected_account=expected_account)
 
     def _complete_first_run_connection(self, login_result: dict[str, Any]) -> None:
         if login_result.get("ready") and login_result.get("client"):
@@ -307,21 +338,27 @@ class HeadlessAgentMixin:
         else:
             self._log("[웹앱 연결] 저장된 웹앱 세션이 없습니다. 웹앱 연결 창이 취소되었습니다.")
 
-    def _handle_agent_connect_request(self) -> None:
+    def _handle_agent_connect_request(self, expected_account: str = "") -> None:
         self._log("[웹앱 연결] 실행기 연결 요청을 받았습니다.")
         if self.web_agent_client:
+            if self._web_agent_account_mismatch(expected_account):
+                self._switch_web_agent_account(prefill_email=expected_account)
+                return
             try:
                 self._send_immediate_web_agent_heartbeat("protocol_connect")
             except Exception:
                 pass
             self._open_headless_status_dialog()
             return
-        login_result = self._open_first_run_connection_dialog()
+        login_result = self._open_first_run_connection_dialog(prefill_email=expected_account)
         self._complete_first_run_connection(login_result)
 
-    def _handle_agent_open_settings_request(self) -> None:
+    def _handle_agent_open_settings_request(self, expected_account: str = "") -> None:
         self._log("[웹앱 연결] 로컬 설정 열기 요청을 받았습니다.")
         if self.web_agent_client:
+            if self._web_agent_account_mismatch(expected_account):
+                self._switch_web_agent_account(prefill_email=expected_account)
+                return
             try:
                 self._send_immediate_web_agent_heartbeat("protocol_open_settings")
             except Exception:
@@ -331,7 +368,75 @@ class HeadlessAgentMixin:
             except Exception as error:
                 self._log(f"[웹앱 연결] 로컬 보안 설정 창을 열 수 없습니다: {error}")
             return
-        login_result = self._open_first_run_connection_dialog()
+        login_result = self._open_first_run_connection_dialog(prefill_email=expected_account)
+        self._complete_first_run_connection(login_result)
+
+    def _web_agent_current_account(self) -> str:
+        """현재 저장된 실행기 토큰의 계정 이메일(소문자). 조회 실패 시 빈 문자열(=불일치 판단 보류)."""
+        client = getattr(self, "web_agent_client", None)
+        if not client:
+            return ""
+        cached = getattr(self, "_web_agent_account_email", "")
+        if cached:
+            return cached
+        try:
+            data = client.me()
+            user = data.get("user") if isinstance(data, dict) else {}
+            email = str((user or {}).get("email") or "").strip().lower()
+        except Exception:
+            email = ""
+        if email:
+            self._web_agent_account_email = email
+        return email
+
+    def _web_agent_account_mismatch(self, expected_account: str) -> bool:
+        """콘솔 로그인 계정과 실행기 저장 토큰의 계정이 '확실히' 다른 경우에만 True.
+
+        콘솔 계정 정보가 없거나(구버전 웹) 토큰 계정 조회에 실패하면(네트워크 등)
+        False 를 반환해 기존 동작을 방해하지 않는다(유효 연결 오인 차단 방지).
+        """
+        expected = (expected_account or "").strip().lower()
+        if not expected:
+            return False
+        current = self._web_agent_current_account()
+        if not current:
+            return False
+        if current == expected:
+            return False
+        self._log(
+            f"[웹앱 연결] 이 PC 실행기에 저장된 계정({current})이 콘솔 로그인 계정({expected})과 "
+            "다릅니다. 본인 계정으로 다시 로그인합니다."
+        )
+        return True
+
+    def _stop_web_agent_polling(self) -> None:
+        """실행 중인 웹앱 폴링 스레드만 중지한다.
+
+        메인 루프와 공유하는 ``web_agent_stop_event`` 는 건드리지 않는다(그걸 set 하면
+        에이전트 전체가 종료됨). 대신 폴링 세대(generation)를 증가시켜 옛 폴링 루프만
+        스스로 빠져나오게 한 뒤 스레드 종료를 기다린다.
+        """
+        self._web_agent_poll_generation = getattr(self, "_web_agent_poll_generation", 0) + 1
+        thread = getattr(self, "web_agent_thread", None)
+        if thread and thread.is_alive():
+            try:
+                thread.join(timeout=10)
+            except Exception:
+                pass
+        self.web_agent_thread = None
+
+    def _switch_web_agent_account(self, prefill_email: str = "") -> None:
+        """저장된 실행기 세션(keyring 토큰)을 비우고, 콘솔 계정으로 다시 로그인하도록 한다."""
+        self._stop_web_agent_polling()
+        try:
+            from web_agent.client import clear_session_token
+
+            clear_session_token()
+        except Exception:
+            pass
+        self.web_agent_client = None
+        self._web_agent_account_email = ""
+        login_result = self._open_first_run_connection_dialog(prefill_email=prefill_email)
         self._complete_first_run_connection(login_result)
 
     def _open_headless_status_dialog(self) -> None:
@@ -341,18 +446,26 @@ class HeadlessAgentMixin:
         root = self._get_headless_tk_root()
         dialog = tk.Toplevel(root)
         dialog.title("AIMAX 실행기 연결됨")
-        dialog.geometry("430x210")
+        dialog.geometry("460x250")
         dialog.resizable(False, False)
         dialog.configure(bg="#f7f7f5")
 
-        result = {"open_settings": False}
+        result = {"open_settings": False, "switch_account": False}
+        connected_email = self._web_agent_current_account()
         frame = ttk.Frame(dialog, padding=22)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="AIMAX 실행기가 연결되어 있습니다.", font=("", 15, "bold")).pack(anchor="w")
+        if connected_email:
+            ttk.Label(
+                frame,
+                text=f"연결된 계정: {connected_email}",
+                foreground="#198754",
+            ).pack(anchor="w", pady=(6, 0))
         ttk.Label(
             frame,
-            text="웹앱 작업을 받을 준비가 되어 있습니다. 로컬 보안 설정을 확인하려면 아래 버튼을 눌러주세요.",
-            wraplength=370,
+            text="웹앱 작업을 받을 준비가 되어 있습니다. 다른 계정으로 쓰던 PC라면 아래 "
+            "‘다른 계정으로 로그인’ 으로 본인 계정으로 전환할 수 있습니다.",
+            wraplength=400,
             foreground="#555555",
         ).pack(anchor="w", pady=(10, 18))
 
@@ -363,20 +476,28 @@ class HeadlessAgentMixin:
             result["open_settings"] = True
             dialog.destroy()
 
+        def _switch_account() -> None:
+            result["switch_account"] = True
+            dialog.destroy()
+
         ttk.Button(buttons, text="닫기", command=dialog.destroy).pack(side="right", padx=(8, 0))
-        ttk.Button(buttons, text="로컬 보안 설정 열기", command=_open_settings).pack(side="right")
+        ttk.Button(buttons, text="로컬 보안 설정 열기", command=_open_settings).pack(side="right", padx=(8, 0))
+        ttk.Button(buttons, text="다른 계정으로 로그인", command=_switch_account).pack(side="right")
 
         dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
         self._center_headless_window(dialog)
         self._focus_headless_window(dialog)
         self._wait_for_headless_window(root, dialog)
+        if result["switch_account"]:
+            self._switch_web_agent_account()
+            return
         if result["open_settings"]:
             try:
                 self._open_headless_settings_dialog()
             except Exception as error:
                 self._log(f"[웹앱 연결] 로컬 보안 설정 창을 열 수 없습니다: {error}")
 
-    def _open_first_run_connection_dialog(self) -> dict[str, Any]:
+    def _open_first_run_connection_dialog(self, prefill_email: str = "") -> dict[str, Any]:
         import tkinter as tk
         from tkinter import ttk
 
@@ -410,7 +531,7 @@ class HeadlessAgentMixin:
             foreground="#555555",
         ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(0, 16))
 
-        email_var = tk.StringVar(master=root, value=getattr(self, "web_email_var", HeadlessVar("")).get() or state.get("email", ""))
+        email_var = tk.StringVar(master=root, value=(prefill_email or "").strip() or getattr(self, "web_email_var", HeadlessVar("")).get() or state.get("email", ""))
         password_var = tk.StringVar(master=root, value="")
         status_var = tk.StringVar(master=root, value="")
 
@@ -482,6 +603,7 @@ class HeadlessAgentMixin:
 
                 save_state(email=email, base_url=client.base_url, device_label=default_device_label())
                 self.web_email_var.set(email)
+                self._web_agent_account_email = email
                 self.web_password_var.set("")
                 result["stored"] = token_stored
                 result["login_succeeded"] = True
