@@ -14,6 +14,10 @@ except Exception:
     _APP_VERSION = ""
 
 REQUEST_PATH = APP_DATA_DIR / "aimax-local-agent.request.json"
+# Go 런처(aimax_agent_launcher.go)는 하이픈 파일명으로 연결 요청을 쓴다.
+# 코어는 두 이름을 모두 감시해야 이미 실행 중인 코어가 런처의 재연결 요청을 받을 수 있다.
+LAUNCHER_REQUEST_PATH = APP_DATA_DIR / "aimax-local-agent-request.json"
+REQUEST_PATHS = (REQUEST_PATH, LAUNCHER_REQUEST_PATH)
 LAUNCH_GUARD_PATH = APP_DATA_DIR / "aimax-agent-launch.lock"
 
 
@@ -204,12 +208,24 @@ def _lock_file_has_running_owner(lock_path: Path) -> bool:
 
 
 def latest_request() -> tuple[int, dict[str, object]] | None:
-    try:
-        stat = REQUEST_PATH.stat()
-        raw = REQUEST_PATH.read_text(encoding="utf-8")
-        data = json.loads(raw) if raw.strip() else {}
+    # 점(.)·하이픈(-) 두 요청 파일 중 가장 최근 것을 반환한다.
+    # Go 런처는 ``aimax-local-agent-request.json``(하이픈)에 쓰고, 파이썬끼리의
+    # 재신호는 ``aimax-local-agent.request.json``(점)에 쓴다. 둘 다 보고 mtime이
+    # 더 새 것을 채택해야 런처가 남긴 연결 요청을 코어가 놓치지 않는다.
+    newest: tuple[int, dict[str, object]] | None = None
+    for path in REQUEST_PATHS:
+        try:
+            stat = path.stat()
+            raw = path.read_text(encoding="utf-8")
+        except (FileNotFoundError, OSError):
+            continue
+        try:
+            data = json.loads(raw) if raw.strip() else {}
+        except json.JSONDecodeError:
+            data = {}
         if not isinstance(data, dict):
             data = {}
-        return stat.st_mtime_ns, data
-    except FileNotFoundError:
-        return None
+        mtime_ns = stat.st_mtime_ns
+        if newest is None or mtime_ns > newest[0]:
+            newest = (mtime_ns, data)
+    return newest

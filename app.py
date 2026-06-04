@@ -1540,7 +1540,10 @@ class NaverBlogApp:
             return
         self.web_agent_client = client
         self.web_agent_stop_event.clear()
-        self.web_agent_thread = threading.Thread(target=self._web_agent_loop, args=(client,), daemon=True)
+        # 폴링 세대: 계정 전환 시 옛 폴링 루프만 무효화하기 위한 토큰(메인 루프와 분리).
+        self._web_agent_poll_generation = getattr(self, "_web_agent_poll_generation", 0) + 1
+        generation = self._web_agent_poll_generation
+        self.web_agent_thread = threading.Thread(target=self._web_agent_loop, args=(client, generation), daemon=True)
         self.web_agent_thread.start()
 
     def _send_immediate_web_agent_heartbeat(self, reason="settings_saved"):
@@ -1942,9 +1945,12 @@ class NaverBlogApp:
             "diagnostics": self._collect_web_agent_diagnostics(),
         }
 
-    def _web_agent_loop(self, client):
+    def _web_agent_loop(self, client, generation=None):
         from web_agent.client import AimaxApiError, current_platform_label, default_device_label
         import time
+
+        if generation is None:
+            generation = getattr(self, "_web_agent_poll_generation", 0)
 
         heartbeat_seconds = max(5, int(os.environ.get("AIMAX_AGENT_HEARTBEAT_SECONDS", os.environ.get("AIMAX_AGENT_POLL_SECONDS", "20")) or 20))
         command_poll_seconds = max(2, int(os.environ.get("AIMAX_AGENT_COMMAND_POLL_SECONDS", "5") or 5))
@@ -2017,7 +2023,7 @@ class NaverBlogApp:
             pass
         next_heartbeat_at = 0.0
         next_version_check_at = time.monotonic() + version_check_seconds
-        while not self.web_agent_stop_event.is_set():
+        while not self.web_agent_stop_event.is_set() and getattr(self, "_web_agent_poll_generation", generation) == generation:
             try:
                 now = time.monotonic()
                 if self.web_agent_active_job_id and not self.running:
