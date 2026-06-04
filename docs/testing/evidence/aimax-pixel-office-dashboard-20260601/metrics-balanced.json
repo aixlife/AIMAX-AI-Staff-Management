@@ -1,0 +1,91 @@
+{
+  "desktop": {
+    "viewport": {
+      "width": 1365,
+      "height": 900
+    },
+    "floor": {
+      "width": 971,
+      "height": 546,
+      "ratio": 1.78
+    },
+    "brainVideo": {
+      "width": 937,
+      "height": 640
+    },
+    "workerCount": 8,
+    "allWorkersLoaded": true,
+    "backgroundImage": "image-set(url(\"http://127.0.0.1:18989/assets/aimax-office-rpg-bg.webp\") 1dppx type(\"image/webp\"), url(\"http://127.0.0.1:18989/assets/aimax-office-rpg-bg.png\") 1dppx type(\"image/png\"))",
+    "labelsVisible": true,
+    "modalOpen": false,
+    "firstWorkerMotion": {
+      "first": {
+        "x": 532.9,
+        "y": 495.6,
+        "imgHeight": 82,
+        "transform": "matrix(1, 0, 0, 1, 14.4844, -107.348)",
+        "animationName": "pixelRoute, pixelBob",
+        "duration": "16s, 0.7s",
+        "dx": "clamp(16px, 2.4vw, 32px)",
+        "dy": "clamp(-28px, -1.9vw, -14px)"
+      },
+      "second": {
+        "x": 532.9,
+        "y": 483.9,
+        "imgHeight": 82,
+        "transform": "matrix(1, 0, 0, 1, 14.4844, -119.019)",
+        "animationName": "pixelRoute, pixelBob",
+        "duration": "16s, 0.7s",
+        "dx": "clamp(16px, 2.4vw, 32px)",
+        "dy": "clamp(-28px, -1.9vw, -14px)"
+      },
+      "deltaX": 0,
+      "deltaY": -11.7
+    }
+  },
+  "mobile": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "floor": {
+      "width": 373,
+      "height": 210,
+      "ratio": 1.78
+    },
+    "brainVideo": {
+      "width": 380,
+      "height": 260
+    },
+    "workerCount": 8,
+    "allWorkersLoaded": true,
+    "backgroundImage": "image-set(url(\"http://127.0.0.1:18989/assets/aimax-office-rpg-bg.webp\") 1dppx type(\"image/webp\"), url(\"http://127.0.0.1:18989/assets/aimax-office-rpg-bg.png\") 1dppx type(\"image/png\"))",
+    "labelsVisible": false,
+    "modalOpen": false,
+    "firstWorkerMotion": {
+      "first": {
+        "x": 112.4,
+        "y": 732.5,
+        "imgHeight": 45,
+        "transform": "matrix(1, 0, 0, 1, 9.26562, -46.7766)",
+        "animationName": "pixelRoute, pixelBob",
+        "duration": "12s, 0.7s",
+        "dx": "18px",
+        "dy": "-12px"
+      },
+      "second": {
+        "x": 112.4,
+        "y": 723.2,
+        "imgHeight": 45,
+        "transform": "matrix(1, 0, 0, 1, 9.26562, -54.0429)",
+        "animationName": "pixelRoute, pixelBob",
+        "duration": "12s, 0.7s",
+        "dx": "18px",
+        "dy": "-12px"
+      },
+      "deltaX": 0,
+      "deltaY": -9.3
+    }
+  },
+  "errors": []
+}

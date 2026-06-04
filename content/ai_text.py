@@ -79,8 +79,8 @@ def precheck_gemini_key(api_key):
     """무료 ListModels 호출로 Gemini 키 유효성을 사전 점검한다.
 
     유효하면 None, 문제가 있으면 사용자에게 보여줄 오류 객체(AiQuotaError/AiGenerationError)를 반환한다.
-    만료/무효 키를 과금 생성 시도(및 재시도) 전에 즉시 걸러, 모호한 실패 대신 정확한 사유를
-    빠르게 노출하기 위함이다.
+    만료/무효 키를 과금 생성 시도(및 재시도 3회) 전에 즉시 걸러내, 같은 stage 의 모호한
+    실패 대신 '키 인증 실패' 같은 정확한 사유를 빠르게 노출하기 위함이다.
     """
     key = (api_key or "").strip()
     if not key:
@@ -232,8 +232,23 @@ def _generate_once(prompt, api_key, model):
         return _generate_with_openai(prompt, api_key, str(model).strip())
     # model 값이 구체적인 Gemini 모델 ID이면 그대로 사용,
     # 레거시 "gemini" 문자열이면 기본 모델로 폴백
-    gemini_model_id = model if str(model or "").startswith("gemini-") else "gemini-2.5-flash"
+    gemini_model_id = _normalize_gemini_model_id(model)
     return _generate_with_gemini(prompt, api_key, gemini_model_id)
+
+
+def _normalize_gemini_model_id(model):
+    value = str(model or "").strip()
+    # 기본/제네릭/구버전 기본값은 무료 등급에서 동작하는 2.5 Flash 로 통일한다.
+    # 명시적 3.1 Pro 선택만 유료 프리뷰로 유지 (app.py _LEGACY_AI_MODEL_MAP 과 일치).
+    aliases = {
+        "gemini": "gemini-2.5-flash",
+        "gemini-pro": "gemini-3.1-pro-preview",
+        "gemini-2.5-pro": "gemini-2.5-flash",
+        "gemini-3.1-pro": "gemini-2.5-flash",
+    }
+    if value in aliases:
+        return aliases[value]
+    return value if value.startswith("gemini-") else "gemini-2.5-flash"
 
 
 def _normalize_generation_result(result):

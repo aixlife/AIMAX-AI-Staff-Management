@@ -5,7 +5,10 @@ from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_all
 from aimax_compliance import APP_VERSION
 
-ROOT = Path(__file__).resolve().parent
+# PyInstaller 스펙 실행 컨텍스트엔 __file__ 이 없다(NameError). PyInstaller 가 주입하는
+# SPECPATH 를 우선 쓰고, 없으면 현재 작업 디렉토리로 폴백한다.
+import os
+ROOT = Path(globals().get("SPECPATH", os.getcwd())).resolve()
 BUNDLE_VERSION = APP_VERSION.removeprefix("v")
 
 datas = [('config.yaml', '.'), ('assets', 'assets')]

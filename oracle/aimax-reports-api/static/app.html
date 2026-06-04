@@ -287,8 +287,7 @@
     }
 
     #setupChecklist,
-    #settingsStatus,
-    #overviewBlockers {
+    #settingsStatus {
       max-height: 310px;
       overflow-y: auto;
       padding-right: 4px;
@@ -382,6 +381,274 @@
       flex-wrap: wrap;
     }
 
+    .aimax-studio {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+      overflow: hidden;
+    }
+
+    .aimax-story {
+      min-width: 0;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .aimax-story h2 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.28;
+      letter-spacing: 0;
+    }
+
+    .aimax-story p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .aimax-story-points {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .aimax-story-point {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+      display: grid;
+      gap: 5px;
+    }
+
+    .aimax-story-point strong,
+    .aimax-story-point span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .aimax-story-point strong {
+      color: var(--brand-dark);
+      line-height: 1.35;
+    }
+
+    .aimax-story-point span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .aimax-floor {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        radial-gradient(circle at 20% 24%, rgba(15, 118, 110, .16), rgba(15, 118, 110, 0) 26%),
+        radial-gradient(circle at 78% 28%, rgba(72, 115, 168, .18), rgba(72, 115, 168, 0) 27%),
+        radial-gradient(circle at 50% 76%, rgba(246, 184, 82, .18), rgba(246, 184, 82, 0) 34%),
+        linear-gradient(135deg, #f7fcfa 0%, #eef7f3 48%, #f8fbf9 100%);
+      aspect-ratio: 6 / 1;
+      min-height: 150px;
+      max-height: 210px;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .62);
+    }
+
+    .aimax-floor::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(15, 118, 110, .08) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(15, 118, 110, .08) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,.36), rgba(0,0,0,.10));
+    }
+
+    .floor-employee {
+      position: absolute;
+      left: var(--x);
+      top: var(--y);
+      z-index: var(--z, 2);
+      width: clamp(82px, 7.6vw, 112px);
+      height: clamp(82px, 7.6vw, 112px);
+      border: 4px solid #ffffff;
+      border-radius: 999px;
+      background: #ffffff;
+      object-fit: cover;
+      box-shadow: 0 16px 34px rgba(22, 29, 25, .18);
+      animation: faceFloat var(--duration, 8s) ease-in-out var(--delay, 0s) infinite;
+      will-change: transform;
+    }
+
+    .floor-employee:nth-child(1) { --x: 16%; --y: 47%; --float-x: 32px; --float-y: -10px; --duration: 8.8s; --delay: -.4s; --z: 4; }
+    .floor-employee:nth-child(2) { --x: 38%; --y: 56%; --float-x: -28px; --float-y: 12px; --duration: 9.6s; --delay: -2.4s; --z: 5; }
+    .floor-employee:nth-child(3) { --x: 62%; --y: 45%; --float-x: 28px; --float-y: 12px; --duration: 10.2s; --delay: -1.6s; --z: 4; }
+    .floor-employee:nth-child(4) { --x: 84%; --y: 55%; --float-x: -32px; --float-y: -10px; --duration: 9.2s; --delay: -3.1s; --z: 5; }
+
+    @keyframes faceFloat {
+      0%, 100% {
+        transform: translate(-50%, -50%) translate(0, 0);
+      }
+      50% {
+        transform: translate(-50%, -50%) translate(var(--float-x), var(--float-y));
+      }
+    }
+
+    .brain-card {
+      min-width: 0;
+      border: 1px solid #cbded8;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .brain-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .brain-card h3 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .brain-card p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .brain-map {
+      position: relative;
+      min-height: 300px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7fcfa;
+      overflow: hidden;
+    }
+
+    .brain-video-wrap {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7fcfa;
+      overflow: hidden;
+      aspect-ratio: 720 / 492;
+    }
+
+    .brain-video {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #f7fcfa;
+    }
+
+    .brain-link {
+      position: absolute;
+      height: 1px;
+      background: #bfd5cb;
+      transform-origin: left center;
+    }
+
+    .brain-link.one {
+      left: 26%;
+      top: 38%;
+      width: 180px;
+      transform: rotate(18deg);
+    }
+
+    .brain-link.two {
+      left: 31%;
+      top: 54%;
+      width: 170px;
+      transform: rotate(-20deg);
+    }
+
+    .brain-link.three {
+      left: 47%;
+      top: 42%;
+      width: 150px;
+      transform: rotate(34deg);
+    }
+
+    .brain-link.four {
+      left: 43%;
+      top: 63%;
+      width: 155px;
+      transform: rotate(-34deg);
+    }
+
+    .brain-node {
+      position: absolute;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 76px;
+      min-height: 34px;
+      border: 1px solid #c9dcd3;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #243128;
+      padding: 6px 11px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 8px 18px rgba(22, 29, 25, .08);
+      white-space: nowrap;
+    }
+
+    .brain-node.core {
+      left: 50%;
+      top: 50%;
+      min-width: 98px;
+      min-height: 42px;
+      background: var(--brand);
+      color: #ffffff;
+      border-color: var(--brand);
+      transform: translate(-50%, -50%);
+    }
+
+    .brain-node.node-a {
+      left: 10%;
+      top: 22%;
+    }
+
+    .brain-node.node-b {
+      right: 9%;
+      top: 22%;
+    }
+
+    .brain-node.node-c {
+      left: 8%;
+      bottom: 18%;
+    }
+
+    .brain-node.node-d {
+      right: 10%;
+      bottom: 18%;
+    }
+
+    .brain-node.node-e {
+      left: 37%;
+      top: 10%;
+      background: var(--accent-soft);
+      border-color: #c9d9ec;
+    }
+
     .guide-agent {
       display: grid;
       grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.25fr);
@@ -446,6 +713,52 @@
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
+    }
+
+    .overview-staff-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .overview-employee-card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 13px;
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .overview-employee-card img {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      object-fit: cover;
+      border: 1px solid var(--line);
+      background: #eef2f7;
+    }
+
+    .overview-employee-copy {
+      min-width: 0;
+      display: grid;
+      gap: 6px;
+    }
+
+    .overview-employee-copy strong,
+    .overview-employee-copy span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .overview-employee-action {
+      justify-self: start;
+      margin-top: 2px;
     }
 
     .metric-card {
@@ -736,6 +1049,96 @@
       grid-column: 1 / -1;
     }
 
+    .sangsu-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .sangsu-layout > * {
+      min-width: 0;
+    }
+
+    .sangsu-items {
+      display: grid;
+      gap: 10px;
+    }
+
+    .sangsu-item-row {
+      display: grid;
+      grid-template-columns: minmax(90px, 130px) minmax(0, 1fr) minmax(100px, 140px) 40px;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .sangsu-preview-wrap {
+      min-width: 0;
+      max-width: 100%;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #dce6e3;
+      padding: 12px;
+      max-height: 72vh;
+    }
+
+    .quote-paper {
+      width: 794px;
+      min-height: 1123px;
+      margin: 0 auto;
+      background: #ffffff;
+      color: #111827;
+      padding: 54px 50px;
+      box-shadow: 0 10px 26px rgba(16, 24, 40, .12);
+      box-sizing: border-box;
+      font-size: 12px;
+    }
+
+    .quote-paper h4 {
+      margin: 0;
+      color: #0f766e;
+      font-size: 34px;
+      letter-spacing: .28em;
+      text-align: center;
+    }
+
+    .quote-logo {
+      height: 58px;
+      max-width: 180px;
+      object-fit: contain;
+      float: left;
+    }
+
+    .quote-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+    }
+
+    .quote-table th,
+    .quote-table td {
+      border: 1px solid #d6dde4;
+      padding: 9px 10px;
+      vertical-align: top;
+    }
+
+    .quote-table th {
+      background: #e8f5f3;
+      color: #0f5f59;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .quote-section-title {
+      margin-top: 24px;
+      color: #0f766e;
+      font-weight: 800;
+      border-bottom: 2px solid #0f766e;
+      padding-bottom: 6px;
+    }
+
     .employee-layout {
       display: grid;
       grid-template-columns: minmax(260px, 360px) 1fr;
@@ -923,20 +1326,18 @@
 
     .staff-layout {
       display: grid;
-      grid-template-columns: minmax(320px, 1fr) minmax(320px, 420px);
+      grid-template-columns: minmax(0, 1fr);
       gap: 18px;
       align-items: start;
-      max-height: calc(100vh - 280px);
-      min-height: 420px;
+      min-height: 0;
     }
 
     .staff-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 12px;
-      max-height: 100%;
-      overflow-y: auto;
-      padding-right: 4px;
+      overflow: visible;
+      padding-right: 0;
       align-content: start;
     }
 
@@ -1023,8 +1424,7 @@
     }
 
     .staff-detail {
-      position: sticky;
-      top: 104px;
+      position: static;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #ffffff;
@@ -1032,13 +1432,12 @@
       display: grid;
       gap: 14px;
       min-width: 0;
-      max-height: calc(100vh - 130px);
-      overflow-y: auto;
-      box-shadow: var(--shadow);
+      overflow: visible;
+      box-shadow: var(--shadow-soft);
     }
 
     .staff-detail-photo {
-      width: 100%;
+      width: min(100%, 520px);
       aspect-ratio: 16 / 11;
       border-radius: 8px;
       object-fit: cover;
@@ -1056,6 +1455,55 @@
       margin: 7px 0 0;
       color: var(--muted);
       line-height: 1.55;
+    }
+
+    .resume-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .resume-box {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .resume-box strong,
+    .resume-box span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-box span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .resume-video {
+      min-height: 104px;
+      border: 1px solid #c9d9ec;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      padding: 13px;
+      display: grid;
+      align-content: center;
+      gap: 5px;
+    }
+
+    .resume-video strong {
+      color: #1d4f84;
+    }
+
+    .resume-video span {
+      color: #42617e;
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     .research-layout {
@@ -1318,6 +1766,132 @@
 
     .songi-output-panel .songi-intro {
       color: var(--muted);
+    }
+
+    .yunmi-result {
+      min-width: 0;
+    }
+
+    .yunmi-hook-list,
+    .yunmi-script-grid,
+    .yunmi-time-list,
+    .yunmi-guide-grid,
+    .yunmi-cta-grid,
+    .yunmi-anchor-list {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .yunmi-script-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
+
+    .yunmi-script-card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .yunmi-script-card h5,
+    .yunmi-section-title {
+      margin: 0;
+      color: var(--brand-dark);
+      font-size: 14px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .yunmi-title-list {
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 4px;
+      color: #3d4842;
+    }
+
+    .yunmi-title-list li,
+    .yunmi-anchor-list li {
+      overflow-wrap: anywhere;
+      line-height: 1.45;
+    }
+
+    .yunmi-time-row {
+      min-width: 0;
+      border: 1px solid #dfe8e4;
+      border-radius: 8px;
+      background: var(--panel-soft);
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 68px minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .yunmi-time {
+      align-self: start;
+      color: var(--brand-dark);
+      font-weight: 800;
+      font-size: 13px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .yunmi-time-body {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .yunmi-time-body div,
+    .yunmi-guide-grid div,
+    .yunmi-cta-grid div,
+    .yunmi-hook-list div {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .yunmi-time-body strong,
+    .yunmi-guide-grid strong,
+    .yunmi-cta-grid strong,
+    .yunmi-hook-list strong {
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .yunmi-time-body span,
+    .yunmi-guide-grid span,
+    .yunmi-cta-grid span,
+    .yunmi-hook-list span {
+      color: #3d4842;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+      word-break: keep-all;
+    }
+
+    .yunmi-guide-grid,
+    .yunmi-cta-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .yunmi-details {
+      min-width: 0;
+      border: 1px solid #dfe8e4;
+      border-radius: 8px;
+      padding: 10px;
+      background: #fbfdfc;
+    }
+
+    .yunmi-details summary {
+      cursor: pointer;
+      color: var(--brand-dark);
+      font-weight: 800;
     }
 
     .songi-brief-meta {
@@ -2102,6 +2676,12 @@
       margin: 0;
     }
 
+    @media (max-width: 1540px) {
+      .sangsu-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
     @media (max-width: 900px) {
       .shell {
         grid-template-columns: 1fr;
@@ -2123,6 +2703,7 @@
 
       .nav button {
         text-align: center;
+        overflow-wrap: anywhere;
       }
 
       .side-footer {
@@ -2154,6 +2735,8 @@
       }
 
       .next-action,
+      .aimax-studio,
+      .aimax-story-points,
       .guide-agent,
       .overview-metrics,
       .blocker-item,
@@ -2168,6 +2751,7 @@
       .staff-layout,
       .staff-grid,
       .research-layout,
+      .sangsu-layout,
       .research-detail-grid,
       .songi-workflow-head,
       .songi-discovery-grid,
@@ -2175,14 +2759,49 @@
       .songi-discovery-metrics,
       .songi-insight-grid,
       .songi-output-grid,
+      .yunmi-script-grid,
+      .yunmi-guide-grid,
+      .yunmi-cta-grid,
       .songi-brief-meta,
       .songi-sequence-list,
       .api-guide-list,
       .api-secret-list,
       .setup-list,
+      .resume-grid,
       .report-meta-grid,
       .update-alert {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .sangsu-item-row {
         grid-template-columns: 1fr;
+      }
+
+      .yunmi-time-row {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+
+      .aimax-floor {
+        aspect-ratio: 16 / 9;
+        min-height: 210px;
+        max-height: none;
+      }
+
+      .floor-employee {
+        width: clamp(58px, 17vw, 76px);
+        height: clamp(58px, 17vw, 76px);
+        border-width: 3px;
+      }
+
+      .floor-employee:nth-child(1) { --x: 22%; --y: 35%; --float-x: 18px; --float-y: -12px; }
+      .floor-employee:nth-child(2) { --x: 38%; --y: 68%; --float-x: -16px; --float-y: 14px; }
+      .floor-employee:nth-child(3) { --x: 63%; --y: 34%; --float-x: 16px; --float-y: 14px; }
+      .floor-employee:nth-child(4) { --x: 78%; --y: 66%; --float-x: -18px; --float-y: -12px; }
+
+      .brain-map,
+      .brain-video-wrap {
+        min-height: 260px;
       }
 
       .update-alert {
@@ -2219,7 +2838,6 @@
       .research-card-list,
       #setupChecklist,
       #settingsStatus,
-      #overviewBlockers,
       .table-wrap,
       #jobsTable,
       #myReportsTable,
@@ -2247,6 +2865,12 @@
 
       .form-grid {
         grid-template-columns: 1fr;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .floor-employee {
+        animation: none;
       }
     }
   </style>
@@ -2288,11 +2912,10 @@
       </div>
       <nav class="nav" aria-label="AIMAX navigation">
         <button class="active" type="button" data-tab="overview">대시보드</button>
-        <button type="button" data-tab="staff">직원</button>
-        <button type="button" data-tab="jobs">작업</button>
+        <button type="button" data-tab="staff">직원 채용</button>
+        <button type="button" data-tab="jobs">직원 업무지시</button>
         <button type="button" data-tab="settings">설정</button>
-        <button type="button" data-tab="updates">업데이트</button>
-        <button type="button" data-tab="reports">오류 보고</button>
+        <button type="button" data-tab="updates">업데이트 및 오류보고</button>
       </nav>
       <div class="side-footer">
         <span id="userEmail"></span>
@@ -2304,7 +2927,7 @@
       <div class="topbar">
         <div>
           <h1 id="pageTitle">대시보드</h1>
-          <p id="pageSubtitle">계정 권한과 로컬 실행기 연결 상태를 확인합니다.</p>
+          <p id="pageSubtitle">AIMAX의 회사 뇌와 AI 직원들이 어떻게 연결되는지 보여줍니다.</p>
         </div>
         <div class="actions">
           <button id="refreshBtn" class="btn" type="button">새로고침</button>
@@ -2312,7 +2935,7 @@
       </div>
 
       <div id="passwordNotice" class="notice warn hidden">
-        첫 로그인 보안을 위해 비밀번호 변경 후 작업 실행이 가능합니다.
+        첫 로그인 보안을 위해 비밀번호 변경 후 직원 업무지시가 가능합니다.
       </div>
 
       <div id="globalUpdateNotice" class="notice warn update-alert hidden" role="status">
@@ -2347,189 +2970,43 @@
       </section>
 
       <div id="overviewTab" class="grid tab-panel">
+        <section class="panel span-12 aimax-studio">
+          <div class="aimax-story">
+            <div>
+              <h2>AIMAX는 우리 회사의 일을 직원 단위로 나눠 맡기는 AI 사무실입니다.</h2>
+              <p>예리는 글을 쓰고, 현주는 고객을 찾고, 송이는 자료를 조사합니다. 사용자는 직원을 고르고 일을 맡기면, AIMAX가 설정 상태와 실행 흐름을 이어서 관리합니다.</p>
+            </div>
+            <div class="aimax-floor" aria-label="AIMAX 직원들이 업무를 오가는 미리보기">
+              <img class="floor-employee" src="/assets/avatar_yeri_circle.png" alt="예리">
+              <img class="floor-employee" src="/assets/avatar_hyunju_circle.png" alt="현주">
+              <img class="floor-employee" src="/assets/avatar_songi.jpg" alt="송이">
+              <img class="floor-employee" src="/assets/avatar_yunmi.jpg" alt="윤미">
+            </div>
+          </div>
+          <aside class="brain-card" aria-label="AIMAX Brain 미리보기">
+            <div class="brain-card-head">
+              <div>
+                <h3>AIMAX Brain</h3>
+                <p>회사 지식, 직원 역할, 작업 결과가 연결되는 뇌 지도 미리보기입니다.</p>
+              </div>
+              <span class="pill ok">미리보기</span>
+            </div>
+            <div class="brain-video-wrap">
+              <video class="brain-video" autoplay muted loop playsinline preload="auto" aria-label="AIMAX Brain 연결 미리보기 영상">
+                <source src="/assets/aimax-brain-preview.mp4?v=20260601-hires" type="video/mp4">
+                <source src="/assets/aimax-brain-preview.webm?v=20260601-hires" type="video/webm">
+              </video>
+            </div>
+          </aside>
+        </section>
         <section class="panel span-12 next-action">
           <div>
-            <h2 id="nextActionTitle">상태 확인 중</h2>
-            <p id="nextActionBody">계정과 로컬 실행기 상태를 확인하고 있습니다.</p>
+            <h2 id="nextActionTitle">직원 상태를 확인하고 있습니다.</h2>
+            <p id="nextActionBody">계정 권한과 실행 상태를 불러오는 중입니다.</p>
           </div>
           <div class="next-action-buttons">
-            <button id="nextActionBtn" class="btn primary" type="button">확인</button>
-            <button id="nextDownloadAgentBtn" class="btn" type="button">설치 파일</button>
-          </div>
-        </section>
-
-        <section class="panel span-12">
-          <div class="panel-title">
-            <h2>첫 사용자 가이드</h2>
-            <span id="onboardingGuideProgress" class="pill">확인 중</span>
-          </div>
-          <div class="guide-agent">
-            <div class="guide-current">
-              <span id="onboardingGuideStepPill" class="pill">시작</span>
-              <h3 id="onboardingGuideTitle">지금 해야 할 일을 확인하고 있습니다</h3>
-              <p id="onboardingGuideBody">계정, 실행기, 로컬 보안 설정 상태를 확인해 한 단계씩 안내합니다.</p>
-              <div class="actions">
-                <button id="onboardingGuidePrimaryBtn" class="btn primary" type="button">이 단계 진행</button>
-                <button id="onboardingGuideSettingsBtn" class="btn" type="button">설정 탭 보기</button>
-              </div>
-              <p class="small muted">네이버 비밀번호는 내 PC에만 저장하고, 송이용 AI/API 키는 웹 보안 저장소에 암호화해 저장합니다.</p>
-            </div>
-            <div id="onboardingGuideSteps" class="guide-steps"></div>
-          </div>
-        </section>
-
-        <section class="panel span-12">
-          <div class="panel-title">
-            <h2>운영 현황</h2>
-            <span id="overviewHealth" class="pill">확인 중</span>
-          </div>
-          <div class="overview-metrics">
-            <div class="metric-card">
-              <strong id="overviewAvailableStaff">0</strong>
-              <span>사용 가능한 직원</span>
-            </div>
-            <div class="metric-card">
-              <strong id="overviewBlockedStaff">0</strong>
-              <span>설정이 필요한 직원</span>
-            </div>
-            <div class="metric-card">
-              <strong id="overviewRunningJobs">0</strong>
-              <span>진행 중인 작업</span>
-            </div>
-            <div class="metric-card">
-              <strong id="overviewUpdateStatus">확인 중</strong>
-              <span>실행기 업데이트</span>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel span-8">
-          <div class="panel-title">
-            <h2>막힌 항목</h2>
-            <span id="overviewBlockerCount" class="pill">0</span>
-          </div>
-          <div id="overviewBlockers" class="blocker-list"></div>
-        </section>
-
-        <section class="panel span-4">
-          <div class="panel-title">
-            <h2>빠른 이동</h2>
-          </div>
-          <div class="shortcut-grid">
-            <button class="shortcut-card" type="button" data-dashboard-action="staff">
-              <strong>직원</strong>
-              <span>권한과 설정 상태 확인</span>
-            </button>
-            <button class="shortcut-card" type="button" data-dashboard-action="jobs" data-dashboard-job-kind="songi_research" data-dashboard-employee="songi">
-              <strong>송이</strong>
-              <span>자료조사 작업 생성</span>
-            </button>
-            <button class="shortcut-card" type="button" data-dashboard-action="jobs">
-              <strong>작업</strong>
-              <span>요청 생성과 실행 로그 확인</span>
-            </button>
-            <button class="shortcut-card" type="button" data-dashboard-action="settings">
-              <strong>설정</strong>
-              <span>로컬 실행기 설정 열기</span>
-            </button>
-            <button class="shortcut-card" type="button" data-dashboard-action="updates">
-              <strong>업데이트</strong>
-              <span>설치 파일과 버전 확인</span>
-            </button>
-            <button class="shortcut-card" type="button" data-dashboard-action="reports">
-              <strong>오류 보고</strong>
-              <span>문제 상황 접수</span>
-            </button>
-          </div>
-        </section>
-
-        <section class="panel span-12">
-          <div class="panel-title">
-            <h2>시작 체크리스트</h2>
-            <span id="setupOverall" class="pill">확인 중</span>
-          </div>
-          <div id="setupChecklist" class="setup-list"></div>
-        </section>
-
-        <section class="panel span-4">
-          <div class="panel-title">
-            <h2>계정</h2>
-            <span id="accountStatus" class="pill">확인 중</span>
-          </div>
-          <div class="stack">
-            <div>
-              <div class="small muted">이메일</div>
-              <strong id="accountEmail">-</strong>
-            </div>
-            <div>
-              <div class="small muted">상품 권한</div>
-              <div id="productPills" class="actions" style="margin-top:8px;"></div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel span-4">
-          <div class="panel-title">
-            <h2>로컬 실행기</h2>
-            <span id="agentStatus" class="pill">확인 중</span>
-          </div>
-          <div class="stack">
-            <div class="row">
-              <span class="muted">마지막 연결</span>
-              <strong id="agentLastSeen">-</strong>
-            </div>
-            <div class="row">
-              <span class="muted">버전</span>
-              <strong id="agentVersion">-</strong>
-            </div>
-            <div class="row">
-              <span class="muted">내 환경</span>
-              <strong id="detectedPlatform">-</strong>
-            </div>
-            <div class="row">
-              <span class="muted">설치 파일</span>
-              <strong id="downloadLabel">-</strong>
-            </div>
-            <button id="downloadAgentBtn" class="btn primary" type="button">실행기 다운로드</button>
-            <button id="launchAgentBtn" class="btn" type="button">실행기 연결</button>
-            <a class="guide-link install-guide-link" href="https://www.notion.so/357b31f1da558132914cd2f40053d66a" target="_blank" rel="noopener noreferrer">설치가 막히나요? 권한 허용 가이드 보기</a>
-            <div id="updateNotice" class="notice warn hidden"></div>
-            <div id="agentCompatibilityNotice" class="notice warn hidden"></div>
-          </div>
-        </section>
-
-        <section class="panel span-4">
-          <div class="panel-title">
-            <h2>최근 작업</h2>
-            <span id="jobCount" class="pill">0</span>
-          </div>
-          <div id="recentJobs" class="stack"></div>
-        </section>
-
-        <section class="panel span-12">
-          <div class="panel-title">
-            <h2>AIMAX 직원</h2>
-            <span id="selectedEmployeeRole" class="pill">예리</span>
-          </div>
-          <div class="employee-layout">
-            <div id="employeeList" class="employee-list" role="list"></div>
-            <article id="employeeDetail" class="employee-detail">
-              <img id="employeeDetailPhoto" class="employee-photo" src="/assets/avatar_yeri.jpg" alt="예리 프로필 사진">
-              <div>
-                <div class="employee-detail-head">
-                  <div>
-                    <h3 id="employeeDetailName">예리</h3>
-                    <p id="employeeDetailRole">블로그 글쓰기 직원</p>
-                  </div>
-                  <span id="employeeDetailStatus" class="pill">확인</span>
-                </div>
-                <p id="employeeDetailDescription">키워드와 CTA를 바탕으로 네이버 블로그 글을 작성하고 임시 저장, 즉시 발행, 예약 발행 흐름으로 넘깁니다.</p>
-                <div id="employeeDetailMeta" class="employee-meta"></div>
-                <div class="employee-actions">
-                  <button id="employeeDetailAction" class="btn primary" type="button">작업 보기</button>
-                </div>
-              </div>
-            </article>
+            <button id="nextActionBtn" class="btn primary" type="button" data-action="staff-tab">직원 보기</button>
+            <button id="nextDownloadAgentBtn" class="btn hidden" type="button">설치 파일</button>
           </div>
         </section>
       </div>
@@ -2537,7 +3014,7 @@
       <div id="staffTab" class="grid tab-panel hidden">
         <section class="panel span-12">
           <div class="panel-title">
-            <h2>직원 현황</h2>
+            <h2>직원 채용 현황</h2>
             <span id="staffOverall" class="pill">확인 중</span>
           </div>
           <div class="staff-summary">
@@ -2591,11 +3068,19 @@
                 <div id="staffDetailMeta" class="employee-meta"></div>
               </div>
               <div>
-                <div class="small muted">최근 작업</div>
+                <div class="small muted">직원 이력서</div>
+                <div id="staffResumeGrid" class="resume-grid" style="margin-top:8px;"></div>
+              </div>
+              <div>
+                <div class="small muted">영상 설명</div>
+                <div id="staffResumeVideo" class="resume-video" style="margin-top:8px;"></div>
+              </div>
+              <div>
+                <div class="small muted">최근 일 맡긴 기록</div>
                 <div id="staffRecentJobs" class="stack" style="margin-top:8px;"></div>
               </div>
               <div class="employee-actions">
-                <button id="staffDetailAction" class="btn primary" type="button">작업 지시하기</button>
+                <button id="staffDetailAction" class="btn primary" type="button">직원 업무지시</button>
               </div>
             </article>
           </div>
@@ -2741,7 +3226,7 @@
       <div id="jobsTab" class="grid tab-panel hidden">
         <section class="panel span-12">
           <div class="panel-title">
-            <h2>작업 생성</h2>
+            <h2>직원 업무지시</h2>
             <span id="jobComposerStatus" class="pill">직원 선택</span>
           </div>
           <div class="job-console">
@@ -2813,7 +3298,7 @@
                   </div>
                 </div>
                 <div id="yeriCostEstimate" class="notice ok small"></div>
-                <button id="yeriSubmitBtn" class="btn primary" type="submit">예리에게 지시</button>
+                <button id="yeriSubmitBtn" class="btn primary" type="submit">예리에게 업무지시</button>
               </form>
 
               <form id="hyunjuJobForm" class="job-form" data-job-kind="hyunju_find">
@@ -2844,16 +3329,16 @@
                     <textarea id="hyunjuMessages" placeholder="한 줄에 하나씩 입력합니다. 비워두면 로컬 앱에 저장된 멘트를 사용합니다."></textarea>
                   </div>
                 </div>
-                <button id="hyunjuSubmitBtn" class="btn primary" type="submit">현주에게 지시</button>
+                <button id="hyunjuSubmitBtn" class="btn primary" type="submit">현주에게 업무지시</button>
               </form>
 
               <form id="yunmiJobForm" class="job-form hidden" data-job-kind="yunmi_script">
                 <div>
                   <h3>윤미 스크립트작가</h3>
-                  <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">레퍼런스와 목표를 바탕으로 A/B/C 스크립트 초안을 만듭니다.</div>
+                  <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">원본 자료와 목표를 바탕으로 숏폼 스크립트 1안/2안, 촬영 가이드, CTA 후보를 만듭니다.</div>
                 </div>
                 <div id="yunmiJobBlocker" class="notice warn job-blocker hidden"></div>
-                <div class="notice ok small">기본은 유료 AI 호출 없이 입력값 기반 초안을 만듭니다. AI 베타 준비 모드는 예상 비용과 요청 ID를 확인한 뒤 mock path로 검증합니다.</div>
+                <div class="notice ok small">기본은 유료 AI 호출 없이 입력값 기반 초안을 만듭니다. AI 생성 모드는 예상 비용과 요청 ID를 확인한 뒤 저장된 Gemini 키로 실제 초안을 만듭니다.</div>
                 <div class="form-grid">
                   <div class="field wide">
                     <label for="yunmiTopic">주제</label>
@@ -2863,7 +3348,29 @@
                     <label for="yunmiGenerationMode">생성 모드</label>
                     <select id="yunmiGenerationMode">
                       <option value="no_paid_alpha" selected>규칙형 알파</option>
-                      <option value="ai_beta">AI 베타 준비</option>
+                      <option value="ai_beta">AI 생성</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="yunmiPlatform">플랫폼</label>
+                    <select id="yunmiPlatform">
+                      <option value="인스타 릴스">인스타 릴스</option>
+                      <option value="유튜브 쇼츠">유튜브 쇼츠</option>
+                      <option value="틱톡">틱톡</option>
+                      <option value="릴스/쇼츠/틱톡 공통" selected>공통</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="yunmiPurpose">목적</label>
+                    <select id="yunmiPurpose">
+                      <option value="">직접 입력 기준</option>
+                      <option value="정보 전달">정보 전달</option>
+                      <option value="판매">판매</option>
+                      <option value="상담 유도">상담 유도</option>
+                      <option value="댓글 유도">댓글 유도</option>
+                      <option value="팔로우 유도">팔로우 유도</option>
+                      <option value="강의 신청">강의 신청</option>
+                      <option value="브랜드 인지도">브랜드 인지도</option>
                     </select>
                   </div>
                   <div class="field">
@@ -2919,10 +3426,94 @@
                 </div>
                 <div id="yunmiCostEstimate" class="notice ok small"></div>
                 <div class="actions">
-                  <button id="yunmiSubmitBtn" class="btn primary" type="submit">윤미에게 지시</button>
+                  <button id="yunmiSubmitBtn" class="btn primary" type="submit">윤미에게 업무지시</button>
                   <button id="yunmiCopyResultBtn" class="btn" type="button">결과 복사</button>
                 </div>
                 <div id="yunmiJobResult" class="songi-preview hidden"></div>
+              </form>
+
+              <form id="sangsuJobForm" class="job-form hidden" data-job-kind="sangsu_quote">
+                <div>
+                  <h3>상수 경리</h3>
+                  <div id="sangsuJobHint" class="small muted" style="margin-top:4px;">입력한 항목으로 견적서를 만들고 PDF 저장용 인쇄 화면을 엽니다.</div>
+                </div>
+                <div id="sangsuJobBlocker" class="notice warn job-blocker hidden"></div>
+                <div class="notice ok small">상수는 브라우저 안에서만 견적서를 생성합니다. 유료 AI/API 호출, 로컬 실행기, 외부 전송 없이 현재 기기에서 PDF 저장 화면을 엽니다.</div>
+                <div class="sangsu-layout">
+                  <section class="stack">
+                    <div class="form-grid">
+                      <div class="field">
+                        <label for="sangsuLogo">로고</label>
+                        <input id="sangsuLogo" type="file" accept="image/*">
+                      </div>
+                      <div class="field">
+                        <label for="sangsuQuoteDate">견적일</label>
+                        <input id="sangsuQuoteDate" type="date">
+                      </div>
+                      <div class="field">
+                        <label for="sangsuIssuerName">공급자</label>
+                        <input id="sangsuIssuerName" placeholder="예: 메이크패밀리">
+                      </div>
+                      <div class="field">
+                        <label for="sangsuClientName">받는 곳</label>
+                        <input id="sangsuClientName" placeholder="예: 고객사명 또는 담당자">
+                      </div>
+                      <div class="field">
+                        <label for="sangsuClientEmail">이메일</label>
+                        <input id="sangsuClientEmail" type="email" placeholder="예: customer@example.com">
+                      </div>
+                      <div class="field wide">
+                        <label for="sangsuProjectName">프로젝트명</label>
+                        <input id="sangsuProjectName" placeholder="예: 상세페이지 제작 견적">
+                      </div>
+                      <div class="field">
+                        <label for="sangsuValidDuration">유효기간</label>
+                        <input id="sangsuValidDuration" placeholder="예: 견적일로부터 14일">
+                      </div>
+                      <div class="field">
+                        <label for="sangsuDeliverySchedule">납기 예정</label>
+                        <input id="sangsuDeliverySchedule" placeholder="예: 착수 후 7영업일">
+                      </div>
+                      <div class="field wide">
+                        <label for="sangsuDeliveryFormat">납품 형식</label>
+                        <input id="sangsuDeliveryFormat" placeholder="예: PDF, 이미지, 원본 파일">
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label>작업 항목</label>
+                      <div id="sangsuItems" class="sangsu-items"></div>
+                      <button id="sangsuAddItemBtn" class="btn" type="button">항목 추가</button>
+                    </div>
+                    <div class="form-grid">
+                      <div class="field wide">
+                        <label for="sangsuNotes">유의사항</label>
+                        <textarea id="sangsuNotes" placeholder="수정 횟수, 결제 조건, 납품 기준 등을 줄바꿈으로 입력"></textarea>
+                      </div>
+                      <div class="field wide">
+                        <label for="sangsuMessage">전달 말씀</label>
+                        <textarea id="sangsuMessage" placeholder="고객에게 전할 안내 문구"></textarea>
+                      </div>
+                      <div class="field">
+                        <label for="sangsuSignOffSender">보낸 사람</label>
+                        <input id="sangsuSignOffSender" placeholder="예: 메이크패밀리 드림">
+                      </div>
+                      <div class="field">
+                        <label for="sangsuSignOffDate">작성일</label>
+                        <input id="sangsuSignOffDate" placeholder="예: 2026년 6월 1일">
+                      </div>
+                    </div>
+                    <div class="actions">
+                      <button id="sangsuPrintBtn" class="btn primary" type="button">PDF 저장 화면 열기</button>
+                      <button id="sangsuResetBtn" class="btn" type="button">초기화</button>
+                    </div>
+                  </section>
+                  <section>
+                    <div class="small muted" style="margin-bottom:8px;">미리보기</div>
+                    <div class="sangsu-preview-wrap">
+                      <div id="sangsuPreview"></div>
+                    </div>
+                  </section>
+                </div>
               </form>
 
               <form id="songiJobForm" class="job-form hidden" data-job-kind="songi_research">
@@ -3031,7 +3622,7 @@
                       </div>
                       <div id="songiCostEstimate" class="notice ok small"></div>
                       <div class="actions">
-                        <button id="songiSubmitBtn" class="btn primary" type="submit">송이에게 지시</button>
+                        <button id="songiSubmitBtn" class="btn primary" type="submit">송이에게 업무지시</button>
                         <button id="songiCopyBriefBtn" class="btn" type="button">브리프 복사</button>
                       </div>
                       <div id="songiJobResult" class="songi-preview hidden"></div>
@@ -3045,7 +3636,7 @@
 
         <section class="panel span-12">
           <div class="panel-title">
-            <h2>작업 목록</h2>
+            <h2>일 맡긴 기록</h2>
             <button id="jobRefreshBtn" class="btn" type="button">목록 갱신</button>
           </div>
           <div id="jobsTable" class="table-wrap"></div>
@@ -3114,7 +3705,7 @@
             <button id="importLocalSecretsBtn" class="btn" type="button">기존 실행기 키 가져오기</button>
             <span id="localSecretImportStatus" class="pill">실행기 연결 필요</span>
           </div>
-          <p class="small muted">Gemini, Apify, OpenAI, Claude 키만 실행기에서 가져오며 네이버 비밀번호와 브라우저 세션은 옮기지 않습니다. YouTube 키는 선택 고급 커넥터용이며 기본 쇼츠 후보 찾기는 로컬 실행기로 처리합니다. 예리 Windows 글쓰기는 현재 로컬 실행기 보안 설정의 선택 모델 키 상태도 확인합니다.</p>
+          <p class="small muted">Gemini, Apify, OpenAI, Claude 키만 실행기에서 가져오며 네이버 비밀번호와 브라우저 세션은 옮기지 않습니다. YouTube 키는 선택 고급 커넥터용이며 기본 쇼츠 후보 찾기는 로컬 실행기로 처리합니다. 예리 글쓰기의 AI/API 키는 이 섹션에서 관리하고, 네이버 로그인과 임시저장은 로컬 실행기가 담당합니다.</p>
           <div class="api-secret-list">
             <div class="api-secret-item">
               <div class="api-secret-meta">
@@ -3216,7 +3807,7 @@
       <div id="updatesTab" class="grid tab-panel hidden">
         <section class="panel span-12">
           <div class="panel-title">
-            <h2>업데이트 상태</h2>
+            <h2>업데이트 및 오류보고</h2>
             <span id="updatesOverall" class="pill">확인 중</span>
           </div>
           <div class="update-summary">
@@ -3288,9 +3879,7 @@
           </div>
           <div id="updatesDownloadList" class="table-wrap"></div>
         </section>
-      </div>
 
-      <div id="reportsTab" class="grid tab-panel hidden">
         <section class="panel span-8">
           <div class="panel-title">
             <div>
@@ -3347,10 +3936,60 @@
   </main>
 
   <div id="toast" class="toast hidden" role="status"></div>
+  <div id="smartScreenDownloadPrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="smartScreenDownloadTitle" aria-describedby="smartScreenDownloadBody">
+    <div class="install-guide-card">
+      <h2 id="smartScreenDownloadTitle">설치 전 꼭 확인하세요</h2>
+      <div id="smartScreenDownloadBody" class="report-checklist small" style="margin-top:12px;">
+        <div class="report-checkitem">
+          <span class="step-index warn">1</span>
+          <span><strong>Windows 보안 경고(SmartScreen)가 나타나면</strong><br><span class="muted">"추가 정보"를 클릭하세요.</span></span>
+        </div>
+        <div class="report-checkitem">
+          <span class="step-index warn">2</span>
+          <span><strong>"실행" 버튼을 클릭하세요</strong><br><span class="muted">이 안내를 확인한 뒤 설치를 시작해주세요.</span></span>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:18px;">
+        <button id="smartScreenConfirmDownloadBtn" class="btn primary" type="button">확인 후 다운로드</button>
+        <button id="smartScreenCancelDownloadBtn" class="btn" type="button">닫기</button>
+      </div>
+    </div>
+  </div>
+  <div id="macCompatibilityDownloadPrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="macCompatibilityDownloadTitle" aria-describedby="macCompatibilityDownloadBody">
+    <div class="install-guide-card">
+      <h2 id="macCompatibilityDownloadTitle">Mac 설치 파일 확인</h2>
+      <div id="macCompatibilityDownloadBody" class="report-checklist small" style="margin-top:12px;">
+        <div class="report-checkitem">
+          <span class="step-index warn">1</span>
+          <span><strong>현재 Mac 설치 파일은 Apple Silicon 전용입니다</strong><br><span class="muted">M1, M2, M3, M4 Mac에서만 설치를 진행해주세요.</span></span>
+        </div>
+        <div class="report-checkitem">
+          <span class="step-index warn">2</span>
+          <span><strong>Intel Mac은 현재 지원하지 않습니다</strong><br><span class="muted">Intel Mac으로 확인되면 다운로드를 중단하고 운영팀 안내를 확인해주세요.</span></span>
+        </div>
+      </div>
+      <p id="macCompatibilityDetectedMeta" class="small muted" style="margin-top:12px;"></p>
+      <div class="actions" style="margin-top:18px;">
+        <button id="macCompatibilityConfirmDownloadBtn" class="btn primary" type="button">Apple Silicon 확인 후 다운로드</button>
+        <button id="macCompatibilityCancelDownloadBtn" class="btn" type="button">닫기</button>
+      </div>
+    </div>
+  </div>
+  <div id="macUnsupportedDownloadPrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="macUnsupportedDownloadTitle" aria-describedby="macUnsupportedDownloadBody">
+    <div class="install-guide-card">
+      <h2 id="macUnsupportedDownloadTitle">Intel Mac은 현재 지원하지 않습니다</h2>
+      <p id="macUnsupportedDownloadBody">현재 Mac 설치 파일은 Apple Silicon(M1/M2/M3/M4) 전용입니다. Intel Mac에서는 실행기가 정상 실행되지 않을 수 있어 다운로드를 중단했습니다.</p>
+      <p id="macUnsupportedDetectedMeta" class="small muted"></p>
+      <div class="actions">
+        <button id="macUnsupportedReportBtn" class="btn primary" type="button">오류 보고 열기</button>
+        <button id="macUnsupportedCloseBtn" class="btn" type="button">확인</button>
+      </div>
+    </div>
+  </div>
   <div id="installGuidePrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="installGuideTitle" aria-describedby="installGuideBody">
     <div class="install-guide-card">
       <h2 id="installGuideTitle">처음 실행 전 확인</h2>
-      <p id="installGuideBody">macOS와 Windows가 보안 확인이나 권한 허용을 요청할 수 있습니다. Windows에서 설치 파일을 눌러도 아무 변화가 없으면 V3 Lite, SmartScreen, 회사 보안 프로그램의 보안 기록을 확인한 뒤 공식 AIMAX 설치 파일만 허용해주세요.</p>
+      <p id="installGuideBody">Mac 설치 파일은 Apple Silicon(M1/M2/M3/M4) 전용입니다. macOS와 Windows가 보안 확인이나 권한 허용을 요청할 수 있습니다. Windows에서 설치 파일을 눌러도 아무 변화가 없으면 V3 Lite, SmartScreen, 회사 보안 프로그램의 보안 기록을 확인한 뒤 공식 AIMAX 설치 파일만 허용해주세요.</p>
       <div class="actions">
         <a class="btn primary install-guide-link" href="https://www.notion.so/357b31f1da558132914cd2f40053d66a" target="_blank" rel="noopener noreferrer">가이드 열기</a>
         <button id="installGuideCloseBtn" class="btn" type="button">닫기</button>
@@ -3365,6 +4004,34 @@
       <div class="actions">
         <button id="requiredUpdateDownloadBtn" class="btn primary" type="button">업데이트 다운로드</button>
         <button id="requiredUpdateDetailsBtn" class="btn" type="button">업데이트 탭 보기</button>
+      </div>
+    </div>
+  </div>
+  <div id="serviceNoticePrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="serviceNoticeTitle" aria-describedby="serviceNoticeBody">
+    <div class="install-guide-card">
+      <p class="small muted">AIMAX 공지</p>
+      <h2 id="serviceNoticeTitle">예리/현주 안정화 작업 안내</h2>
+      <div id="serviceNoticeBody" class="report-checklist small">
+        <div class="report-checkitem">
+          <span class="step-index warn">1</span>
+          <span>현재 일부 사용자 환경에서 예리/현주 실행기 연결, 네이버 입력, 임시저장 과정이 정상적으로 완료되지 않는 오류를 수정하고 있습니다.</span>
+        </div>
+        <div class="report-checkitem">
+          <span class="step-index warn">2</span>
+          <span><strong>2026년 6월 1일까지 오류 수정 및 안정화 업데이트를 완료할 예정입니다.</strong><br>조금만 기다려주시면 안정화 완료 후 다시 안내드리겠습니다.</span>
+        </div>
+        <div class="report-checkitem">
+          <span class="step-index ok">3</span>
+          <span>6월 1일 이후에는 최신 설치 파일을 다시 다운로드하신 뒤 이용을 시도해주세요. 기존 구매자는 추가 결제 없이 그대로 사용하실 수 있습니다.</span>
+        </div>
+        <div class="report-checkitem">
+          <span class="step-index ok">4</span>
+          <span>송이/윤미 같은 웹기반 직원은 계속 웹에서 이용하실 수 있으며, 운영팀은 예리/현주를 Mac과 Windows에서 누구나 사용할 수 있도록 실제 배포 링크 기준으로 확인하고 있습니다.</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="serviceNoticeUpdatesBtn" class="btn primary" type="button">다운로드/업데이트 보기</button>
+        <button id="serviceNoticeCloseBtn" class="btn" type="button">확인했습니다</button>
       </div>
     </div>
   </div>
@@ -3394,11 +4061,11 @@
       <div id="webSecretNoticeBody" class="report-checklist small">
         <div class="report-checkitem">
           <span class="step-index ok">1</span>
-          <span>송이 자료조사원은 이제 실행기 없이 웹에서 바로 사용할 수 있도록 개선되었습니다.</span>
+          <span>예리 글 생성과 송이/윤미 같은 웹 기반 AI 작업은 웹 설정을 통해 더 안정적으로 사용할 수 있도록 개선되었습니다.</span>
         </div>
         <div class="report-checkitem">
           <span class="step-index warn">2</span>
-          <span><strong>송이에서 사용하는 Gemini API Key와 Apify API Token은</strong><br><strong>설정 &gt; AI/API 연결</strong>에서 저장해주세요.</span>
+          <span><strong>Gemini, Claude, OpenAI, Apify 같은 AI/API 키는</strong><br><strong>설정 &gt; AI/API 연결</strong>에서 저장해주세요.</span>
         </div>
         <div class="report-checkitem">
           <span class="step-index warn">3</span>
@@ -3410,7 +4077,7 @@
         </div>
         <div class="report-checkitem">
           <span class="step-index ok">5</span>
-          <span>Apify 수집이나 Gemini 분석처럼 외부 API 비용이 생길 수 있는 작업은 실행 전 확인창을 보여드린 뒤에만 진행됩니다.</span>
+          <span>예리 서버 글 생성, Apify 수집, Gemini 분석처럼 외부 API 비용이 생길 수 있는 작업은 실행 전 확인창을 보여드린 뒤에만 진행됩니다.</span>
         </div>
       </div>
       <div class="actions">
@@ -3426,9 +4093,11 @@
     const WEB_SETTINGS_STORAGE_KEY = "aimax_web_work_settings";
     const UPDATE_NOTICE_DISMISS_PREFIX = "aimax_update_notice_dismissed";
     const REPORT_ATTENTION_SEEN_PREFIX = "aimax_report_attention_seen";
+    const SERVICE_NOTICE_KEY = "aimax_service_notice_20260530_yeri_hyunju_june1";
     const WEB_SECRET_NOTICE_KEY = "aimax_web_secret_notice_20260522";
+    const SANGSU_STORAGE_KEY = "aimax_sangsu_quote_generator_state_v1";
     const NEW_SONGI_PROJECT_VALUE = "__new_project__";
-    const DEFAULT_AI_MODEL = "gemini-2.5-pro";
+    const DEFAULT_AI_MODEL = "gemini-2.5-flash";
     const SONGI_DEFAULT_AI_MODEL = "gemini-2.5-flash";
     const USD_KRW_RATE = 1476;
     const USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot";
@@ -3440,13 +4109,19 @@
       TikTok: 0.01,
     };
     const AI_MODEL_OPTIONS = [
-      ["gemini-2.5-pro", "Gemini 2.5 Pro"],
-      ["gemini-2.5-flash", "Gemini 2.5 Flash"],
+      ["gemini-2.5-flash", "Gemini 2.5 Flash (기본)"],
+      ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (유료/고급)"],
       ["gpt-5.4-mini", "GPT-5.4 mini"],
       ["gpt-5-mini", "GPT-5 mini"],
       ["claude", "Claude"],
     ];
+    const YUNMI_AI_MODEL_OPTIONS = [
+      ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
+      ["gemini-2.5-pro", "Gemini 2.5 Pro"],
+      ["gemini-2.5-flash", "Gemini 2.5 Flash"],
+    ];
     const AI_MODEL_PRICES = {
+      "gemini-3.1-pro-preview": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
       "gemini-2.5-pro": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
       "gemini-2.5-flash": { inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
       "gpt-5.4-mini": { inputUsdPer1m: 0.75, outputUsdPer1m: 4.50, label: "GPT-5.4 mini" },
@@ -3540,6 +4215,7 @@
       versionInfo: {},
       reports: [],
       platform: "",
+      macArchitecture: null,
       selectedEmployee: "yeri",
       selectedJobKind: "yeri_write",
       staffFilter: "all",
@@ -3557,17 +4233,25 @@
       agentWatchTimer: null,
       agentWatchUntil: 0,
       requiredUpdatePromptKey: "",
+      serviceNoticeDismissed: storageGet("localStorage", SERVICE_NOTICE_KEY) === "1",
       reportAttentionPromptKey: "",
       secretImportBusy: false,
       webSecretNoticeDismissed: storageGet("localStorage", WEB_SECRET_NOTICE_KEY) === "1",
+      sangsuLogoDataUrl: "",
     };
 
     const productLabels = {
       yeri: "예리",
       hyunju: "현주",
       songi: "송이",
+      yunmi: "윤미",
+      jieun: "지은",
+      nakyung: "나경",
+      hyojin: "효진",
+      sangsu: "상수",
       blog_team: "블로그팀",
       bundle: "전체 통합",
+      free: "무료 공개",
     };
 
     const jobKinds = {
@@ -3582,14 +4266,19 @@
         worker: "현주",
       },
       yunmi_script: {
-        label: "윤미 스크립트 초안",
-        required: "bundle",
+        label: "윤미 숏폼 스크립트",
+        required: "yunmi",
         worker: "윤미",
       },
       songi_research: {
         label: "송이 자료조사",
         required: "songi",
         worker: "송이",
+      },
+      sangsu_quote: {
+        label: "상수 경리",
+        required: "sangsu",
+        worker: "상수",
       },
     };
 
@@ -3627,16 +4316,25 @@
       nakyung: {
         code: "nakyung",
         name: "나경",
-        role: "판서쌤",
+        role: "판서",
         avatar: "/assets/avatar_nakyung.jpg",
         photo: "/assets/avatar_nakyung.jpg",
-        product: "bundle",
+        product: "nakyung",
         jobKind: "",
-        status: "needs_setup",
-        requiredSettings: ["future_staff_setup"],
-        repoUrl: "https://github.com/aixlife/pencil",
-        description: "강의와 설명을 판서 흐름으로 정리해줄 직원입니다. 기능 연결 전이라 기본 설정이 필요한 상태로 먼저 등록했습니다.",
-        meta: ["판서", "강의 보조", "기능 준비 중"],
+        status: "available",
+        execution: "external_download",
+        type: "desktop_app",
+        requiredSettings: [],
+        moduleKey: "pencil",
+        repoUrl: "https://github.com/makefriendscoltd-design/pencil",
+        releaseUrl: "",
+        setupDownloadUrl: "/downloads/Pencil-Setup-1.0.0.exe",
+        portableDownloadUrl: "/downloads/Pencil-portable.exe",
+        downloadLabel: "Setup exe 다운로드",
+        supportedPlatforms: ["windows"],
+        version: "1.0.0",
+        description: "화면 위에 자유롭게 판서하고 같은 와이파이에서 실시간으로 공유할 수 있는 Windows 전용 데스크톱 판서 직원입니다.",
+        meta: ["전체화면 판서", "실시간 공유", "형광펜/도형/텍스트", "스포트라이트"],
       },
       hyunseong: {
         code: "hyunseong",
@@ -3655,16 +4353,18 @@
       sangsu: {
         code: "sangsu",
         name: "상수",
-        role: "회계원",
+        role: "경리",
         avatar: "/assets/avatar_sangsu.jpg",
         photo: "/assets/avatar_sangsu.jpg",
-        product: "bundle",
-        jobKind: "",
-        status: "needs_setup",
-        requiredSettings: ["future_staff_setup"],
-        repoUrl: "https://github.com/makefamily/bookkeeper",
-        description: "입출금과 정산 흐름을 챙겨줄 회계원 직원입니다. 기능 연결 전이라 기본 설정이 필요한 상태로 먼저 등록했습니다.",
-        meta: ["회계", "정산", "기능 준비 중"],
+        product: "sangsu",
+        jobKind: "sangsu_quote",
+        status: "available",
+        execution: "web_module",
+        type: "web_module",
+        requiredSettings: [],
+        moduleKey: "quote_generator",
+        description: "상호, 작업 항목, 금액, 유의사항을 입력하면 브라우저에서 바로 견적서를 작성하고 PDF 저장용 인쇄 화면으로 넘깁니다.",
+        meta: ["견적서 작성", "로고 업로드", "PDF 저장"],
       },
       songi: {
         code: "songi",
@@ -3682,6 +4382,29 @@
         repoUrl: "https://github.com/makefamily/data-research",
         description: "URL과 메모를 받아 근거, 태그, 핵심 포인트를 정리하고 다음 제작 직원에게 넘길 리서치 브리프를 만듭니다.",
         meta: ["자료조사", "태그 정리", "브리프 생성"],
+      },
+      jieun: {
+        code: "jieun",
+        name: "지은",
+        role: "AI 오피스 지원",
+        avatar: "/assets/avatar_jieun.jpg",
+        photo: "/assets/avatar_jieun.jpg",
+        product: "jieun",
+        jobKind: "",
+        status: "available",
+        execution: "external_download",
+        type: "desktop_app",
+        requiredSettings: [],
+        moduleKey: "office_support",
+        repoUrl: "https://github.com/aixlife/aimax-viseo",
+        releaseUrl: "",
+        setupDownloadUrl: "/downloads/AIMAX-Office-Manager-Setup-0.1.5.exe",
+        portableDownloadUrl: "/downloads/AIMAX-Office-Manager-portable.exe",
+        downloadLabel: "Setup exe 다운로드",
+        supportedPlatforms: ["windows"],
+        version: "0.1.5",
+        description: "화면 캡처, 캡처 이미지 모자이크, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
+        meta: ["화면 캡처", "캡처 이미지 모자이크", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
       },
     };
 
@@ -3711,13 +4434,19 @@
         formId: "yunmiJobForm",
         hintId: "yunmiJobHint",
         blockerId: "yunmiJobBlocker",
-        defaultHint: "레퍼런스와 목표를 바탕으로 A/B/C 스크립트 초안을 만듭니다.",
+        defaultHint: "원본 자료와 목표를 바탕으로 숏폼 스크립트 1안/2안을 만듭니다.",
       },
       songi_research: {
         formId: "songiJobForm",
         hintId: "songiJobHint",
         blockerId: "songiJobBlocker",
         defaultHint: "벤치마킹 영상을 읽고 콘텐츠 기획 브리프를 만듭니다.",
+      },
+      sangsu_quote: {
+        formId: "sangsuJobForm",
+        hintId: "sangsuJobHint",
+        blockerId: "sangsuJobBlocker",
+        defaultHint: "입력한 항목으로 견적서를 만들고 PDF 저장용 인쇄 화면을 엽니다.",
       },
     };
 
@@ -3733,6 +4462,98 @@
       if (source.includes("mac")) return "macos";
       if (source.includes("win")) return "windows";
       return "";
+    }
+
+    function webGlRendererLabel() {
+      try {
+        const canvas = document.createElement("canvas");
+        const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+        if (!gl) return "";
+        const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+        if (debugInfo) {
+          return String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) || "").trim();
+        }
+        return String(gl.getParameter(gl.RENDERER) || "").trim();
+      } catch (_error) {
+        return "";
+      }
+    }
+
+    function normalizeArchitectureHint(value) {
+      const text = String(value || "").trim().toLowerCase();
+      if (!text) return "";
+      if (["arm", "arm64", "aarch64"].includes(text)) return "arm64";
+      if (["x86", "x64", "x86_64", "amd64"].includes(text)) return "x86_64";
+      return text;
+    }
+
+    function macArchitectureFromSignals(signals = {}) {
+      if ((state.platform || detectPlatform()) !== "macos") {
+        return { architecture: "not_macos", confidence: "none", renderer: "", hint: "" };
+      }
+      const renderer = String(signals.renderer || "").trim();
+      const rendererLower = renderer.toLowerCase();
+      const hint = normalizeArchitectureHint(signals.architecture);
+      const appleGpu = /\bapple\s+(m[1-9]|gpu|agx)\b/.test(rendererLower)
+        || /\bapple m[1-9]\b/.test(rendererLower);
+      const intelOrAmdGpu = /\bintel\b/.test(rendererLower)
+        || /\bamd\b/.test(rendererLower)
+        || /\bradeon\b/.test(rendererLower);
+      if (appleGpu && !intelOrAmdGpu) {
+        return { architecture: "apple_silicon", confidence: "renderer", renderer, hint };
+      }
+      if (intelOrAmdGpu) {
+        return { architecture: "intel", confidence: "renderer", renderer, hint };
+      }
+      if (hint === "arm64") {
+        return { architecture: "apple_silicon", confidence: "browser_hint", renderer, hint };
+      }
+      return {
+        architecture: "unknown",
+        confidence: hint === "x86_64" ? "browser_x86_hint" : "limited",
+        renderer,
+        hint,
+      };
+    }
+
+    function detectMacArchitectureSync() {
+      return macArchitectureFromSignals({
+        renderer: webGlRendererLabel(),
+        architecture: navigator.userAgentData?.architecture || "",
+      });
+    }
+
+    async function detectMacArchitecture() {
+      const base = detectMacArchitectureSync();
+      if (base.architecture === "not_macos" || base.confidence === "renderer") return base;
+      const userAgentData = navigator.userAgentData;
+      if (!userAgentData?.getHighEntropyValues) return base;
+      try {
+        const values = await userAgentData.getHighEntropyValues(["architecture"]);
+        const hinted = macArchitectureFromSignals({
+          renderer: base.renderer,
+          architecture: values?.architecture || base.hint || "",
+        });
+        return hinted.architecture === "unknown" ? base : hinted;
+      } catch (_error) {
+        return base;
+      }
+    }
+
+    function macArchitectureLabel(info = state.macArchitecture) {
+      const architecture = info?.architecture || "unknown";
+      if (architecture === "apple_silicon") return "Apple Silicon Mac";
+      if (architecture === "intel") return "Intel Mac";
+      if (architecture === "not_macos") return "macOS 아님";
+      return "Mac 종류 자동 확인 제한";
+    }
+
+    function macArchitectureMeta(info = state.macArchitecture) {
+      const parts = [macArchitectureLabel(info)];
+      if (info?.renderer) parts.push(`그래픽: ${info.renderer}`);
+      if (info?.hint) parts.push(`브라우저 힌트: ${info.hint}`);
+      if (info?.confidence) parts.push(`감지: ${info.confidence}`);
+      return parts.join(" · ");
     }
 
     function platformLabel(platform) {
@@ -3783,6 +4604,9 @@
     function reportEnvironmentPayload() {
       const agent = state.agent?.agent || {};
       const platform = state.platform || detectPlatform();
+      const macArchitecture = platform === "macos"
+        ? (state.macArchitecture || detectMacArchitectureSync())
+        : null;
       const viewport = {
         width: window.innerWidth || 0,
         height: window.innerHeight || 0,
@@ -3804,6 +4628,7 @@
           browser_language: navigator.language || "",
           platform: navigator.userAgentData?.platform || navigator.platform || "",
           detected_platform: platform,
+          mac_architecture: macArchitecture,
           time_zone: timeZone,
           viewport,
           screen: screenInfo,
@@ -3818,6 +4643,7 @@
           runtime: {
             system: platformLabel(platform),
             platform,
+            mac_architecture: macArchitecture,
             browser_language: navigator.language || "",
             user_agent: navigator.userAgent,
             time_zone: timeZone,
@@ -3852,12 +4678,35 @@
 
     function normalizeAiModel(value) {
       const model = String(value || "").trim();
+      const legacy = {
+        gemini: DEFAULT_AI_MODEL,
+        "gemini-pro": DEFAULT_AI_MODEL,
+        "gemini-2.5-pro": DEFAULT_AI_MODEL,
+        "gemini-3.1-pro": DEFAULT_AI_MODEL,
+      };
+      if (legacy[model]) return legacy[model];
       return AI_MODEL_OPTIONS.some(([id]) => id === model) ? model : DEFAULT_AI_MODEL;
     }
 
     function aiModelLabel(value) {
       const model = normalizeAiModel(value);
       return AI_MODEL_OPTIONS.find(([id]) => id === model)?.[1] || model;
+    }
+
+    function normalizeYunmiAiModel(value) {
+      const model = String(value || "").trim();
+      const legacy = {
+        gemini: DEFAULT_AI_MODEL,
+        "gemini-pro": DEFAULT_AI_MODEL,
+        "gemini-3.1-pro": DEFAULT_AI_MODEL,
+      };
+      if (legacy[model]) return legacy[model];
+      return YUNMI_AI_MODEL_OPTIONS.some(([id]) => id === model) ? model : DEFAULT_AI_MODEL;
+    }
+
+    function yunmiAiModelLabel(value) {
+      const model = normalizeYunmiAiModel(value);
+      return YUNMI_AI_MODEL_OPTIONS.find(([id]) => id === model)?.[1] || model;
     }
 
     function normalizeImageCount(value) {
@@ -3954,6 +4803,8 @@
     function yunmiFormPayload() {
       return {
         topic: nonEmpty($("#yunmiTopic")?.value),
+        platform: nonEmpty($("#yunmiPlatform")?.value),
+        content_purpose: nonEmpty($("#yunmiPurpose")?.value),
         format: $("#yunmiFormat")?.value || "shortform",
         duration: nonEmpty($("#yunmiDuration")?.value),
         target_audience: nonEmpty($("#yunmiAudience")?.value),
@@ -3966,12 +4817,14 @@
     }
 
     function selectedYunmiModel() {
-      return normalizeAiModel($("#yunmiAiModel")?.value || DEFAULT_AI_MODEL);
+      return normalizeYunmiAiModel($("#yunmiAiModel")?.value || DEFAULT_AI_MODEL);
     }
 
     function estimateYunmiCost(payload = yunmiFormPayload(), model = selectedYunmiModel()) {
       const text = [
         payload.topic,
+        payload.platform,
+        payload.content_purpose,
         payload.objective,
         payload.target_audience,
         payload.reference_url,
@@ -3979,11 +4832,11 @@
         payload.cta,
       ].filter(Boolean).join("\n");
       const charCount = Math.max(2200, Math.min(7000, text.length + 2600));
-      const estimate = estimateTextCostWon(model, charCount);
+      const estimate = estimateTextCostWon(model, charCount, AI_MODEL_PRICES);
       return {
         ...estimate,
         model,
-        provider: model === "claude" ? "Claude" : isOpenAiModel(model) ? "OpenAI" : "Gemini",
+        provider: "Gemini",
       };
     }
 
@@ -3999,9 +4852,9 @@
       const estimate = estimateYunmiCost();
       target.className = "notice warn small";
       target.innerHTML = [
-        `AI 베타 준비 예상 원가 약 ${wonLabel(estimate.won)}`,
-        `${estimate.provider} · ${aiModelLabel(estimate.model)} · 입력 ${estimate.inputTokens.toLocaleString("ko-KR")}t / 출력 ${estimate.outputTokens.toLocaleString("ko-KR")}t 추정`,
-        `이번 검증 모드는 실제 유료 AI 호출 없이 request id와 비용 확인 흐름만 점검합니다.`,
+        `AI 생성 예상 원가 약 ${wonLabel(estimate.won)}`,
+        `${estimate.provider} · ${yunmiAiModelLabel(estimate.model)} · 입력 ${estimate.inputTokens.toLocaleString("ko-KR")}t / 출력 ${estimate.outputTokens.toLocaleString("ko-KR")}t 추정`,
+        `저장된 Gemini 키로 실제 생성합니다. 자동 유료 재시도는 하지 않습니다.`,
       ].map(escapeHtml).join("<br>");
     }
 
@@ -4045,14 +4898,15 @@
       const model = normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel());
       const wordCount = Number($("#yeriWordCount")?.value || 1500);
       const imageCount = normalizeImageCount($("#yeriImageCount")?.value || 3);
-      const fallback = yeriServerGenerationFallbackState();
+      const fallback = yeriServerGenerationFallbackState(model);
       if (fallback.available) {
         const limitIssue = yeriPayloadLimitIssue({ word_count: wordCount, image_count: imageCount }, fallback.config);
+        const providerLabel = USER_SECRET_FIELDS[fallback.provider]?.label || aiModelLabel(model);
         target.innerHTML = [
           fallback.needsFallback
-            ? "웹에 저장된 Gemini 키로 서버 글 생성 후 실행기가 네이버 입력을 이어갈 수 있습니다."
-            : "안전 테스트 모드에서는 웹 Gemini 키로 서버 글 생성 경로를 확인할 수 있습니다.",
-          limitIssue || `서버 생성 사용 시 제출 전 비용 확인창이 표시됩니다. 모델 ${fallback.config.model || "Gemini"}`,
+            ? `웹에 저장된 ${providerLabel} 키로 서버 글 생성 후 실행기가 네이버 입력을 이어갈 수 있습니다.`
+            : `안전 테스트 모드에서는 웹 ${providerLabel} 키로 서버 글 생성 경로를 확인할 수 있습니다.`,
+          limitIssue || `서버 생성 사용 시 제출 전 비용 확인창이 표시됩니다. 모델 ${aiModelLabel(model)}`,
         ].map(escapeHtml).join("<br>");
         target.className = `notice ${limitIssue ? "warn" : "ok"} small`;
         return;
@@ -4096,15 +4950,19 @@
       const result = job?.result || {};
       const posts = Array.isArray(result.posts) ? result.posts : [];
       const failedPosts = Array.isArray(result.failed_posts) ? result.failed_posts : [];
+      const jobStatus = String(job?.status || "").toLowerCase();
+      const isFailedJob = ["failed", "error", "cancelled"].includes(jobStatus) || result.ok === false;
       const failures = [
         ...failedPosts,
         ...posts.filter((post) => post?.error || ["failed", "error"].includes(String(post?.status || "").toLowerCase())),
       ];
-      if (!failures.length && (result.error || result.failed_keyword || result.stage)) {
+      if (!failures.length && (result.error || result.failed_keyword || (isFailedJob && result.stage))) {
         failures.push({
           keyword: result.failed_keyword || "",
           stage: result.stage || "",
           error: result.error || "",
+          visible_error: result.visible_error || result.user_message || "",
+          reason: job?.failed_reason || "",
           status: job?.status || "failed",
         });
       }
@@ -4162,6 +5020,7 @@
         failure?.stage,
         failure?.error,
         failure?.message,
+        failure?.user_message,
         failure?.visible_error,
         failure?.reason,
         failure?.context,
@@ -4248,7 +5107,7 @@
         };
       }
 
-      if (text.includes("quota") || text.includes("rate limit") || text.includes("rate-limits") || text.includes("429")) {
+      if (text.includes("quota") || text.includes("rate limit") || text.includes("rate-limits") || text.includes("429") || text.includes("resource_exhausted") || text.includes("사용량") || text.includes("한도 초과") || text.includes("요금제")) {
         return {
           ...base,
           title: "AI API 사용량 또는 쿼터 초과",
@@ -4261,7 +5120,7 @@
         };
       }
 
-      if (text.includes("api key") || text.includes("apikey") || text.includes("invalid key") || text.includes("permission denied") || text.includes("unauthorized")) {
+      if (text.includes("api key") || text.includes("apikey") || text.includes("invalid key") || text.includes("permission denied") || text.includes("unauthorized") || text.includes("api key expired") || text.includes("api_key_invalid") || text.includes("키 인증 실패") || text.includes("인증 실패") || text.includes("키를 확인")) {
         return {
           ...base,
           title: "AI API 키 확인 필요",
@@ -4313,10 +5172,11 @@
       }
 
       if (stage === "content_generation") {
+        const visibleMessage = String(failure?.visible_error || failure?.user_message || "").trim();
         return {
           ...base,
           title: "AI 글 생성 실패",
-          body: "네이버 입력 전, AI가 글을 만드는 단계에서 작업이 중단됐습니다.",
+          body: visibleMessage || "네이버 입력 전, AI가 글을 만드는 단계에서 작업이 중단됐습니다.",
           action: "모델, API 키, 사용량 한도를 확인해주세요.",
           next: "설정을 바꾼 뒤 다시 실행할 수 있습니다.",
           retry: "원인을 바꾸지 않고 반복하면 같은 오류가 날 수 있습니다.",
@@ -4563,6 +5423,20 @@
       }
     }
 
+    function renderYunmiModelSelect(selector, selected = DEFAULT_AI_MODEL) {
+      const select = $(selector);
+      if (!select) return;
+      const current = normalizeYunmiAiModel(selected);
+      select.innerHTML = "";
+      for (const [id, label] of YUNMI_AI_MODEL_OPTIONS) {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = label;
+        option.selected = id === current;
+        select.appendChild(option);
+      }
+    }
+
     function readWebSettingsForm() {
       return sanitizeWebSettings({
         ai_model: $("#settingsAiModel")?.value || selectedAiModel(),
@@ -4576,7 +5450,7 @@
       const settings = state.webSettings || defaultWebSettings();
       renderAiModelSelect("#settingsAiModel", settings.ai_model);
       renderAiModelSelect("#yeriAiModel", settings.ai_model);
-      renderAiModelSelect("#yunmiAiModel", DEFAULT_AI_MODEL);
+      renderYunmiModelSelect("#yunmiAiModel", DEFAULT_AI_MODEL);
       if ($("#settingsBlogProfile")) $("#settingsBlogProfile").value = settings.blog_profile || "";
       if ($("#settingsNeighborMessages")) $("#settingsNeighborMessages").value = webNeighborMessages().join("\n");
       if ($("#hyunjuMessages") && !$("#hyunjuMessages").value.trim()) {
@@ -4769,6 +5643,19 @@
         server_ytdlp_discovery_failed: "쇼츠 공개 검색이 실패했습니다. 잠시 뒤 다시 시도하거나 실행기를 연결해주세요.",
         research_discovery_candidate_not_found: "가져올 후보를 찾지 못했습니다.",
         research_paid_confirmation_required: "비용이 발생할 수 있어 실행 확인이 필요합니다.",
+        yeri_paid_confirmation_required: "예리 서버 글 생성은 선택한 AI 모델 비용이 발생할 수 있어 실행 확인이 필요합니다.",
+        yeri_server_generation_provider_mismatch: "선택한 예리 AI 모델을 확인할 수 없어 글 생성을 시작하지 않았습니다.",
+        yeri_server_generation_not_allowed: "이 계정은 예리 서버 글 생성 테스트 대상이 아닙니다.",
+        yeri_claude_key_missing: "Claude API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.",
+        yeri_openai_key_missing: "OpenAI API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.",
+        yeri_gemini_key_missing: "Gemini API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.",
+        server_generation_auth_failed: "API 키 인증 실패입니다. 웹 설정의 AI/API 연결에서 키를 확인하거나 갱신해주세요.",
+        server_generation_quota_exceeded: "사용량/요금제 한도 초과입니다. 결제/쿼터 상태를 확인해주세요.",
+        server_generation_rate_limited: "AI 제공자 요청 제한이 걸렸습니다. 잠시 뒤 다시 시도해주세요.",
+        server_generation_provider_transient: "AI 제공자 일시적 오류입니다. 잠시 뒤 다시 시도해주세요.",
+        server_generation_provider_error: "AI 제공자 글 생성 오류입니다. 모델/API 설정을 확인해주세요.",
+        server_generation_timeout: "AI 글 생성 시간이 초과되었습니다. 글 분량을 줄이거나 잠시 뒤 다시 시도해주세요.",
+        server_generation_invalid_response: "AI 응답을 글 형식으로 해석하지 못했습니다. 모델을 바꾸거나 다시 시도해주세요.",
         research_paid_operation_in_progress: "이미 같은 자료의 유료 분석이 진행 중입니다. 잠시 뒤 결과를 확인해주세요.",
         research_apify_key_missing: "Apify 토큰이 아직 웹 보안 저장소에 연결되지 않았습니다. 설정 탭의 AI/API 연결에서 Apify API Token을 저장해주세요.",
         research_apify_not_supported: "이 링크는 Apify 수집 대상이 아닙니다.",
@@ -4779,6 +5666,7 @@
         research_apify_run_missing: "Apify 실행 ID를 받지 못했습니다.",
         research_apify_failed: "Apify 수집이 실패했습니다.",
         research_gemini_key_missing: "Gemini API 키가 아직 연결되지 않았습니다.",
+        research_gemini_invalid_api_key: "저장된 Gemini API 키가 유효하지 않습니다. 설정 탭의 AI/API 연결에서 Gemini 키를 새로 저장해주세요.",
         research_gemini_invalid_json: "Gemini 분석 응답을 해석하지 못했습니다.",
         research_gemini_bad_request: "Gemini 요청 형식이 맞지 않습니다. 모델/응답 포맷 설정을 확인해야 합니다.",
         research_gemini_auth_or_permission: "Gemini 키 권한 또는 결제/프로젝트 설정을 확인해야 합니다.",
@@ -4827,6 +5715,15 @@
     function setView(loggedIn) {
       $("#loginView").classList.toggle("hidden", loggedIn);
       $("#appView").classList.toggle("hidden", !loggedIn);
+      if (loggedIn) window.setTimeout(ensureBrainVideoPlayback, 0);
+    }
+
+    function ensureBrainVideoPlayback() {
+      const video = $(".brain-video");
+      if (!video) return;
+      video.muted = true;
+      const playPromise = video.play?.();
+      if (playPromise?.catch) playPromise.catch(() => {});
     }
 
     function productsForUser() {
@@ -4838,25 +5735,32 @@
         products.add("hyunju");
       }
       if (products.has("bundle")) {
-        products.add("yeri");
-        products.add("hyunju");
-        products.add("songi");
-        products.add("blog_team");
+        const bundledProducts = state.workers?.length
+          ? state.workers.map((item) => item.product).filter((product) => product && product !== "free")
+          : ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
+        bundledProducts.push("bundle", "blog_team");
+        bundledProducts.forEach((product) => products.add(product));
       }
       return Array.from(products);
     }
 
     function displayProductsForUser() {
       const products = new Set(productsForUser());
-      if (products.has("bundle")) return ["bundle"];
       const visible = [];
-      if (products.has("blog_team")) {
+      if (products.has("bundle")) {
+        return ["bundle"];
+      } else if (products.has("blog_team")) {
         visible.push("blog_team");
       } else {
         if (products.has("yeri")) visible.push("yeri");
         if (products.has("hyunju")) visible.push("hyunju");
       }
       if (products.has("songi")) visible.push("songi");
+      if (products.has("yunmi")) visible.push("yunmi");
+      if (products.has("jieun")) visible.push("jieun");
+      if (products.has("nakyung")) visible.push("nakyung");
+      if (products.has("hyojin")) visible.push("hyojin");
+      if (products.has("sangsu")) visible.push("sangsu");
       return visible;
     }
 
@@ -4906,8 +5810,15 @@
             type: worker.type || worker.execution || "",
             moduleKey: worker.module_key || "",
             status: worker.status || "",
+            accessPolicy: worker.access_policy || "",
             requiredSettings: Array.isArray(worker.required_settings) ? worker.required_settings : [],
             repoUrl: worker.repo_url || "",
+            releaseUrl: worker.release_url || "",
+            setupDownloadUrl: worker.setup_download_url || "",
+            portableDownloadUrl: worker.portable_download_url || "",
+            downloadLabel: worker.download_label || "",
+            supportedPlatforms: Array.isArray(worker.supported_platforms) ? worker.supported_platforms : [],
+            version: worker.version || "",
             description: worker.short_description || "기능 연결 전이라 기본 설정이 필요한 상태입니다.",
             meta: Array.isArray(worker.capabilities) ? worker.capabilities : [],
           };
@@ -4925,7 +5836,16 @@
         employees[key].type = worker.type || employees[key].type;
         employees[key].moduleKey = worker.module_key || employees[key].moduleKey;
         employees[key].status = worker.status || employees[key].status;
+        employees[key].accessPolicy = worker.access_policy || employees[key].accessPolicy;
         employees[key].repoUrl = worker.repo_url || employees[key].repoUrl;
+        employees[key].releaseUrl = worker.release_url || employees[key].releaseUrl;
+        employees[key].setupDownloadUrl = worker.setup_download_url || employees[key].setupDownloadUrl;
+        employees[key].portableDownloadUrl = worker.portable_download_url || employees[key].portableDownloadUrl;
+        employees[key].downloadLabel = worker.download_label || employees[key].downloadLabel;
+        employees[key].supportedPlatforms = Array.isArray(worker.supported_platforms)
+          ? worker.supported_platforms
+          : employees[key].supportedPlatforms;
+        employees[key].version = worker.version || employees[key].version;
         employees[key].requiredSettings = Array.isArray(worker.required_settings)
           ? worker.required_settings
           : employees[key].requiredSettings;
@@ -4971,9 +5891,37 @@
     }
 
     function hasEmployeeEntitlement(employee) {
-      if (!state.me?.can_execute || !employee) return false;
+      if (!employee) return false;
+      if (isPublicEmployee(employee)) return Boolean(state.me?.user?.status === "active" || state.me?.can_execute);
+      if (!state.me?.can_execute) return false;
       const products = new Set(productsForUser());
-      return products.has("bundle") || products.has(employee.product);
+      return products.has(employee.product);
+    }
+
+    function isPublicEmployee(employee) {
+      return employee?.accessPolicy === "public";
+    }
+
+    function isExternalDownloadEmployee(employee) {
+      return employee?.execution === "external_download"
+        || employee?.type === "desktop_app"
+        || Boolean(employee?.setupDownloadUrl || employee?.releaseUrl);
+    }
+
+    function employeeSupportedPlatforms(employee) {
+      return Array.isArray(employee?.supportedPlatforms) ? employee.supportedPlatforms.filter(Boolean) : [];
+    }
+
+    function employeeSupportsCurrentPlatform(employee) {
+      const platforms = employeeSupportedPlatforms(employee);
+      if (!platforms.length) return true;
+      const platform = state.platform || detectPlatform();
+      return platforms.includes(platform);
+    }
+
+    function employeePlatformLabel(employee) {
+      const platforms = employeeSupportedPlatforms(employee);
+      return platforms.length ? platforms.map(platformLabel).join(", ") : "모든 환경";
     }
 
     function requiredSettingsText(settings) {
@@ -4985,6 +5933,31 @@
       return (settings || [])
         .map((item) => `<span class="pill">${escapeHtml(settingLabels[item] || item)}</span>`)
         .join("") || `<span class="pill">없음</span>`;
+    }
+
+    function employeeExecutionLabel(employee) {
+      if (isExternalDownloadEmployee(employee)) return "직접 다운로드";
+      if (isWebModuleEmployee(employee)) return "웹 기반";
+      if (isPlannedEmployee(employee)) return "기능 준비 중";
+      return "로컬 실행기 연동";
+    }
+
+    function employeeResumeBoxes(employee, status) {
+      if (isExternalDownloadEmployee(employee)) {
+        return [
+          { label: "직무", detail: employee.role || "AI 직원" },
+          { label: "실행 방식", detail: "Windows 앱 직접 다운로드" },
+          { label: "지원 환경", detail: `${employeePlatformLabel(employee)} 전용` },
+          { label: "설치 방식", detail: "일반 사용자는 Setup exe를 설치하고, Portable exe는 설치가 막히는 환경에서만 사용합니다." },
+          { label: "주요 기능", detail: (employee.meta || []).join(", ") || "기능 준비 중" },
+        ];
+      }
+      return [
+        { label: "직무", detail: employee.role || "AI 직원" },
+        { label: "실행 방식", detail: employeeExecutionLabel(employee) },
+        { label: "사용 조건", detail: status.reason || "바로 사용 가능" },
+        { label: "주요 기능", detail: (employee.meta || []).join(", ") || "기능 준비 중" },
+      ];
     }
 
     function userSecretDiagnostics() {
@@ -5025,12 +5998,24 @@
 
     function yeriServerGenerationConfig() {
       const config = jobKinds.yeri_write?.serverGeneration || {};
-      return config.enabled && config.mode === "gemini" ? config : null;
+      return config.enabled ? config : null;
     }
 
-    function yeriServerGenerationFallbackState() {
+    function serverGenerationSupportsModel(model, config = yeriServerGenerationConfig()) {
+      if (!config) return false;
+      const provider = aiProviderForModel(model);
+      const supported = Array.isArray(config.supported_providers) && config.supported_providers.length
+        ? config.supported_providers
+        : ["gemini"];
+      return supported.includes(provider);
+    }
+
+    function yeriServerGenerationFallbackState(model = selectedAiModel()) {
       const config = yeriServerGenerationConfig();
       if (!config) return { available: false, reason: "" };
+      const selectedModel = normalizeAiModel(model);
+      const provider = aiProviderForModel(selectedModel);
+      if (!serverGenerationSupportsModel(selectedModel, config)) return { available: false, reason: "" };
       if (!state.agent?.agent?.connected) return { available: false, reason: "로컬 실행기 연결 후 사용할 수 있습니다." };
       const versionInfo = effectiveVersionInfo();
       if (versionInfo.update_required) {
@@ -5043,28 +6028,41 @@
       if (r.naver_account?.status !== "ready") {
         return { available: false, reason: "로컬 실행기에서 네이버 계정을 먼저 설정해주세요." };
       }
-      if (!webSecretReady("gemini")) {
-        return { available: false, reason: "예리 서버 글 생성은 웹 AI/API 연결의 Gemini API Key가 필요합니다." };
+      if (!webSecretReady(provider)) {
+        return { available: false, reason: `예리 서버 글 생성은 웹 AI/API 연결의 ${USER_SECRET_FIELDS[provider]?.label || aiModelLabel(selectedModel)} API Key가 필요합니다.` };
       }
       const workerStatus = workerReadiness("yeri_write");
       if (workerStatus === "unavailable") return { available: false, reason: "" };
-      const localReady = localAiKeyStatusForModel() === "ready";
+      const localReady = localAiKeyStatusForModel(selectedModel) === "ready";
       const needsFallback = workerStatus !== "ready" || !localReady;
       if (!needsFallback && !config.real_test_only) return { available: false, reason: "" };
-      return { available: true, config, needsFallback };
+      return { available: true, config, needsFallback, provider, model: selectedModel };
+    }
+
+    function aiKeyOperationalState(model = selectedAiModel()) {
+      const provider = aiProviderForModel(model);
+      const localStatus = localAiKeyStatusForModel(model);
+      const config = yeriServerGenerationConfig();
+      if (localStatus === "ready") {
+        return { status: "ready", detail: `${aiModelLabel(model)} · 로컬 준비됨` };
+      }
+      if (config?.enabled && serverGenerationSupportsModel(model, config) && webSecretReady(provider)) {
+        return { status: "ready", detail: `${USER_SECRET_FIELDS[provider]?.label || aiModelLabel(model)} 웹 저장됨 · 예리 서버 글 생성 가능` };
+      }
+      if (webSecretReady(provider)) {
+        return {
+          status: "missing",
+          detail: `${aiModelLabel(model)} 웹 저장됨 · 실행기 연결 또는 업데이트 필요`,
+        };
+      }
+      return {
+        status: localStatus === "unknown" ? "missing" : localStatus,
+        detail: `${aiModelLabel(model)} · 웹 AI/API 연결 필요`,
+      };
     }
 
     function aiKeySettingDetail(model = selectedAiModel()) {
-      const provider = aiProviderForModel(model);
-      const localStatus = localAiKeyStatusForModel(model);
-      const detail = [aiModelLabel(model)];
-      if (webSecretReady(provider) && localStatus !== "ready") {
-        detail.push("웹 저장됨", "로컬 저장 필요");
-      }
-      if (localStatus !== "ready" && yeriServerGenerationFallbackState().available) {
-        detail.push("Gemini 서버 생성 가능");
-      }
-      return detail.join(" · ");
+      return aiKeyOperationalState(model).detail;
     }
 
     function settingState(setting) {
@@ -5079,12 +6077,12 @@
       }
       if (setting === "ai_key") {
         const model = selectedAiModel();
-        const modelReady = localAiKeyStatusForModel(model);
+        const aiState = aiKeyOperationalState(model);
         return {
           label: settingLabels.ai_key,
-          status: modelReady,
-          detail: aiKeySettingDetail(model),
-          action: "웹/로컬 설정",
+          status: aiState.status,
+          detail: aiState.detail,
+          action: "AI/API 연결",
         };
       }
       if (setting === "neighbor_messages") {
@@ -5125,25 +6123,37 @@
       return entitledEmployees().filter(({ employee }) => !isPlannedEmployee(employee));
     }
 
+    function staffCatalogEmployees() {
+      return employeeEntries()
+        .map(([key, employee]) => ({ key, employee }))
+        .filter(({ employee }) => !isPlannedEmployee(employee));
+    }
+
     function needsLocalAgentForEntitlement() {
-      return runnableEntitledEmployees().some(({ employee }) => !isWebModuleEmployee(employee));
+      return runnableEntitledEmployees().some(({ employee }) => requiresLocalAgentEmployee(employee));
     }
 
     function employeeStatusInfo(key) {
       const employee = employees[key];
       if (!employee) return { status: "unknown", label: "확인 중", className: "warn", reason: "직원 정보를 확인할 수 없습니다." };
-      if (state.me?.requires_password_change) {
+      if (state.me?.requires_password_change && !isPublicEmployee(employee)) {
         return { status: "needs_setup", label: "비밀번호 변경", className: "warn", reason: "첫 로그인 비밀번호 변경 후 사용할 수 있습니다." };
       }
       const allowed = hasEmployeeEntitlement(employee);
       if (!allowed) {
         return { status: "no_entitlement", label: "권한 없음", className: "warn", reason: "현재 계정 권한으로는 이 직원을 사용할 수 없습니다." };
       }
-      if (!state.me?.can_execute) {
+      if (!state.me?.can_execute && !isPublicEmployee(employee)) {
         return { status: "needs_setup", label: "권한 확인", className: "warn", reason: "계정 권한 확인 후 사용할 수 있습니다." };
       }
       if (isPlannedEmployee(employee)) {
         return { status: "needs_setup", label: "설정 필요", className: "warn", reason: "기능 연결 전이라 직원 기본 설정을 준비 중입니다." };
+      }
+      if (isExternalDownloadEmployee(employee)) {
+        if (!employeeSupportsCurrentPlatform(employee)) {
+          return { status: "windows_only", label: "Windows 전용", className: "warn", reason: "현재는 Windows PC에서만 설치와 사용을 지원합니다." };
+        }
+        return { status: "available", label: "다운로드 가능", className: "ok", reason: "Windows Setup exe를 직접 내려받아 설치합니다." };
       }
       if (isWebModuleEmployee(employee)) {
         return { status: "available", label: "사용 가능", className: "ok", reason: "" };
@@ -5166,11 +6176,11 @@
 
     function filteredStaffEntries() {
       const query = state.staffQuery.trim().toLowerCase();
-      return runnableEntitledEmployees().map(({ key, employee }) => [key, employee]).filter(([key, employee]) => {
+      return staffCatalogEmployees().map(({ key, employee }) => [key, employee]).filter(([key, employee]) => {
         const status = employeeStatusInfo(key).status;
         const statusMatch = state.staffFilter === "all"
           || status === state.staffFilter
-          || (state.staffFilter === "needs_setup" && ["needs_setup", "agent_offline", "unsupported_agent"].includes(status));
+          || (state.staffFilter === "needs_setup" && ["needs_setup", "agent_offline", "unsupported_agent", "windows_only"].includes(status));
         const text = [employee.name, employee.role, employee.description, ...(employee.meta || [])]
           .join(" ")
           .toLowerCase();
@@ -5207,7 +6217,7 @@
       if (!state.me?.can_execute) return false;
       if (!jobKinds[kind]) return false;
       const products = new Set(productsForUser());
-      return products.has("bundle") || products.has(jobKinds[kind].required);
+      return products.has(jobKinds[kind].required);
     }
 
     function isResearchJobKind(kind) {
@@ -5286,11 +6296,11 @@
           const provider = aiProviderForModel(model);
           const modelReady = localAiKeyStatusForModel(model);
           if (r.naver_account?.status === "ready" && modelReady === "ready") return "";
-          const fallback = yeriServerGenerationFallbackState();
+          const fallback = yeriServerGenerationFallbackState(model);
           if (fallback.available) return "";
           if (fallback.reason) return fallback.reason;
           if (modelReady !== "ready" && webSecretReady(provider)) {
-            return `웹 AI/API 키는 저장되어 있지만 현재 예리 Windows 실행기는 로컬 보안 설정의 선택 모델 키도 필요합니다. 로컬 설정 열기에서 ${aiModelLabel(model)} 키를 저장해주세요.`;
+            return "웹 AI/API 키는 저장되어 있습니다. 실행기를 최신 버전으로 업데이트하면 자동으로 인식됩니다.";
           }
         }
         if (kind === "hyunju_find" && r.naver_account?.status === "ready" && webNeighborMessages().length) {
@@ -5360,14 +6370,20 @@
         showToast(limitIssue);
         return false;
       }
-      const model = config?.model || "gemini";
-      const localReady = localAiKeyStatusForModel(payload?.ai_model || selectedAiModel()) === "ready";
+      const model = normalizeAiModel(payload?.ai_model || selectedAiModel());
+      if (!serverGenerationSupportsModel(model, config)) {
+        showToast("선택한 AI 모델은 현재 예리 서버 글 생성에서 지원하지 않습니다.");
+        return false;
+      }
+      const provider = aiProviderForModel(model);
+      const providerLabel = USER_SECRET_FIELDS[provider]?.label || aiModelLabel(model);
+      const localReady = localAiKeyStatusForModel(model) === "ready";
       return window.confirm([
         localReady
-          ? "웹에 저장된 Gemini API Key로 서버에서 예리 글 초안을 먼저 생성합니다."
-          : "로컬 AI 키가 없어 웹에 저장된 Gemini API Key로 예리 글 생성을 진행합니다.",
+          ? `웹에 저장된 ${providerLabel} API Key로 서버에서 예리 글 초안을 먼저 생성합니다.`
+          : `로컬 AI 키가 없어 웹에 저장된 ${providerLabel} API Key로 예리 글 생성을 진행합니다.`,
         "외부 AI 사용량 비용이 발생할 수 있습니다.",
-        `모델: ${model}`,
+        `모델: ${aiModelLabel(model)}`,
         "중복 실행하면 비용이 다시 발생할 수 있으니 한 번만 진행해주세요.",
       ].join("\n"));
     }
@@ -5386,6 +6402,10 @@
         || employee?.type === "web_module";
     }
 
+    function requiresLocalAgentEmployee(employee) {
+      return !isWebModuleEmployee(employee) && !isExternalDownloadEmployee(employee);
+    }
+
     function employeeJobKind(key) {
       return employees[key]?.jobKind || "";
     }
@@ -5393,6 +6413,7 @@
     function isPlannedEmployee(employee) {
       if (!employee) return true;
       if (isWebModuleEmployee(employee)) return false;
+      if (isExternalDownloadEmployee(employee)) return false;
       return (employee.status === "needs_setup" && !employee.jobKind)
         || !employee.jobKind
         || !jobFormConfigs[employee.jobKind];
@@ -5401,14 +6422,29 @@
     function employeeAction(key) {
       const employee = employees[key];
       const kind = employeeJobKind(key);
+      if (isExternalDownloadEmployee(employee) && isPublicEmployee(employee)) {
+        if (!canUseEmployee(key)) {
+          return { label: "권한 없음", action: "", disabled: true };
+        }
+        if (!employeeSupportsCurrentPlatform(employee)) {
+          return { label: "Windows 전용", action: "", disabled: true };
+        }
+        return { label: employee.downloadLabel || "Setup exe 다운로드", action: "employee-download", disabled: !externalEmployeeDownloadUrl(employee) };
+      }
       if (state.me?.requires_password_change) {
         return { label: "비밀번호 변경", action: "password", disabled: false };
       }
       if (!canUseEmployee(key)) {
         return { label: "권한 없음", action: "", disabled: true };
       }
+      if (isExternalDownloadEmployee(employee)) {
+        if (!employeeSupportsCurrentPlatform(employee)) {
+          return { label: "Windows 전용", action: "", disabled: true };
+        }
+        return { label: employee.downloadLabel || "Setup exe 다운로드", action: "employee-download", disabled: !externalEmployeeDownloadUrl(employee) };
+      }
       if (isWebModuleEmployee(employee)) {
-        return { label: "작업 지시하기", action: "quick-actions", disabled: !state.me?.can_execute };
+        return { label: "직원 업무지시", action: "quick-actions", disabled: !state.me?.can_execute };
       }
       if (isPlannedEmployee(employee)) {
         return { label: "기능 준비 중", action: "", disabled: true };
@@ -5428,7 +6464,7 @@
       if (jobBlockReason(kind)) {
         return { label: "로컬 설정 열기", action: "settings", disabled: false };
       }
-      return { label: "작업 지시하기", action: "quick-actions", disabled: false };
+      return { label: "직원 업무지시", action: "quick-actions", disabled: false };
     }
 
     function preferredDownloadProduct() {
@@ -5438,6 +6474,58 @@
       if (products.has("yeri")) return "yeri";
       if (products.has("hyunju")) return "hyunju";
       return "";
+    }
+
+    function externalEmployeeDownloadUrl(employee) {
+      return employee?.setupDownloadUrl || employee?.releaseUrl || employee?.repoUrl || "";
+    }
+
+    function filenameFromUrl(value) {
+      try {
+        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://api.aimax.ai.kr";
+        const url = new URL(value, baseUrl);
+        return decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() || "aimax-download");
+      } catch (_error) {
+        return "aimax-download";
+      }
+    }
+
+    function isDirectExternalDownloadUrl(value) {
+      try {
+        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://api.aimax.ai.kr";
+        const url = new URL(value, baseUrl);
+        return /\.(exe|msi|dmg|pkg|zip)$/i.test(url.pathname);
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function downloadExternalEmployee(employee) {
+      if (!employee) {
+        showToast("직원 정보를 확인할 수 없습니다.");
+        return;
+      }
+      if (!employeeSupportsCurrentPlatform(employee)) {
+        showToast(`${employee.name || "이 직원"}은 현재 Windows 환경에서만 설치와 사용을 지원합니다.`);
+        return;
+      }
+      const url = externalEmployeeDownloadUrl(employee);
+      if (!url) {
+        showToast("다운로드 링크가 아직 준비되지 않았습니다.");
+        return;
+      }
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      const directDownload = isDirectExternalDownloadUrl(url);
+      if (directDownload) anchor.download = filenameFromUrl(url);
+      anchor.rel = "noopener noreferrer";
+      anchor.target = "_blank";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      showToast(directDownload
+        ? `${employee.name || "직원"} 설치 파일 다운로드를 시작했습니다.`
+        : `${employee.name || "직원"} 다운로드 페이지를 열었습니다.`);
     }
 
     function currentDownload() {
@@ -5633,7 +6721,7 @@
               <span>${escapeHtml(item)}</span>
             </div>
           `).join("")
-        : `<div class="report-checkitem"><span class="step-index warn">1</span><span>오류 보고 탭에서 운영팀 안내를 확인해주세요.</span></div>`;
+        : `<div class="report-checkitem"><span class="step-index warn">1</span><span>업데이트 및 오류보고에서 운영팀 안내를 확인해주세요.</span></div>`;
       $("#reportAttentionNote").value = "";
       prompt.classList.remove("hidden");
     }
@@ -5643,9 +6731,47 @@
       return Boolean(prompt && !prompt.classList.contains("hidden"));
     }
 
+    function hasVisibleServiceNoticePrompt() {
+      const prompt = $("#serviceNoticePrompt");
+      return Boolean(prompt && !prompt.classList.contains("hidden"));
+    }
+
+    function markServiceNoticeSeen() {
+      state.serviceNoticeDismissed = true;
+      storageSet("localStorage", SERVICE_NOTICE_KEY, "1");
+    }
+
+    function hideServiceNoticePrompt(markSeen = false) {
+      if (markSeen) markServiceNoticeSeen();
+      $("#serviceNoticePrompt")?.classList.add("hidden");
+      if (markSeen) setTimeout(() => renderWebSecretNoticePrompt(), 0);
+    }
+
+    function shouldShowServiceNoticePrompt() {
+      if (!state.token) return false;
+      if (state.serviceNoticeDismissed) return false;
+      if (effectiveVersionInfo().update_required) return false;
+      if (hasVisibleReportAttentionPrompt()) return false;
+      return true;
+    }
+
+    function renderServiceNoticePrompt() {
+      const prompt = $("#serviceNoticePrompt");
+      if (!prompt) return;
+      if (!shouldShowServiceNoticePrompt()) {
+        hideServiceNoticePrompt(false);
+        return;
+      }
+      prompt.classList.remove("hidden");
+    }
+
     function hasWebSecretNoticeAudience() {
       const products = new Set(productsForUser());
-      return products.has("bundle") || products.has("songi");
+      return products.has("bundle")
+        || products.has("songi")
+        || products.has("blog_team")
+        || products.has("yeri")
+        || products.has("hyunju");
     }
 
     function markWebSecretNoticeSeen() {
@@ -5663,6 +6789,7 @@
       if (state.webSecretNoticeDismissed) return false;
       if (effectiveVersionInfo().update_required) return false;
       if (hasVisibleReportAttentionPrompt()) return false;
+      if (hasVisibleServiceNoticePrompt()) return false;
       return hasWebSecretNoticeAudience();
     }
 
@@ -5829,11 +6956,6 @@
       return runnableEntitledEmployees().some(({ employee }) => (employee.requiredSettings || []).includes("ai_key"));
     }
 
-    function selectedAiKeyStatus() {
-      const model = selectedAiModel();
-      return localAiKeyStatusForModel(model);
-    }
-
     function onboardingGuideItems() {
       const agent = state.agent?.agent;
       const r = readiness();
@@ -5841,13 +6963,11 @@
       const needsAi = needsAiKeyForEntitlement();
       const needsLocalAgent = needsLocalAgentForEntitlement();
       const naverReady = r.naver_account?.status === "ready";
-      const aiReady = !needsAi || selectedAiKeyStatus() === "ready";
-      const settingsReady = !needsLocalAgent || (Boolean(agent?.connected) && naverReady && aiReady);
       const model = selectedAiModel();
-      const modelKeyName = model === "claude" ? "Claude API Key" : isOpenAiModel(model) ? "OpenAI API Key" : "Gemini API Key";
-      const localSettingsBody = needsAi
-        ? `로컬 보안 설정 창에 네이버 ID/비밀번호와 ${modelKeyName}를 입력하고 저장합니다. 현재 선택 모델은 ${aiModelLabel(model)}입니다.`
-        : "로컬 보안 설정 창에 네이버 ID와 비밀번호를 입력하고 저장합니다.";
+      const aiState = aiKeyOperationalState(model);
+      const aiReady = !needsAi || isReady(aiState.status);
+      const settingsReady = !needsLocalAgent || (Boolean(agent?.connected) && naverReady);
+      const localSettingsBody = "로컬 보안 설정 창에는 네이버 ID와 비밀번호만 저장합니다. AI/API 키는 웹 설정 탭의 AI/API 연결에서 관리합니다.";
       const webMessages = webNeighborMessages();
       const webSettings = state.webSettings || defaultWebSettings();
       const needsBlogProfile = runnableEntitledEmployees().some(({ employee }) => employee.jobKind === "yeri_write");
@@ -5866,7 +6986,7 @@
           label: "비밀번호 변경",
           status: state.me?.requires_password_change ? "missing" : "ready",
           title: "임시 비밀번호를 내 비밀번호로 바꿉니다",
-          body: "첫 로그인 비밀번호 변경이 끝나야 작업 실행과 설치 파일 다운로드가 열립니다.",
+          body: "첫 로그인 비밀번호 변경이 끝나야 직원 업무지시와 설치 파일 다운로드가 열립니다.",
           detail: state.me?.requires_password_change ? "변경 필요" : "완료",
           action: "password",
           button: "비밀번호 변경",
@@ -5897,7 +7017,7 @@
           {
             label: "로컬 보안 설정",
             status: settingsReady ? "ready" : agent?.connected ? "missing" : "unknown",
-            title: "네이버 계정과 API 키를 내 PC에 저장합니다",
+            title: "네이버 계정을 내 PC에 저장합니다",
             body: localSettingsBody,
             detail: settingsReady ? "저장 완료" : agent?.connected ? "설정 필요" : "실행기 연결 후 가능",
             action: "settings",
@@ -5913,7 +7033,7 @@
           body: "자료조사 작업은 웹앱에서 처리됩니다. Instagram/TikTok 수집과 Gemini 분석은 서버에 키가 연결되어 있을 때 승인 후 실행됩니다.",
           detail: "로컬 실행기 불필요",
           action: "jobs",
-          button: "작업 탭 보기",
+          button: "직원 업무지시 보기",
         });
       }
 
@@ -5922,10 +7042,21 @@
           label: "웹 작업 설정",
           status: webSettingsReady ? "ready" : "missing",
           title: "블로그 프로필과 멘트를 정리합니다",
-          body: "설정 탭에서 블로그 프로필과 서로이웃/댓글 멘트를 적어두면 작업 지시가 더 안정적으로 이어집니다.",
+          body: "설정 탭에서 블로그 프로필과 서로이웃/댓글 멘트를 적어두면 일 맡기기가 더 안정적으로 이어집니다.",
           detail: webSettingsDetail,
           action: "settings-tab",
           button: "설정 탭 보기",
+        });
+      }
+      if (needsAi) {
+        items.push({
+          label: "AI/API 연결",
+          status: aiReady ? "ready" : "missing",
+          title: "글 생성에 사용할 API 키를 웹에 연결합니다",
+          body: "설정 탭의 AI/API 연결에서 Gemini API Key를 저장하면 예리가 서버에서 글 초안을 만든 뒤 실행기가 네이버 임시저장을 이어갑니다.",
+          detail: aiState.detail,
+          action: "settings-tab",
+          button: "AI/API 연결 열기",
         });
       }
       if (researchApi) {
@@ -5942,11 +7073,11 @@
       items.push({
         label: "첫 작업 테스트",
         status: runnableEntitledEmployees().some(({ employee }) => isResearchEmployee(employee) || canUseJob(employee.jobKind)) ? "ready" : "missing",
-        title: "짧은 테스트 작업을 하나 실행합니다",
-        body: needsLocalAgent ? "모든 준비가 끝나면 작업 탭에서 짧은 키워드로 먼저 테스트하세요." : "작업 탭에서 송이를 선택하고 벤치마킹 링크를 하나 넣어 먼저 테스트하세요.",
-        detail: "작업 탭",
+        title: "짧은 테스트 일을 하나 맡깁니다",
+        body: needsLocalAgent ? "모든 준비가 끝나면 직원 업무지시에서 짧은 키워드로 먼저 테스트하세요." : "직원 업무지시에서 송이를 선택하고 벤치마킹 링크를 하나 넣어 먼저 테스트하세요.",
+        detail: "직원 업무지시",
         action: "jobs",
-        button: "작업 탭 보기",
+        button: "직원 업무지시 보기",
       });
       return items;
     }
@@ -5956,6 +7087,7 @@
     }
 
     function renderOnboardingGuide() {
+      if (!$("#onboardingGuideProgress")) return;
       const items = onboardingGuideItems();
       const readyCount = items.filter((item) => isReady(item.status)).length;
       const current = currentOnboardingGuideItem(items);
@@ -5964,8 +7096,8 @@
       $("#onboardingGuideStepPill").textContent = current?.label || "완료";
       $("#onboardingGuideStepPill").className = `pill ${readinessClass(current?.status)}`;
       $("#onboardingGuideTitle").textContent = current?.title || "준비가 끝났습니다";
-      $("#onboardingGuideBody").textContent = current?.body || "이제 작업을 시작할 수 있습니다.";
-      $("#onboardingGuidePrimaryBtn").textContent = current?.button || "작업 보기";
+      $("#onboardingGuideBody").textContent = current?.body || "이제 일을 맡길 수 있습니다.";
+      $("#onboardingGuidePrimaryBtn").textContent = current?.button || "직원 업무지시";
       $("#onboardingGuidePrimaryBtn").dataset.action = current?.action || "jobs";
       $("#onboardingGuidePrimaryBtn").disabled = Boolean(current?.disabled);
       $("#onboardingGuideSteps").innerHTML = items.map((item, index) => `
@@ -5981,6 +7113,7 @@
     }
 
     function renderSetupItems(target, items) {
+      if (!target) return;
       const stepMode = target.id === "settingsStatus";
       target.innerHTML = items.map((item, index) => stepMode ? `
         <div class="step-item">
@@ -6009,7 +7142,8 @@
     }
 
     function nextAction() {
-      const blocked = runnableEntitledEmployees()
+      const jobEmployees = runnableEntitledEmployees().filter(({ key }) => employeeJobKind(key));
+      const blocked = jobEmployees
         .map(({ key, employee }) => ({
           key,
           employee,
@@ -6019,7 +7153,7 @@
       if (state.me?.requires_password_change) {
         return {
           title: "비밀번호 변경이 필요합니다",
-          body: "첫 로그인 보안 설정을 완료하면 작업 지시가 열립니다.",
+          body: "첫 로그인 보안 설정을 완료하면 직원 업무지시가 열립니다.",
           label: "변경하기",
           action: "password",
         };
@@ -6060,8 +7194,13 @@
           action: needsBundle ? "download" : "settings",
         };
       }
-      const available = runnableEntitledEmployees().map(({ employee }) => employee);
-      if (!available.length) {
+      const availableJobs = jobEmployees
+        .filter(({ key }) => !jobBlockReason(employeeJobKind(key)))
+        .map(({ employee }) => employee);
+      const availableDownloads = runnableEntitledEmployees()
+        .filter(({ employee }) => isExternalDownloadEmployee(employee))
+        .map(({ employee }) => employee);
+      if (!availableJobs.length && !availableDownloads.length) {
         return {
           title: "사용 가능한 직원이 없습니다",
           body: "구매 상품 권한이 계정에 연결되어 있는지 확인해주세요.",
@@ -6069,15 +7208,24 @@
           action: "settings",
         };
       }
+      if (!availableJobs.length && availableDownloads.length) {
+        return {
+          title: "설치 가능한 직원이 있습니다",
+          body: `${employeeNameList(availableDownloads)}는 직원 채용 화면에서 확인할 수 있습니다.`,
+          label: "직원 채용",
+          action: "staff-tab",
+        };
+      }
       return {
-        title: "작업 지시가 가능합니다",
-        body: `${employeeNameList(available)}에게 웹에서 바로 작업을 요청할 수 있습니다.`,
-        label: "작업 보기",
+        title: "일을 맡길 수 있습니다",
+        body: `${employeeNameList(availableJobs)}에게 웹에서 바로 일을 맡길 수 있습니다.`,
+        label: "직원 업무지시",
         action: "jobs",
       };
     }
 
     function renderNextAction() {
+      if (!$("#nextActionTitle")) return;
       const item = nextAction();
       const needsLocalAgent = needsLocalAgentForEntitlement();
       $("#nextActionTitle").textContent = item.title;
@@ -6092,96 +7240,16 @@
       $("#nextDownloadAgentBtn").classList.toggle("hidden", !needsLocalAgent || Boolean(state.agent?.agent?.connected));
     }
 
-    function dashboardEmployeeEntries() {
-      return runnableEntitledEmployees().map(({ key, employee }) => [key, employee]);
-    }
-
-    function dashboardJobCounts() {
-      const active = new Set(["queued", "running"]);
-      return {
-        running: state.jobs.filter((job) => active.has(job.status)).length,
-      };
-    }
-
-    function dashboardBlockers() {
-      const blockers = [];
-      const versionInfo = state.agent?.agent?.version_info || state.versionInfo;
-      if (versionInfo?.update_required) {
-        blockers.push({
-          label: "실행기 업데이트",
-          detail: `최소 ${versionInfo.min_version || "필수 버전"} 이상으로 업데이트가 필요합니다.`,
-          status: "needs_attention",
-          action: "업데이트",
-        });
-      }
-      for (const item of setupItems()) {
-        if (!isReady(item.status)) {
-          blockers.push({
-            label: item.label,
-            detail: item.detail || readinessLabel(item.status),
-            status: item.status,
-            action: item.action || "확인",
-          });
-        }
-      }
-      for (const [key, employee] of dashboardEmployeeEntries()) {
-        const status = employeeStatusInfo(key);
-        if (status.status !== "available" && status.reason) {
-          blockers.push({
-            label: employee.name,
-            detail: status.reason,
-            status: status.status,
-            action: status.label,
-          });
-        }
-      }
-      const seen = new Set();
-      return blockers.filter((item) => {
-        const key = `${item.label}:${item.detail}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }).slice(0, 5);
-    }
-
-    function renderOverviewDashboard() {
-      const staffStatuses = dashboardEmployeeEntries().map(([key]) => employeeStatusInfo(key));
-      const availableCount = staffStatuses.filter((item) => item.status === "available").length;
-      const blockedCount = staffStatuses.filter((item) => item.status !== "available").length;
-      const jobCounts = dashboardJobCounts();
-      const blockers = dashboardBlockers();
-      const versionInfo = state.agent?.agent?.version_info || state.versionInfo;
-      const updateStatus = versionInfo?.update_required ? "필수" : versionInfo?.update_available ? "권장" : "최신";
-      const healthy = blockers.length === 0;
-      $("#overviewAvailableStaff").textContent = String(availableCount);
-      $("#overviewBlockedStaff").textContent = String(blockedCount);
-      $("#overviewRunningJobs").textContent = String(jobCounts.running);
-      $("#overviewUpdateStatus").textContent = updateStatus;
-      $("#overviewHealth").textContent = healthy ? "운영 가능" : "확인 필요";
-      $("#overviewHealth").className = `pill ${healthy ? "ok" : "warn"}`;
-      $("#overviewBlockerCount").textContent = String(blockers.length);
-      $("#overviewBlockerCount").className = `pill ${blockers.length ? "warn" : "ok"}`;
-      $("#overviewBlockers").innerHTML = blockers.length
-        ? blockers.map((item, index) => `
-          <div class="blocker-item">
-            <span class="step-index ${readinessClass(item.status)}">${index + 1}</span>
-            <span>
-              <strong>${escapeHtml(item.label)}</strong><br>
-              <span class="small muted">${escapeHtml(item.detail)}</span>
-            </span>
-            <span class="pill ${readinessClass(item.status)}">${escapeHtml(item.action)}</span>
-          </div>
-        `).join("")
-        : `<div class="empty">현재 막힌 항목이 없습니다.</div>`;
-    }
-
     function renderSetup() {
       const items = setupItems();
       const readyCount = items.filter((item) => isReady(item.status)).length;
       const allReady = items.length > 0 && readyCount === items.length;
       const label = allReady ? "준비 완료" : `${readyCount}/${items.length}`;
-      $("#setupOverall").textContent = label;
-      $("#setupOverall").className = `pill ${allReady ? "ok" : "warn"}`;
+      const setupOverall = $("#setupOverall");
+      if (setupOverall) {
+        setupOverall.textContent = label;
+        setupOverall.className = `pill ${allReady ? "ok" : "warn"}`;
+      }
       $("#settingsOverall").textContent = label;
       $("#settingsOverall").className = `pill ${allReady ? "ok" : "warn"}`;
       renderSetupItems($("#setupChecklist"), items);
@@ -6193,7 +7261,6 @@
       $("#settingsAgentVersion").textContent = agent?.version || "-";
       $("#openLocalSettingsBtn").disabled = !agent?.connected;
       renderNextAction();
-      renderOverviewDashboard();
     }
 
     function renderWebSettings() {
@@ -6248,9 +7315,13 @@
       const user = state.me?.user;
       if (!user) return;
       $("#userEmail").textContent = user.email;
-      $("#accountEmail").textContent = user.email;
-      $("#accountStatus").textContent = state.me.can_execute ? "실행 가능" : "제한됨";
-      $("#accountStatus").className = `pill ${state.me.can_execute ? "ok" : "warn"}`;
+      const accountEmail = $("#accountEmail");
+      if (accountEmail) accountEmail.textContent = user.email;
+      const accountStatus = $("#accountStatus");
+      if (accountStatus) {
+        accountStatus.textContent = state.me.can_execute ? "실행 가능" : "제한됨";
+        accountStatus.className = `pill ${state.me.can_execute ? "ok" : "warn"}`;
+      }
       $("#passwordNotice").classList.toggle("hidden", !state.me.requires_password_change);
       $("#passwordPanel").classList.toggle("hidden", !state.me.requires_password_change);
       $("#currentPasswordField").classList.toggle("hidden", state.me.requires_password_change);
@@ -6258,9 +7329,12 @@
       $("#newPasswordField").classList.toggle("span-12", state.me.requires_password_change);
       $("#newPasswordField").classList.toggle("span-6", !state.me.requires_password_change);
       const products = displayProductsForUser();
-      $("#productPills").innerHTML = products.length
-        ? products.map((product) => `<span class="pill">${productLabels[product] || product}</span>`).join("")
-        : `<span class="pill warn">권한 없음</span>`;
+      const productPills = $("#productPills");
+      if (productPills) {
+        productPills.innerHTML = products.length
+          ? products.map((product) => `<span class="pill">${productLabels[product] || product}</span>`).join("")
+          : `<span class="pill warn">권한 없음</span>`;
+      }
     }
 
     function isAgentLaunchBusy() {
@@ -6270,33 +7344,54 @@
     function renderAgent() {
       const agent = state.agent?.agent;
       const status = agent?.connected ? "연결됨" : "미연결";
-      $("#agentStatus").textContent = status;
-      $("#agentStatus").className = `pill ${agent?.connected ? "ok" : "warn"}`;
-      $("#agentLastSeen").textContent = formatTime(agent?.last_seen_at);
-      $("#agentVersion").textContent = agent?.version || "-";
-      $("#detectedPlatform").textContent = platformLabel(state.platform);
+      const agentStatus = $("#agentStatus");
+      if (agentStatus) {
+        agentStatus.textContent = status;
+        agentStatus.className = `pill ${agent?.connected ? "ok" : "warn"}`;
+      }
+      const agentLastSeen = $("#agentLastSeen");
+      if (agentLastSeen) agentLastSeen.textContent = formatTime(agent?.last_seen_at);
+      const agentVersion = $("#agentVersion");
+      if (agentVersion) agentVersion.textContent = agent?.version || "-";
+      const detectedPlatform = $("#detectedPlatform");
+      if (detectedPlatform) detectedPlatform.textContent = platformLabel(state.platform);
       const download = currentDownload();
-      $("#downloadLabel").textContent = download
-        ? download.exists ? download.label : `${download.label} 준비 중`
-        : "지원 준비 중";
-      $("#downloadAgentBtn").disabled = !download?.exists || isDownloadBusy();
-      $("#downloadAgentBtn").textContent = isDownloadBusy()
-        ? "다운로드 여는 중"
-        : hasBundleEntitlement() && download?.exists ? "통합 실행기 다운로드" : download?.exists ? "실행기 다운로드" : "준비 중";
-      $("#launchAgentBtn").disabled = isAgentLaunchBusy();
-      $("#launchAgentBtn").textContent = isAgentLaunchBusy() ? "연결 확인 중" : agent?.connected ? "실행기 열기" : "실행기 연결";
+      const downloadLabel = $("#downloadLabel");
+      if (downloadLabel) {
+        downloadLabel.textContent = download
+          ? download.exists ? download.label : `${download.label} 준비 중`
+          : "지원 준비 중";
+      }
+      const downloadAgentBtn = $("#downloadAgentBtn");
+      if (downloadAgentBtn) {
+        downloadAgentBtn.disabled = !download?.exists || isDownloadBusy();
+        downloadAgentBtn.textContent = isDownloadBusy()
+          ? "다운로드 여는 중"
+          : hasBundleEntitlement() && download?.exists ? "통합 실행기 다운로드" : download?.exists ? "실행기 다운로드" : "준비 중";
+      }
+      const launchAgentBtn = $("#launchAgentBtn");
+      if (launchAgentBtn) {
+        launchAgentBtn.disabled = isAgentLaunchBusy();
+        launchAgentBtn.textContent = isAgentLaunchBusy() ? "연결 확인 중" : agent?.connected ? "실행기 열기" : "실행기 연결";
+      }
       const versionInfo = effectiveVersionInfo();
       const shouldShowUpdate = Boolean(versionInfo?.update_available || versionInfo?.update_required);
-      $("#updateNotice").classList.toggle("hidden", !shouldShowUpdate);
-      if (shouldShowUpdate) {
-        $("#updateNotice").className = `notice ${updateNoticeSeverity(versionInfo)}`;
-        $("#updateNotice").textContent = updateNoticeMessage(versionInfo);
+      const updateNotice = $("#updateNotice");
+      if (updateNotice) {
+        updateNotice.classList.toggle("hidden", !shouldShowUpdate);
+        if (shouldShowUpdate) {
+          updateNotice.className = `notice ${updateNoticeSeverity(versionInfo)}`;
+          updateNotice.textContent = updateNoticeMessage(versionInfo);
+        }
       }
       const mismatch = splitAgentMismatchInfo();
-      $("#agentCompatibilityNotice").classList.toggle("hidden", !mismatch);
-      if (mismatch) {
-        $("#agentCompatibilityNotice").className = "notice warn";
-        $("#agentCompatibilityNotice").textContent = `${mismatch.message} 다운로드 버튼은 통합 설치 파일만 받습니다.`;
+      const agentCompatibilityNotice = $("#agentCompatibilityNotice");
+      if (agentCompatibilityNotice) {
+        agentCompatibilityNotice.classList.toggle("hidden", !mismatch);
+        if (mismatch) {
+          agentCompatibilityNotice.className = "notice warn";
+          agentCompatibilityNotice.textContent = `${mismatch.message} 다운로드 버튼은 통합 설치 파일만 받습니다.`;
+        }
       }
     }
 
@@ -6343,6 +7438,7 @@
       const agent = state.agent?.agent;
       const versionInfo = agent?.version_info || state.versionInfo || {};
       const download = currentDownload();
+      const macUnsupported = isMacIntelUnsupportedDownload(download);
       const status = updateStatusInfo();
       $("#updatesOverall").textContent = status.label;
       $("#updatesOverall").className = `pill ${status.className}`;
@@ -6356,10 +7452,12 @@
       $("#updateDownloadMeta").textContent = download?.exists
         ? `${download.filename} · ${formatBytes(download.size)}`
         : download?.filename || "-";
-      $("#updateDownloadStatus").textContent = download?.exists ? "다운로드 가능" : "준비 중";
-      $("#updateDownloadStatus").className = `pill ${download?.exists ? "ok" : "warn"}`;
+      $("#updateDownloadStatus").textContent = macUnsupported ? "Intel Mac 미지원" : download?.exists ? "다운로드 가능" : "준비 중";
+      $("#updateDownloadStatus").className = `pill ${download?.exists && !macUnsupported ? "ok" : "warn"}`;
       $("#updateDownloadBtn").disabled = !download?.exists || isDownloadBusy();
-      $("#updateDownloadBtn").textContent = isDownloadBusy() ? "다운로드 여는 중" : "설치 파일 다운로드";
+      $("#updateDownloadBtn").textContent = isDownloadBusy()
+        ? "다운로드 여는 중"
+        : macUnsupported ? "Intel Mac 미지원 안내" : "설치 파일 다운로드";
       $("#updatesNotice").className = `notice ${status.className}`;
       $("#updatesNotice").classList.remove("hidden");
       $("#updatesNotice").textContent = versionInfo.release_notes
@@ -6367,6 +7465,9 @@
         : status.message;
       if (hasBundleEntitlement()) {
         $("#updatesNotice").textContent += " 통합 권한 계정은 혼선을 막기 위해 통합 설치 파일만 표시합니다.";
+      }
+      if (macUnsupported) {
+        $("#updatesNotice").textContent += " 현재 Mac 설치 파일은 Apple Silicon 전용이며 Intel Mac은 지원하지 않습니다.";
       }
       const rows = visibleDownloads();
       $("#updatesDownloadList").innerHTML = rows.length
@@ -6396,6 +7497,7 @@
     function renderQuickActions() {
       ensureSelectedJobKind();
       renderJobEmployeeSwitch();
+      renderSangsuQuoteForm();
       for (const [kind, config] of Object.entries(jobFormConfigs)) {
         const form = $(`#${config.formId}`);
         if (form) form.classList.toggle("hidden", kind !== state.selectedJobKind);
@@ -6461,14 +7563,112 @@
         || null;
     }
 
+    function yunmiTextBlock(label, value) {
+      return `<div><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value || "-")}</span></div>`;
+    }
+
+    function yunmiTitleListHtml(items) {
+      const titles = Array.isArray(items) ? items.filter(Boolean) : [];
+      return titles.length
+        ? `<ol class="yunmi-title-list">${titles.slice(0, 3).map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>`
+        : "";
+    }
+
+    function yunmiTimeRowsHtml(rows) {
+      return `<div class="yunmi-time-list">${(Array.isArray(rows) ? rows : []).map((row) => `
+        <article class="yunmi-time-row">
+          <div class="yunmi-time">${escapeHtml(row.time || "-")}</div>
+          <div class="yunmi-time-body">
+            ${yunmiTextBlock("화면/행동", row.screen || row.visual)}
+            ${yunmiTextBlock("대사", row.dialogue || row.line)}
+            ${yunmiTextBlock("자막", row.subtitles || row.caption)}
+          </div>
+        </article>
+      `).join("")}</div>`;
+    }
+
+    function yunmiGuideHtml(guide = {}) {
+      return `
+        <div class="yunmi-guide-grid">
+          ${yunmiTextBlock("비주얼", guide.visual)}
+          ${yunmiTextBlock("오디오/톤", guide.audio_tone || guide.audio)}
+          ${yunmiTextBlock("에너지", guide.energy)}
+          ${yunmiTextBlock("표정/제스처", guide.expression_gesture || guide.gesture)}
+          ${yunmiTextBlock("컷 전환", guide.cut_points || guide.cuts)}
+        </div>
+      `;
+    }
+
+    function yunmiCtaHtml(ctas = {}) {
+      return `
+        <div class="yunmi-cta-grid">
+          ${yunmiTextBlock("댓글 유도형", ctas.comment)}
+          ${yunmiTextBlock("팔로우 유도형", ctas.follow)}
+          ${yunmiTextBlock("저장 유도형", ctas.save)}
+        </div>
+      `;
+    }
+
+    function yunmiAnchorBridgeHtml(items) {
+      const rows = Array.isArray(items) ? items : [];
+      return rows.length
+        ? `<ul class="yunmi-anchor-list">${rows.map((item) => `<li><strong>${escapeHtml(item.time || "구간")}</strong> · 앵커: ${escapeHtml(item.anchor || "-")}<br>브릿지: ${escapeHtml(item.bridge || "-")}</li>`).join("")}</ul>`
+        : "";
+    }
+
+    function yunmiHookOptionsHtml(options) {
+      const rows = Array.isArray(options) ? options.slice(0, 3) : [];
+      return rows.length ? `
+        <section class="songi-output-panel wide">
+          <h5>후킹 방식 후보</h5>
+          <div class="yunmi-hook-list">
+            ${rows.map((item) => `
+              <div>
+                <strong>${escapeHtml(item.label || item.code || "후킹")}</strong>
+                <span>${escapeHtml(item.sample || "")}</span>
+                <span class="small muted">${escapeHtml(item.reason || "")}</span>
+              </div>
+            `).join("")}
+          </div>
+        </section>
+      ` : "";
+    }
+
     function yunmiVariantHtml(variant) {
       if (!variant) return "";
+      const hook = variant.hook_method || {};
       return `
-        <section class="songi-output-panel">
-          <h5>${escapeHtml(variant.title || variant.code || "초안")}</h5>
-          <p><strong>각도</strong><br>${escapeHtml(variant.angle || "-")}</p>
-          <p><strong>후킹</strong><br>${escapeHtml(variant.hook || "-")}</p>
-          <pre>${escapeHtml(variant.script || "")}</pre>
+        <section class="yunmi-script-card">
+          <div>
+            <h5>${escapeHtml(variant.title || `${variant.code || ""}안`)}</h5>
+            <p>${escapeHtml(variant.angle || "")}</p>
+          </div>
+          <div class="research-meta">
+            <span class="pill ok">${escapeHtml(hook.label || "후킹")}</span>
+            <span class="pill">${escapeHtml(variant.duration || "60초")}</span>
+            <span class="pill">${escapeHtml(variant.tone || "톤")}</span>
+          </div>
+          ${yunmiTitleListHtml(variant.title_candidates)}
+          ${yunmiTextBlock("선택 이유", hook.reason)}
+          ${yunmiTextBlock("훅", variant.hook || hook.sample)}
+          ${yunmiTimeRowsHtml(variant.rows)}
+          <details class="yunmi-details">
+            <summary>앵커 / 촬영 가이드 / CTA</summary>
+            <div style="display:grid;gap:12px;margin-top:10px;">
+              <div>
+                <h6 class="yunmi-section-title">앵커 & 브릿지</h6>
+                ${yunmiAnchorBridgeHtml(variant.anchor_bridges)}
+              </div>
+              <div>
+                <h6 class="yunmi-section-title">촬영 가이드</h6>
+                ${yunmiGuideHtml(variant.shooting_guide)}
+              </div>
+              <div>
+                <h6 class="yunmi-section-title">CTA 후보</h6>
+                ${yunmiCtaHtml(variant.cta_candidates)}
+              </div>
+            </div>
+          </details>
           <button class="btn" type="button" data-yunmi-copy-variant="${escapeHtml(variant.code || "")}">이 안 복사</button>
         </section>
       `;
@@ -6482,32 +7682,44 @@
       const cost = result.cost || {};
       const isFailed = job?.status === "failed" || result.ok === false;
       const modeLabel = result.mode === "paid_ready_mock"
-        ? "AI beta mock"
+        ? "AI mock"
+        : result.mode === "ai_generated"
+          ? "AI 생성"
         : result.mode === "no_paid_alpha"
           ? "no-paid alpha"
           : result.mode || "윤미";
       return `
-        <div>
+        <div class="yunmi-result">
           <h4>윤미 초안 결과</h4>
           <p>${escapeHtml(result.summary || result.error || "초안이 생성되었습니다.")}</p>
           <div class="research-meta">
             <span class="pill ${isFailed ? "bad" : "ok"}">${escapeHtml(modeLabel)}</span>
             ${paidCall.request_id ? `<span class="pill">요청 ID ${escapeHtml(paidCall.request_id)}</span>` : ""}
             ${cost.estimated_total_won ? `<span class="pill">예상 ${escapeHtml(wonLabel(cost.estimated_total_won))}</span>` : ""}
+            ${paidCall.executed === true && cost.total_won ? `<span class="pill ${isFailed ? "bad" : "ok"}">실행 ${escapeHtml(wonLabel(cost.total_won))}</span>` : ""}
+            ${paidCall.executed === true ? `<span class="pill ${isFailed ? "bad" : "ok"}">${escapeHtml(paidCall.status === "failed" ? "AI 호출 실패" : "Gemini 호출 완료")}</span>` : ""}
             ${paidCall.executed === false ? `<span class="pill ok">유료 호출 없음</span>` : ""}
             <span class="pill">${escapeHtml(formatTime(job?.updated_at || job?.created_at))}</span>
           </div>
           ${isFailed ? `<div class="actions" style="margin-top:10px;"><button class="btn" type="button" data-yunmi-report-error="${escapeHtml(job?.id || "")}">오류 보고 보내기</button></div>` : ""}
         </div>
+        ${yunmiHookOptionsHtml(result.hook_options)}
         ${patterns.length ? `
           <section class="songi-output-panel wide">
             <h5>관찰 패턴</h5>
             <ul>${patterns.map((item) => `<li><strong>${escapeHtml(item.label || "")}</strong><br>${escapeHtml(item.insight || "")}</li>`).join("")}</ul>
           </section>
         ` : ""}
-        <div class="songi-output-grid">
+        <div class="yunmi-script-grid">
           ${variants.map(yunmiVariantHtml).join("")}
         </div>
+        ${result.final_recommendation ? `
+          <section class="songi-output-panel wide">
+            <h5>최종 추천</h5>
+            <p>${escapeHtml(result.final_recommendation.text || "")}</p>
+            ${Array.isArray(result.final_recommendation.criteria) ? `<ul>${result.final_recommendation.criteria.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
+          </section>
+        ` : ""}
       `;
     }
 
@@ -6522,7 +7734,9 @@
     }
 
     function renderJobEmployeeSwitch() {
-      const runnableEntries = runnableEntitledEmployees().map(({ key, employee }) => [key, employee]);
+      const runnableEntries = runnableEntitledEmployees()
+        .filter(({ employee }) => employee.jobKind && jobFormConfigs[employee.jobKind])
+        .map(({ key, employee }) => [key, employee]);
       $("#jobEmployeeSwitch").innerHTML = runnableEntries.map(([key, employee]) => {
         const kind = employeeJobKind(key);
         const status = employeeStatusInfo(key);
@@ -6549,10 +7763,10 @@
     }
 
     function renderStaffConsole() {
-      const entries = runnableEntitledEmployees().map(({ key, employee }) => [key, employee]);
+      const entries = staffCatalogEmployees().map(({ key, employee }) => [key, employee]);
       const statuses = entries.map(([key]) => employeeStatusInfo(key));
       const availableCount = statuses.filter((item) => item.status === "available").length;
-      const needsSetupCount = statuses.filter((item) => ["needs_setup", "agent_offline", "unsupported_agent"].includes(item.status)).length;
+      const needsSetupCount = statuses.filter((item) => ["needs_setup", "agent_offline", "unsupported_agent", "windows_only"].includes(item.status)).length;
       const noAccessCount = statuses.filter((item) => item.status === "no_entitlement").length;
       $("#staffTotalCount").textContent = String(entries.length);
       $("#staffAvailableCount").textContent = String(availableCount);
@@ -6579,7 +7793,7 @@
               </span>
               <span class="staff-card-meta">
                 ${(employee.meta || []).slice(0, 3).map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("")}
-                <span class="pill">${recent ? `최근 ${escapeHtml(recent.status)}` : "작업 없음"}</span>
+                <span class="pill">${isExternalDownloadEmployee(employee) ? `${escapeHtml(employeePlatformLabel(employee))} 앱` : recent ? `최근 ${escapeHtml(recent.status)}` : "작업 없음"}</span>
               </span>
             </button>
           `;
@@ -6613,6 +7827,22 @@
       $("#staffDetailMeta").innerHTML = (selected.meta || [])
         .map((item) => `<span class="pill">${escapeHtml(item)}</span>`)
         .join("") || `<span class="pill">준비 중</span>`;
+      const resumeGrid = $("#staffResumeGrid");
+      if (resumeGrid) {
+        resumeGrid.innerHTML = employeeResumeBoxes(selected, status).map((item) => `
+          <div class="resume-box">
+            <strong>${escapeHtml(item.label)}</strong>
+            <span>${escapeHtml(item.detail)}</span>
+          </div>
+        `).join("");
+      }
+      const resumeVideo = $("#staffResumeVideo");
+      if (resumeVideo) {
+        resumeVideo.innerHTML = `
+          <strong>${escapeHtml(selected.name)} 데모 영상</strong>
+          <span>${escapeHtml(selected.name)}가 실제로 어떤 일을 맡는지 보여주는 짧은 영상 설명 영역입니다. 영상 파일은 이후 연결 예정입니다.</span>
+        `;
+      }
       const recentJobs = employeeRecentJobs(selectedKey, 3);
       $("#staffRecentJobs").innerHTML = recentJobs.length
         ? recentJobs.map((job) => `
@@ -6624,7 +7854,9 @@
             ${statusPill(job.status)}
           </div>
         `).join("")
-        : `<div class="empty">최근 작업이 없습니다.</div>`;
+        : isExternalDownloadEmployee(selected)
+          ? `<div class="empty">${escapeHtml(selected.name)}은 설치형 앱이라 웹 작업 기록을 만들지 않습니다.</div>`
+          : `<div class="empty">최근 일 맡긴 기록이 없습니다.</div>`;
       const action = employeeAction(selectedKey);
       $("#staffDetailAction").textContent = action.label;
       $("#staffDetailAction").dataset.action = action.action;
@@ -7500,7 +8732,9 @@
       }
       const selected = employees[state.selectedEmployee] || employees.yeri || entries[0]?.[1];
       const selectedKey = state.selectedEmployee;
-      $("#employeeList").innerHTML = entries.map(([key, employee]) => {
+      const employeeList = $("#employeeList");
+      if (!employeeList) return;
+      employeeList.innerHTML = entries.map(([key, employee]) => {
         const status = employeeStatusInfo(key);
         const active = key === state.selectedEmployee;
         return `
@@ -7553,7 +8787,7 @@
       if (!enabled) {
         const reason = jobBlockReason(form.dataset.jobKind) || "설정 확인 후 사용할 수 있습니다.";
         const action = jobBlockerAction(form.dataset.jobKind);
-        hint.textContent = "준비가 끝나면 작업을 지시할 수 있습니다.";
+        hint.textContent = "준비가 끝나면 일을 맡길 수 있습니다.";
         hint.className = "small muted";
         blocker.innerHTML = action
           ? `<span>${escapeHtml(reason)}</span><button class="btn" type="button" data-job-blocker-action="${escapeHtml(action.action)}">${escapeHtml(action.label)}</button>`
@@ -7567,18 +8801,22 @@
 
     function renderJobs() {
       const rows = visibleJobRows();
-      $("#jobCount").textContent = String(rows.length);
-      $("#recentJobs").innerHTML = rows.length
-        ? rows.slice(0, 3).map((job) => `
-          <div class="row">
-            <span>
-              <strong>${escapeHtml(job.label)}</strong><br>
-              ${jobFailureSummaryHtml(job, 1) || `<span class="small muted">${formatTime(job.updated_at || job.created_at)}</span>`}
-            </span>
-            ${statusPill(job.status)}
-          </div>
-        `).join("")
-        : `<div class="empty">아직 작업이 없습니다.</div>`;
+      const jobCount = $("#jobCount");
+      if (jobCount) jobCount.textContent = String(rows.length);
+      const recentJobs = $("#recentJobs");
+      if (recentJobs) {
+        recentJobs.innerHTML = rows.length
+          ? rows.slice(0, 3).map((job) => `
+            <div class="row">
+              <span>
+                <strong>${escapeHtml(job.label)}</strong><br>
+                ${jobFailureSummaryHtml(job, 1) || `<span class="small muted">${formatTime(job.updated_at || job.created_at)}</span>`}
+              </span>
+              ${statusPill(job.status)}
+            </div>
+          `).join("")
+          : `<div class="empty">아직 일 맡긴 기록이 없습니다.</div>`;
+      }
 
       $("#jobsTable").innerHTML = rows.length
         ? `<table>
@@ -7605,7 +8843,7 @@
               `).join("")}
             </tbody>
           </table>`
-        : `<div class="empty">생성된 작업이 없습니다.</div>`;
+        : `<div class="empty">생성된 요청이 없습니다.</div>`;
       $$("#jobsTable [data-songi-table-item]").forEach((button) => {
         button.addEventListener("click", () => {
           const itemId = button.dataset.songiTableItem || "";
@@ -7712,6 +8950,7 @@
       renderAccount();
       renderAgent();
       renderSetup();
+      renderNextAction();
       renderWebSettings();
       renderUserSecrets();
       renderEmployeeProfile();
@@ -7724,6 +8963,7 @@
       renderReportResult();
       renderReportsList();
       renderReportAttentionPrompt();
+      renderServiceNoticePrompt();
       renderWebSecretNoticePrompt();
       renderOnboardingGuide();
     }
@@ -8424,7 +9664,7 @@
       const result = job.result || {};
       const paidCall = result.paid_call || {};
       const report = await submitWebErrorReport({
-        workContext: "윤미 스크립트 AI 베타",
+        workContext: "윤미 스크립트 AI 생성",
         visibleError: result.error || job.logs?.slice(-1)[0]?.message || "윤미 스크립트 생성 실패",
         userNote: [
           `작업 ID: ${job.id || "-"}`,
@@ -8586,7 +9826,73 @@
       }, 2500);
     }
 
-    async function downloadAgent() {
+    function isWindowsInstallerDownload(download = currentDownload()) {
+      if (!download?.exists) return false;
+      const filename = String(download.filename || "").toLowerCase();
+      return download.platform === "windows" || filename.endsWith(".exe");
+    }
+
+    function isMacInstallerDownload(download = currentDownload()) {
+      if (!download?.exists) return false;
+      const filename = String(download.filename || "").toLowerCase();
+      return download.platform === "macos" || filename.endsWith(".dmg");
+    }
+
+    function isMacIntelUnsupportedDownload(download = currentDownload(), info = state.macArchitecture) {
+      return isMacInstallerDownload(download) && info?.architecture === "intel";
+    }
+
+    function showSmartScreenDownloadPrompt() {
+      $("#smartScreenDownloadPrompt")?.classList.remove("hidden");
+    }
+
+    function hideSmartScreenDownloadPrompt() {
+      $("#smartScreenDownloadPrompt")?.classList.add("hidden");
+    }
+
+    function showMacCompatibilityDownloadPrompt(info) {
+      const meta = $("#macCompatibilityDetectedMeta");
+      if (meta) {
+        meta.textContent = macArchitectureMeta(info)
+          || "브라우저에서 Mac 종류를 자동 확인하지 못했습니다.";
+      }
+      $("#macCompatibilityDownloadPrompt")?.classList.remove("hidden");
+    }
+
+    function hideMacCompatibilityDownloadPrompt() {
+      $("#macCompatibilityDownloadPrompt")?.classList.add("hidden");
+    }
+
+    function showMacUnsupportedDownloadPrompt(info) {
+      const meta = $("#macUnsupportedDetectedMeta");
+      if (meta) {
+        meta.textContent = macArchitectureMeta(info)
+          || "Intel Mac으로 감지되어 다운로드를 중단했습니다.";
+      }
+      $("#macUnsupportedDownloadPrompt")?.classList.remove("hidden");
+    }
+
+    function hideMacUnsupportedDownloadPrompt() {
+      $("#macUnsupportedDownloadPrompt")?.classList.add("hidden");
+    }
+
+    async function ensureMacDownloadSupported(options, download) {
+      if (!isMacInstallerDownload(download)) return true;
+      const info = await detectMacArchitecture();
+      state.macArchitecture = info;
+      if (isMacIntelUnsupportedDownload(download, info)) {
+        renderUpdates();
+        showMacUnsupportedDownloadPrompt(info);
+        return false;
+      }
+      if (info.architecture !== "apple_silicon" && !options.macCompatibilityConfirmed) {
+        showMacCompatibilityDownloadPrompt(info);
+        return false;
+      }
+      return true;
+    }
+
+    async function downloadAgent(options = {}) {
       const download = currentDownload();
       if (!download?.exists) {
         showToast("이 환경의 설치 파일이 아직 준비되지 않았습니다.");
@@ -8594,6 +9900,13 @@
       }
       if (isDownloadBusy()) {
         showToast("다운로드 창을 여는 중입니다. 브라우저의 다운로드 목록을 확인해주세요.");
+        return;
+      }
+      if (!(await ensureMacDownloadSupported(options, download))) {
+        return;
+      }
+      if (!options.smartScreenConfirmed && isWindowsInstallerDownload(download)) {
+        showSmartScreenDownloadPrompt();
         return;
       }
       try {
@@ -8679,13 +9992,17 @@
         const command = await waitForAgentCommand(created.command?.id, 60000, { returnOnDelivered: false });
         if (command?.status === "failed") {
           const message = command.logs?.slice(-1)[0]?.message || "로컬 설정 창을 열지 못했습니다.";
-          showToast(message);
-          submitOperationalErrorReportOnce(
-            "local_settings_failed",
-            "로컬 설정 열기",
-            message,
-            `command_id=${created.command?.id || ""}`
-          ).catch(() => {});
+          if (message.includes("저장을 취소")) {
+            showToast("로컬 보안 설정 저장이 취소되었습니다. 필요하면 다시 열어 저장해주세요.");
+          } else {
+            showToast(message);
+            submitOperationalErrorReportOnce(
+              "local_settings_failed",
+              "로컬 설정 열기",
+              message,
+              `command_id=${created.command?.id || ""}`
+            ).catch(() => {});
+          }
           return;
         }
         if (command?.status === "done") {
@@ -8693,25 +10010,12 @@
           return;
         }
         if (command?.assigned_at || command?.status === "delivered") {
-          const message = "로컬 실행기가 설정 열기 요청을 받았지만 완료 응답이 늦습니다. 설정 창이 뒤에 숨어 있으면 작업 표시줄의 AIMAX를 확인해주세요.";
-          showToast(message);
-          submitOperationalErrorReportOnce(
-            "local_settings_slow_after_delivered",
-            "로컬 설정 열기",
-            message,
-            `command_id=${created.command?.id || ""}; command_status=${command?.status || ""}`
-          ).catch(() => {});
+          showToast("로컬 실행기가 설정 요청을 받았습니다. 설정 창이 보이지 않으면 작업 표시줄의 AIMAX를 확인해주세요.");
           return;
         }
         launchLocalAgent("open_settings");
         const message = "실행기 응답이 늦어 직접 설정 창 열기를 다시 요청했습니다.";
         showToast(message);
-        submitOperationalErrorReportOnce(
-          "local_settings_command_timeout",
-          "로컬 설정 열기",
-          message,
-          `command_id=${created.command?.id || ""}`
-        ).catch(() => {});
       } catch (error) {
         showToast(error.body?.error || "로컬 설정 열기 요청에 실패했습니다.");
       } finally {
@@ -8721,12 +10025,17 @@
     }
 
     function runUiAction(action) {
-      if (action === "download") {
+      if (action === "employee-download") {
+        downloadExternalEmployee(employees[state.selectedEmployee]);
+      } else if (action === "download") {
         downloadAgent();
       } else if (action === "launch") {
         launchLocalAgent();
       } else if (action === "settings") {
         openLocalSettings();
+      } else if (action === "staff-tab") {
+        const staffButton = $('[data-tab="staff"]');
+        if (staffButton) staffButton.click();
       } else if (action === "settings-tab") {
         const settingsButton = $('[data-tab="settings"]');
         if (settingsButton) settingsButton.click();
@@ -8734,8 +10043,11 @@
         const updatesButton = $('[data-tab="updates"]');
         if (updatesButton) updatesButton.click();
       } else if (action === "reports-tab") {
-        const reportsButton = $('[data-tab="reports"]');
-        if (reportsButton) reportsButton.click();
+        const updatesButton = $('[data-tab="updates"]');
+        if (updatesButton) updatesButton.click();
+        setTimeout(() => {
+          $("#reportForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 80);
       } else if (action === "research-tab") {
         state.selectedEmployee = "songi";
         state.selectedJobKind = "songi_research";
@@ -8773,7 +10085,7 @@
       try {
         const body = { kind, payload, ...localAgentJobTarget(kind) };
         if (kind === "yeri_write") {
-          const fallback = yeriServerGenerationFallbackState();
+          const fallback = yeriServerGenerationFallbackState(payload?.ai_model || selectedAiModel());
           if (fallback.available) {
             if (!confirmYeriServerGeneration(payload, fallback.config)) return null;
             body.server_generation = true;
@@ -8786,7 +10098,7 @@
         });
         const job = response.job || null;
         if (kind === "yunmi_script" && job?.id) state.lastYunmiJobId = job.id;
-        showToast(job?.status === "done" ? "작업이 완료되었습니다." : "작업 요청이 생성되었습니다.");
+        showToast(job?.status === "done" ? "맡긴 일이 완료되었습니다." : "일 요청이 생성되었습니다.");
         await refreshAll();
         if (!isWebModuleJobKind(kind)) startAgentStatusWatch(120000);
         return job;
@@ -8815,6 +10127,299 @@
       return text || undefined;
     }
 
+    function todayDateValue() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function sangsuDefaultState() {
+      return {
+        logo: "",
+        quoteDate: todayDateValue(),
+        issuerName: "",
+        clientName: "",
+        clientEmail: "",
+        projectName: "",
+        validDuration: "견적일로부터 14일",
+        deliverySchedule: "",
+        deliveryFormat: "",
+        notes: [
+          "견적 금액은 부가세 별도 기준이며, 최종 결제 시 부가세가 포함됩니다.",
+          "작업 범위가 변경되면 견적 금액과 일정이 조정될 수 있습니다.",
+          "최종 파일은 협의된 형식으로 전달됩니다.",
+        ].join("\n"),
+        message: "검토 후 조율이 필요한 부분이 있으면 편하게 말씀해주세요.",
+        signOffSender: "",
+        signOffDate: new Date().toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" }),
+        items: [
+          { category: "기본안", description: "", price: 0 },
+        ],
+      };
+    }
+
+    function sangsuStoredState() {
+      const fallback = sangsuDefaultState();
+      const saved = storageGet("localStorage", SANGSU_STORAGE_KEY);
+      if (!saved) return fallback;
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...fallback,
+          ...parsed,
+          items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : fallback.items,
+        };
+      } catch (_error) {
+        return fallback;
+      }
+    }
+
+    function sangsuFormFields() {
+      return {
+        quoteDate: "#sangsuQuoteDate",
+        issuerName: "#sangsuIssuerName",
+        clientName: "#sangsuClientName",
+        clientEmail: "#sangsuClientEmail",
+        projectName: "#sangsuProjectName",
+        validDuration: "#sangsuValidDuration",
+        deliverySchedule: "#sangsuDeliverySchedule",
+        deliveryFormat: "#sangsuDeliveryFormat",
+        notes: "#sangsuNotes",
+        message: "#sangsuMessage",
+        signOffSender: "#sangsuSignOffSender",
+        signOffDate: "#sangsuSignOffDate",
+      };
+    }
+
+    function sangsuReadItems() {
+      const rows = $$("#sangsuItems [data-sangsu-item-row]");
+      const items = rows.map((row) => ({
+        category: row.querySelector("[data-sangsu-field='category']")?.value || "",
+        description: row.querySelector("[data-sangsu-field='description']")?.value || "",
+        price: Number(row.querySelector("[data-sangsu-field='price']")?.value || 0),
+      }));
+      return items.length ? items : sangsuDefaultState().items;
+    }
+
+    function sangsuReadState() {
+      const data = sangsuDefaultState();
+      for (const [key, selector] of Object.entries(sangsuFormFields())) {
+        const field = $(selector);
+        if (field) data[key] = field.value || "";
+      }
+      data.logo = state.sangsuLogoDataUrl || "";
+      data.items = sangsuReadItems();
+      return data;
+    }
+
+    function sangsuWriteFields(data) {
+      for (const [key, selector] of Object.entries(sangsuFormFields())) {
+        const field = $(selector);
+        if (field) field.value = data[key] || "";
+      }
+      state.sangsuLogoDataUrl = data.logo || "";
+    }
+
+    function sangsuSaveState() {
+      const data = sangsuReadState();
+      storageSet("localStorage", SANGSU_STORAGE_KEY, JSON.stringify(data));
+      return data;
+    }
+
+    function renderSangsuItems(items = sangsuReadItems()) {
+      const target = $("#sangsuItems");
+      if (!target) return;
+      target.innerHTML = (items.length ? items : sangsuDefaultState().items).map((item, index) => `
+        <div class="sangsu-item-row" data-sangsu-item-row>
+          <div class="field">
+            <label>항목</label>
+            <input data-sangsu-field="category" value="${escapeHtml(item.category || "")}" placeholder="예: 기본안">
+          </div>
+          <div class="field">
+            <label>내용</label>
+            <input data-sangsu-field="description" value="${escapeHtml(item.description || "")}" placeholder="작업 내용을 입력">
+          </div>
+          <div class="field">
+            <label>금액</label>
+            <input data-sangsu-field="price" type="number" min="0" step="1000" value="${Number(item.price || 0) || ""}" placeholder="0">
+          </div>
+          <button class="btn" type="button" data-sangsu-remove-item="${index}" aria-label="항목 삭제">×</button>
+        </div>
+      `).join("");
+    }
+
+    function formatSangsuCurrency(value) {
+      return `${Math.round(Number(value) || 0).toLocaleString("ko-KR")}원`;
+    }
+
+    function formatSangsuDate(value) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return value || "";
+      const [year, month, day] = value.split("-").map(Number);
+      return `${year}년 ${month}월 ${day}일`;
+    }
+
+    function sangsuLines(value) {
+      return String(value || "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    function sangsuQuoteHtml(data, options = {}) {
+      const items = (data.items || []).filter((item) => item.category || item.description || Number(item.price || 0));
+      const subtotal = items.reduce((sum, item) => sum + Number(item.price || 0), 0);
+      const vat = Math.round(subtotal * 0.1);
+      const total = subtotal + vat;
+      const logoHtml = data.logo && String(data.logo).startsWith("data:image/")
+        ? `<img class="quote-logo" src="${data.logo}" alt="회사 로고">`
+        : "";
+      const notes = sangsuLines(data.notes);
+      const printClass = options.forPrint ? " quote-print-paper" : "";
+      return `
+        <article class="quote-paper${printClass}">
+          <div>
+            ${logoHtml}
+            <h4>견적서</h4>
+            <p style="margin:6px 0 0;text-align:center;color:#667085;letter-spacing:.08em;">QUOTATION</p>
+            <div style="clear:both;border-top:2px solid #0f766e;margin-top:18px;"></div>
+          </div>
+          <div class="quote-section-title">기본 정보</div>
+          <table class="quote-table">
+            <tbody>
+              <tr>
+                <th>견적일</th>
+                <td>${escapeHtml(formatSangsuDate(data.quoteDate)) || "-"}</td>
+                <th>유효기간</th>
+                <td>${escapeHtml(data.validDuration || "-")}</td>
+              </tr>
+              <tr>
+                <th>공급자</th>
+                <td>${escapeHtml(data.issuerName || "공급자명")}</td>
+                <th>받는 곳</th>
+                <td>${escapeHtml(data.clientName || "고객명")}</td>
+              </tr>
+              <tr>
+                <th>이메일</th>
+                <td colspan="3">${escapeHtml(data.clientEmail || "-")}</td>
+              </tr>
+              <tr>
+                <th>프로젝트명</th>
+                <td>${escapeHtml(data.projectName || "프로젝트명")}</td>
+                <th>납기 예정</th>
+                <td>${escapeHtml(data.deliverySchedule || "-")}</td>
+              </tr>
+              <tr>
+                <th>납품 형식</th>
+                <td colspan="3">${escapeHtml(data.deliveryFormat || "-")}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="quote-section-title">작업 항목</div>
+          <table class="quote-table">
+            <thead>
+              <tr>
+                <th style="width:20%;">항목</th>
+                <th>내용</th>
+                <th style="width:22%;">금액</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(items.length ? items : [{ category: "-", description: "-", price: 0 }]).map((item) => `
+                <tr>
+                  <td style="text-align:center;font-weight:700;">${escapeHtml(item.category || "-")}</td>
+                  <td>${escapeHtml(item.description || "-")}</td>
+                  <td style="text-align:right;">${formatSangsuCurrency(item.price)}</td>
+                </tr>
+              `).join("")}
+              <tr>
+                <td colspan="2" style="text-align:right;font-weight:700;">공급가액</td>
+                <td style="text-align:right;">${formatSangsuCurrency(subtotal)}</td>
+              </tr>
+              <tr>
+                <td colspan="2" style="text-align:right;font-weight:700;">부가세</td>
+                <td style="text-align:right;">${formatSangsuCurrency(vat)}</td>
+              </tr>
+              <tr>
+                <td colspan="2" style="text-align:right;font-weight:900;color:#0f766e;">총 견적 금액</td>
+                <td style="text-align:right;font-weight:900;color:#0f766e;">${formatSangsuCurrency(total)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="quote-section-title">유의사항</div>
+          <ul style="margin:10px 0 0;padding-left:18px;line-height:1.8;">
+            ${(notes.length ? notes : ["협의된 작업 범위와 일정에 따라 진행됩니다."]).map((note) => `<li>${escapeHtml(note.replace(/^[·\-*]\s*/, ""))}</li>`).join("")}
+          </ul>
+          <div class="quote-section-title">전달 말씀</div>
+          <div style="margin-top:10px;padding:18px 20px;background:#f2fbf8;border:1px solid #d6e8e5;line-height:1.8;white-space:pre-wrap;">${escapeHtml(data.message || "")}</div>
+          <div style="margin-top:22px;text-align:right;">
+            <strong style="font-size:15px;color:#0f766e;">${escapeHtml(data.signOffSender || data.issuerName || "공급자")}</strong>
+            <div style="margin-top:4px;color:#667085;">${escapeHtml(data.signOffDate || "")}</div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderSangsuQuoteForm() {
+      if (!$("#sangsuJobForm")) return;
+      const data = sangsuSaveState();
+      const preview = $("#sangsuPreview");
+      if (preview) preview.innerHTML = sangsuQuoteHtml(data);
+    }
+
+    function openSangsuPrintWindow() {
+      if (!canUseJob("sangsu_quote")) {
+        showToast(jobBlockReason("sangsu_quote") || "상수 권한 확인 후 사용할 수 있습니다.");
+        return;
+      }
+      const data = sangsuSaveState();
+      const popup = window.open("", "_blank", "width=960,height=900");
+      if (!popup) {
+        showToast("팝업 차단을 해제한 뒤 다시 시도해주세요.");
+        return;
+      }
+      popup.document.write(`
+        <!doctype html>
+        <html lang="ko">
+          <head>
+            <meta charset="utf-8">
+            <title>견적서_${escapeHtml(data.projectName || "프로젝트")}</title>
+            <style>
+              @page { size: A4; margin: 0; }
+              * { box-sizing: border-box; }
+              body { margin: 0; background: #eef2f7; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+              .print-toolbar { position: sticky; top: 0; z-index: 2; display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; background: #ffffff; border-bottom: 1px solid #d6dde4; }
+              .print-toolbar button { min-height: 38px; border: 1px solid #d6dde4; border-radius: 8px; background: #0f766e; color: white; padding: 8px 12px; cursor: pointer; }
+              .quote-paper { width: 794px; min-height: 1123px; margin: 18px auto; background: #ffffff; color: #111827; padding: 54px 50px; box-shadow: 0 10px 26px rgba(16, 24, 40, .12); font-size: 12px; }
+              .quote-paper h4 { margin: 0; color: #0f766e; font-size: 34px; letter-spacing: .28em; text-align: center; }
+              .quote-logo { height: 58px; max-width: 180px; object-fit: contain; float: left; }
+              .quote-table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+              .quote-table th, .quote-table td { border: 1px solid #d6dde4; padding: 9px 10px; vertical-align: top; }
+              .quote-table th { background: #e8f5f3; color: #0f5f59; font-weight: 800; text-align: center; }
+              .quote-section-title { margin-top: 24px; color: #0f766e; font-weight: 800; border-bottom: 2px solid #0f766e; padding-bottom: 6px; }
+              @media print {
+                body { background: #ffffff; }
+                .print-toolbar { display: none; }
+                .quote-paper { width: 210mm; min-height: 297mm; margin: 0; box-shadow: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="print-toolbar"><button type="button" onclick="window.print()">PDF로 저장/인쇄</button></div>
+            ${sangsuQuoteHtml(data, { forPrint: true })}
+          </body>
+        </html>
+      `);
+      popup.document.close();
+      popup.focus();
+    }
+
+    function resetSangsuQuote() {
+      if (!window.confirm("작성 중인 상수 견적서를 초기화할까요?")) return;
+      storageRemove("localStorage", SANGSU_STORAGE_KEY);
+      const data = sangsuDefaultState();
+      sangsuWriteFields(data);
+      renderSangsuItems(data.items);
+      renderSangsuQuoteForm();
+    }
+
     function newYunmiRequestId() {
       if (window.crypto?.randomUUID) return window.crypto.randomUUID();
       return `yunmi-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -8824,17 +10429,24 @@
       const model = selectedYunmiModel();
       const estimate = estimateYunmiCost(payload, model);
       return window.confirm([
-        "윤미 AI 베타 준비 모드로 초안을 생성합니다.",
-        `모델: ${aiModelLabel(model)} (${estimate.provider})`,
+        "윤미 AI 생성 모드로 초안을 생성합니다.",
+        `모델: ${yunmiAiModelLabel(model)} (${estimate.provider})`,
         `예상 원가: 약 ${wonLabel(estimate.won)}`,
         `추정 토큰: 입력 ${estimate.inputTokens.toLocaleString("ko-KR")} / 출력 ${estimate.outputTokens.toLocaleString("ko-KR")}`,
-        "이번 검증 모드는 실제 유료 AI 호출 없이 request id, 비용 확인, 중복 방지 흐름만 점검합니다.",
-        "자동 유료 재시도는 하지 않습니다. 진행할까요?",
+        "저장된 Gemini API 키로 실제 유료 AI 호출을 실행합니다.",
+        "자동 유료 재시도는 하지 않고, 요청 ID로 중복 제출을 막습니다. 진행할까요?",
       ].join("\n"));
     }
 
     async function boot() {
       state.platform = detectPlatform();
+      state.macArchitecture = detectMacArchitectureSync();
+      if (state.platform === "macos") {
+        detectMacArchitecture().then((info) => {
+          state.macArchitecture = info;
+          if (state.token) renderUpdates();
+        }).catch(() => {});
+      }
       state.webSettings = loadWebSettings();
       syncWebSettingsForm(true);
       if (!state.token) {
@@ -8878,6 +10490,56 @@
       }
     });
 
+    const sangsuInitialState = sangsuStoredState();
+    sangsuWriteFields(sangsuInitialState);
+    renderSangsuItems(sangsuInitialState.items);
+    renderSangsuQuoteForm();
+
+    $("#sangsuJobForm").addEventListener("input", (event) => {
+      if (event.target?.id === "sangsuLogo") return;
+      renderSangsuQuoteForm();
+    });
+
+    $("#sangsuLogo").addEventListener("change", (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        showToast("이미지 파일만 로고로 사용할 수 있습니다.");
+        event.target.value = "";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        state.sangsuLogoDataUrl = String(reader.result || "");
+        renderSangsuQuoteForm();
+      };
+      reader.readAsDataURL(file);
+      event.target.value = "";
+    });
+
+    $("#sangsuItems").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-sangsu-remove-item]");
+      if (!button) return;
+      const items = sangsuReadItems();
+      if (items.length <= 1) {
+        items[0] = { category: "", description: "", price: 0 };
+      } else {
+        items.splice(Number(button.dataset.sangsuRemoveItem || 0), 1);
+      }
+      renderSangsuItems(items);
+      renderSangsuQuoteForm();
+    });
+
+    $("#sangsuAddItemBtn").addEventListener("click", () => {
+      const items = sangsuReadItems();
+      items.push({ category: "", description: "", price: 0 });
+      renderSangsuItems(items);
+      renderSangsuQuoteForm();
+    });
+
+    $("#sangsuPrintBtn").addEventListener("click", () => openSangsuPrintWindow());
+    $("#sangsuResetBtn").addEventListener("click", () => resetSangsuQuote());
+
     $("#yeriJobForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const keywords = splitKeywords($("#yeriKeywords").value);
@@ -8920,8 +10582,8 @@
     $("#yunmiJobForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       const payload = yunmiFormPayload();
-      if (!payload.topic && !payload.objective && !payload.reference_url && !payload.reference_text) {
-        showToast("윤미에게 전달할 주제, 목표, 레퍼런스 중 하나는 입력해주세요.");
+      if (!payload.topic && !payload.objective && !payload.reference_text) {
+        showToast("윤미에게 전달할 주제, 목표, 레퍼런스 메모 중 하나는 입력해주세요. URL만으로는 대본 내용을 추출하지 않습니다.");
         $("#yunmiTopic")?.focus();
         return;
       }
@@ -8939,7 +10601,7 @@
       const submitButton = $("#yunmiSubmitBtn");
       const originalLabel = submitButton.textContent;
       submitButton.disabled = true;
-      submitButton.textContent = mode === "ai_beta" ? "AI 베타 확인 중..." : "초안 생성 중...";
+      submitButton.textContent = mode === "ai_beta" ? "AI 생성 중..." : "초안 생성 중...";
       try {
         const job = await createJob("yunmi_script", payload);
         if (job?.id) {
@@ -9342,7 +11004,7 @@
     });
 
     $("#refreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("갱신되었습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
-    $("#jobRefreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("작업 목록을 갱신했습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
+    $("#jobRefreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("일 맡긴 기록을 갱신했습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
     $("#reportRefreshBtn").addEventListener("click", () => refreshReports().then(() => {
       renderReportsList();
       showToast("오류 보고 목록을 갱신했습니다.");
@@ -9377,8 +11039,8 @@
         buttons.forEach((button) => { button.disabled = false; });
       }
     }
-    $("#downloadAgentBtn").addEventListener("click", downloadAgent);
-    $("#launchAgentBtn").addEventListener("click", launchLocalAgent);
+    $("#downloadAgentBtn")?.addEventListener("click", downloadAgent);
+    $("#launchAgentBtn")?.addEventListener("click", launchLocalAgent);
     $("#updateDownloadBtn").addEventListener("click", downloadAgent);
     $("#globalUpdateDownloadBtn").addEventListener("click", downloadAgent);
     $("#globalUpdateDetailsBtn").addEventListener("click", () => runUiAction("updates-tab"));
@@ -9389,6 +11051,11 @@
     });
     $("#requiredUpdateDetailsBtn").addEventListener("click", () => {
       hideRequiredUpdatePrompt();
+      runUiAction("updates-tab");
+    });
+    $("#serviceNoticeCloseBtn").addEventListener("click", () => hideServiceNoticePrompt(true));
+    $("#serviceNoticeUpdatesBtn").addEventListener("click", () => {
+      hideServiceNoticePrompt(true);
       runUiAction("updates-tab");
     });
     $("#openLocalSettingsBtn").addEventListener("click", openLocalSettings);
@@ -9424,7 +11091,7 @@
       const field = $(selector);
       if (field) field.addEventListener("change", renderYeriCostEstimate);
     });
-    ["#yunmiGenerationMode", "#yunmiAiModel", "#yunmiFormat", "#yunmiDuration", "#yunmiTone"].forEach((selector) => {
+    ["#yunmiGenerationMode", "#yunmiPlatform", "#yunmiPurpose", "#yunmiAiModel", "#yunmiFormat", "#yunmiDuration", "#yunmiTone"].forEach((selector) => {
       const field = $(selector);
       if (field) field.addEventListener("change", renderYunmiCostEstimate);
     });
@@ -9470,6 +11137,30 @@
     $("#installGuidePrompt").addEventListener("click", (event) => {
       if (event.target === event.currentTarget) hideInstallGuidePrompt();
     });
+    $("#smartScreenConfirmDownloadBtn")?.addEventListener("click", () => {
+      hideSmartScreenDownloadPrompt();
+      downloadAgent({ smartScreenConfirmed: true });
+    });
+    $("#smartScreenCancelDownloadBtn")?.addEventListener("click", hideSmartScreenDownloadPrompt);
+    $("#smartScreenDownloadPrompt")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) hideSmartScreenDownloadPrompt();
+    });
+    $("#macCompatibilityConfirmDownloadBtn")?.addEventListener("click", () => {
+      hideMacCompatibilityDownloadPrompt();
+      downloadAgent({ macCompatibilityConfirmed: true });
+    });
+    $("#macCompatibilityCancelDownloadBtn")?.addEventListener("click", hideMacCompatibilityDownloadPrompt);
+    $("#macCompatibilityDownloadPrompt")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) hideMacCompatibilityDownloadPrompt();
+    });
+    $("#macUnsupportedReportBtn")?.addEventListener("click", () => {
+      hideMacUnsupportedDownloadPrompt();
+      runUiAction("reports-tab");
+    });
+    $("#macUnsupportedCloseBtn")?.addEventListener("click", hideMacUnsupportedDownloadPrompt);
+    $("#macUnsupportedDownloadPrompt")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) hideMacUnsupportedDownloadPrompt();
+    });
     $("#reportAttentionResolvedBtn").addEventListener("click", () => sendReportAttentionResponse("resolved"));
     $("#reportAttentionStillBtn").addEventListener("click", () => sendReportAttentionResponse("still_failing"));
     $("#reportAttentionOpenBtn").addEventListener("click", () => openReportAttentionDetails(true));
@@ -9483,11 +11174,11 @@
     $("#webSecretNoticePrompt").addEventListener("click", (event) => {
       if (event.target === event.currentTarget) hideWebSecretNoticePrompt(true);
     });
-    $("#nextActionBtn").addEventListener("click", () => runUiAction($("#nextActionBtn").dataset.action));
-    $("#nextDownloadAgentBtn").addEventListener("click", downloadAgent);
-    $("#onboardingGuidePrimaryBtn").addEventListener("click", () => runUiAction($("#onboardingGuidePrimaryBtn").dataset.action));
-    $("#onboardingGuideSettingsBtn").addEventListener("click", () => runUiAction("settings-tab"));
-    $("#employeeDetailAction").addEventListener("click", () => {
+    $("#nextActionBtn")?.addEventListener("click", () => runUiAction($("#nextActionBtn").dataset.action));
+    $("#nextDownloadAgentBtn")?.addEventListener("click", downloadAgent);
+    $("#onboardingGuidePrimaryBtn")?.addEventListener("click", () => runUiAction($("#onboardingGuidePrimaryBtn").dataset.action));
+    $("#onboardingGuideSettingsBtn")?.addEventListener("click", () => runUiAction("settings-tab"));
+    $("#employeeDetailAction")?.addEventListener("click", () => {
       state.selectedJobKind = $("#employeeDetailAction").dataset.jobKind || state.selectedJobKind;
       runUiAction($("#employeeDetailAction").dataset.action);
     });
@@ -9639,17 +11330,17 @@
         $(`#${button.dataset.tab}Tab`).classList.remove("hidden");
         $("#pageTitle").textContent = button.textContent;
         $("#pageSubtitle").textContent = button.dataset.tab === "overview"
-          ? "계정 권한과 로컬 실행기 연결 상태를 확인합니다."
+          ? "AIMAX의 회사 뇌와 AI 직원들이 어떻게 연결되는지 보여줍니다."
           : button.dataset.tab === "staff"
-            ? "AI 직원의 권한, 설정 상태, 최근 작업을 확인합니다."
+            ? "채용한 AI 직원의 이력서, 기능, 사용 가능 상태를 확인합니다."
           : button.dataset.tab === "research"
             ? "송이가 URL과 메모를 리서치 브리프로 정리합니다."
           : button.dataset.tab === "jobs"
-            ? "웹에서 생성한 작업 요청과 실행 상태를 확인합니다."
+            ? "채용한 AI 직원에게 업무를 지시하고 진행 상태를 확인합니다."
             : button.dataset.tab === "settings"
               ? "로컬 실행기에 저장된 필수 설정 상태를 확인합니다."
             : button.dataset.tab === "updates"
-              ? "웹앱과 로컬 실행기 버전, 설치 파일을 확인합니다."
+              ? "업데이트, 설치 파일, 오류 보고와 처리 상태를 확인합니다."
               : "오류 상황을 한 곳으로 모읍니다.";
       });
     });

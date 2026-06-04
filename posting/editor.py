@@ -373,6 +373,11 @@ def navigate_to_editor(driver, naver_id=None, naver_pw=None):
     except Exception:
         pass
 
+    try:
+        _save_editor_debug(driver, "loaded")
+    except Exception:
+        pass
+
     logger.info("글쓰기 화면 준비 완료")
 
 
@@ -520,18 +525,18 @@ def _reset_inline_formatting(driver):
     꺼져 있는 서식을 역활성화하여 켜는 부작용을 막기 위해, 실제 active 상태인 서식만 골라서 비활성화합니다.
     """
     logger.info("인라인 서식(볼드, 취소선, 밑줄 등) 상태 검사 및 정밀 초기화 시작...")
-    
+
     # 툴바 상태 동기화를 위해 본문 영역에 확실하게 포커스를 먼저 부여합니다.
     _focus_content_area(driver)
     time.sleep(0.5)
-    
+
     targets = [
         ("볼드", [BOLD_BUTTON, "button[class*='bold']", ".se-toolbar-item-bold button"]),
         ("취소선", ["button[class*='strikethrough']", ".se-toolbar-item-strikethrough button", ".se-strikethrough-toolbar-button"]),
         ("밑줄", ["button[class*='underline']", ".se-toolbar-item-underline button", ".se-underline-toolbar-button"]),
         ("기울임", ["button[class*='italic']", ".se-toolbar-item-italic button", ".se-italic-toolbar-button"]),
     ]
-    
+
     for name, selectors in targets:
         button = None
         for sel in selectors:
@@ -542,7 +547,7 @@ def _reset_inline_formatting(driver):
                     break
             except Exception:
                 continue
-                
+
         if button:
             try:
                 # 디버그 로그 추가
@@ -553,7 +558,7 @@ def _reset_inline_formatting(driver):
                     pass
                 logger.info(f"[디버그] {name} 버튼 HTML: {button.get_attribute('outerHTML')}")
                 logger.info(f"[디버그] {name} 버튼 부모 HTML: {parent_html[:200]}")
-                
+
                 is_active = _toolbar_button_is_active(button)
                 logger.info(f"[서식검사] {name} 버튼 감지됨 (활성화 상태: {is_active})")
                 if is_active:
@@ -570,7 +575,14 @@ def input_title(driver, title):
     if not title:
         raise RuntimeError("제목이 비어 있어 Smart Editor에 입력할 수 없습니다.")
     logger.info(f"제목 입력 시도: {title}")
-    
+
+    # 방어: 작성중 글 팝업이 아직 떠 있으면 Cmd/Ctrl+A(전체선택)가 허공으로 날아가
+    # 제목이 조용히 비워진다. 제목 입력 직전 한 번 더 정리한다.
+    if _draft_popup_visible(driver):
+        logger.info("제목 입력 직전 작성중 글 팝업 잔존 — 재정리 시도")
+        _dismiss_draft_popup(driver, timeout=5)
+        wait_short()
+
     # 1. 제목 영역의 껍데기(컨테이너)를 먼저 확실히 클릭하여 React 편집 모드를 동적 활성화합니다.
     title_container_selectors = [
         ".se-section-documentTitle",
@@ -578,7 +590,7 @@ def input_title(driver, title):
         ".se-title-text",
         TITLE_AREA,
     ]
-    
+
     container_element = None
     for sel in title_container_selectors:
         try:
@@ -589,7 +601,7 @@ def input_title(driver, title):
                 break
         except Exception:
             continue
-            
+
     if container_element:
         try:
             human_click(driver, container_element)
@@ -597,7 +609,7 @@ def input_title(driver, title):
             time.sleep(0.5) # React가 DOM을 업데이트하여 진짜 입력 필드를 생성할 시간 부여
         except Exception as e:
             logger.warning(f"제목 컨테이너 클릭 실패: {e}")
-            
+
     # 2. 클릭 후 동적으로 렌더링된 진짜 제목 문단(p)을 우선 탐색한다.
     # Smart Editor는 빈 span.__se-node 안에 placeholder를 함께 두는 경우가 있어
     # span을 먼저 잡으면 입력/검증이 빈 값으로 남을 수 있다.
@@ -615,7 +627,7 @@ def input_title(driver, title):
         ".se-title-text",
         TITLE_AREA,
     ]
-    
+
     title_element = None
     for sel in title_editable_selectors:
         try:
@@ -626,7 +638,7 @@ def input_title(driver, title):
                 break
         except Exception:
             continue
-            
+
     if not title_element:
         title_element = driver.find_element(By.CSS_SELECTOR, TITLE_AREA)
         logger.warning(f"적합한 제목 입력 엘리먼트를 찾지 못해 기본 영역({TITLE_AREA})을 타겟팅합니다.")
@@ -775,7 +787,7 @@ def input_title(driver, title):
     # 최종 안전 차단 장치: 제목이 제대로 입력되지 않은 경우 저장을 진행하지 않고 예외 발생
     if not actual or actual.strip() == "":
         raise RuntimeError(f"Smart Editor 제목 입력에 실패했습니다. (입력 목표값: {title})")
-        
+
     logger.info(f"제목 입력 최종 성공 확인: {actual[:80]}")
 
 
