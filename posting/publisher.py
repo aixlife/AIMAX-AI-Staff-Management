@@ -413,6 +413,33 @@ def save_draft(driver):
     return confirmed
 
 
+def _accept_alert_if_present(driver, context="publish", attempts=4, gap=0.6):
+    """발행 confirm 직후 네이버가 게시글로 리다이렉트하며 띄우는 beforeunload/이동확인
+    다이얼로그를 자동 수락한다.
+
+    처리하지 않으면 Selenium 후속 명령이 UnexpectedAlertPresentException 으로 막혀
+    '발행은 됐는데 다음으로 안 넘어감'(특히 다중 포스팅) 증상이 발생한다.
+    다이얼로그가 confirm 직후 약간 지연돼 뜨는 경우가 있어 짧게 여러 번 폴링한다.
+    engagement.auto_comment.handle_possible_alert 와 동일한 방어 패턴(발행 경로용).
+    """
+    accepted = False
+    for i in range(max(1, attempts)):
+        try:
+            alert = driver.switch_to.alert
+            text = (alert.text or "")[:120]
+            logger.warning(f"[{context}] 발행 후 alert 자동 수락: {text}")
+            alert.accept()
+            accepted = True
+            time.sleep(gap)  # 연속 다이얼로그 대비 잠깐 대기 후 재확인
+            continue
+        except Exception:
+            # 이미 하나 처리했으면 종료. 첫 회 miss 는 confirm 직후 지연 발생 대비 한 번만 더 대기.
+            if accepted or i >= 1:
+                break
+            time.sleep(gap)
+    return accepted
+
+
 def publish_now(driver, category=None):
     """즉시 발행"""
     logger.info("즉시 발행 중...")
@@ -431,6 +458,8 @@ def publish_now(driver, category=None):
     except Exception:
         _save_publish_debug(driver, "confirm_missing")
         raise
+    # 발행 confirm 후 리다이렉트 시 뜰 수 있는 beforeunload/이동확인 다이얼로그 자동 수락.
+    _accept_alert_if_present(driver, context="publish_now")
     wait_medium()
     logger.info("즉시 발행 완료")
 
@@ -525,6 +554,8 @@ def schedule_publish(driver, target_date=None, hour=None, category=None):
     except Exception:
         _save_publish_debug(driver, "schedule_confirm_missing")
         raise
+    # 예약 confirm 후 리다이렉트 시 뜰 수 있는 beforeunload/이동확인 다이얼로그 자동 수락.
+    _accept_alert_if_present(driver, context="schedule_publish")
     wait_medium()
 
     logger.info(f"예약 발행 완료: {target_date.strftime('%Y-%m-%d')} {hour_str}:{minute_val}")

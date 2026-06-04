@@ -348,12 +348,46 @@ def navigate_to_editor(driver, naver_id=None, naver_pw=None):
     _dismiss_draft_popup(driver, timeout=8)
     wait_short()
 
-    # 도움말/기타 팝업 닫기
-    try:
-        help_btn = driver.find_element(By.CSS_SELECTOR, HELP_CLOSE)
-        help_btn.click()
-    except Exception:
-        pass
+    # 도움말/기타 패널 닫기 — 발행/툴바 버튼을 가릴 수 있어 견고하게 처리한다.
+    # 1) 알려진 close 버튼 셀렉터들을 순회하며 보이면 클릭, 2) 못 찾으면 패널을 직접 숨겨 가림 방지.
+    _help_close_selectors = [
+        HELP_CLOSE,
+        "button[class*='help-panel-close']",
+        "button[class*='help_panel_close']",
+        ".se-help-panel button[class*='close']",
+    ]
+    help_closed = False
+    for _sel in _help_close_selectors:
+        try:
+            help_btn = driver.find_element(By.CSS_SELECTOR, _sel)
+            if help_btn.is_displayed():
+                try:
+                    help_btn.click()
+                except Exception:
+                    driver.execute_script("arguments[0].click();", help_btn)
+                help_closed = True
+                wait_short()
+                break
+        except Exception:
+            continue
+    if not help_closed:
+        # close 버튼을 못 찾으면(셀렉터 변경 등) 보이는 도움말 패널을 직접 숨겨 툴바/발행 버튼 가림 방지.
+        try:
+            driver.execute_script(
+                """
+                const sels = ['.se-help-panel', "[class*='help-panel']", "[class*='help_panel']"];
+                let hidden = 0;
+                for (const s of sels) {
+                  document.querySelectorAll(s).forEach(el => {
+                    const r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) { el.style.display = 'none'; hidden++; }
+                  });
+                }
+                return hidden;
+                """
+            )
+        except Exception:
+            pass
 
     # 에디터 툴바가 실제로 렌더링될 때까지 대기 (최대 20초)
     try:
