@@ -352,6 +352,11 @@ def main() -> int:
 
     elif IS_MAC:
         cmd.append("--hidden-import=keyring.backends.macOS")
+        # aimax:// (GetURL Apple Event) 수신용 PyObjC Foundation. local_agent/runtime.py 가
+        # lazy import 라 정적 분석으로 안 잡히므로 명시 수집(미포함 시 맥 계정 불일치 자동감지 불능).
+        cmd.append("--hidden-import=Foundation")
+        cmd.append("--hidden-import=objc")
+        cmd.append("--collect-submodules=objc")
         # macOS 번들에서 Tk deprecation 경고 억제
         cmd += ["--runtime-hook", str(ROOT / "hooks" / "macos_tk_fix.py")] if (ROOT / "hooks" / "macos_tk_fix.py").exists() else []
         icon = ROOT / "assets" / "app.icns"

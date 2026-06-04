@@ -322,29 +322,57 @@ class HeadlessAgentMixin:
     # ::tk::mac::OpenURL 핸들러로 받아 보류해 두고, 메인 루프가 기존 connect 핸들러로
     # 라우팅한다(=Windows 와 동일한 계정 불일치 감지/재로그인 경로 재사용).
     def _register_mac_url_handler(self) -> None:
+        """macOS 에서 aimax:// (GetURL Apple Event) 수신 핸들러를 등록한다.
+
+        주의: Tk 의 ::tk::mac::OpenURL Tcl 명령은 Tk 9.0 / PyInstaller 번들에서 GetURL
+        Apple Event 를 전혀 전달하지 않음(2026-06-04 실기기 프로브로 확인). 대신 PyObjC
+        NSAppleEventManager 로 kAEGetURL 을 직접 후킹한다(프로브로 발화 확인). 이벤트는
+        run 루프의 root.update() 가 CFRunLoop 를 펌프할 때 콜백으로 전달된다.
+        """
         if sys.platform != "darwin" or getattr(self, "_mac_url_handler_registered", False):
             return
+        # CFRunLoop 펌프용 Tk 루트 확보(이벤트 디스패치에 필요).
         try:
-            root = self._get_headless_tk_root()
-            root.createcommand("::tk::mac::OpenURL", self._on_mac_open_url)
+            self._get_headless_tk_root()
+        except Exception:
+            pass
+        try:
+            from Foundation import NSAppleEventManager, NSObject
+
+            kInternetEventClass = 0x4755524C  # 'GURL'
+            kAEGetURL = 0x4755524C            # 'GURL'
+            keyDirectObject = 0x2D2D2D2D      # '----'
+            runtime = self
+
+            class _AimaxAEGetURLHandler(NSObject):
+                def handleAppleEvent_withReplyEvent_(self, event, reply):
+                    try:
+                        desc = event.paramDescriptorForKeyword_(keyDirectObject)
+                        url = desc.stringValue() if desc is not None else None
+                        if url:
+                            runtime._on_mac_open_url(str(url))
+                    except Exception:
+                        pass
+
+            # 핸들러 인스턴스는 GC 되지 않도록 self 에 보관.
+            self._mac_ae_handler = _AimaxAEGetURLHandler.alloc().init()
+            NSAppleEventManager.sharedAppleEventManager().setEventHandler_andSelector_forEventClass_andEventID_(
+                self._mac_ae_handler,
+                b"handleAppleEvent:withReplyEvent:",
+                kInternetEventClass,
+                kAEGetURL,
+            )
             self._mac_url_handler_registered = True
-            self._log("[웹앱 연결] macOS aimax:// URL 핸들러 등록됨.")
+            self._log("[웹앱 연결] macOS aimax:// URL 핸들러 등록됨 (NSAppleEventManager).")
         except Exception as error:
             # 실패해도 기존 연결 흐름에는 영향 없음(수동 '다른 계정으로 로그인' 경로 유지).
             self._log(f"[웹앱 연결] macOS URL 핸들러 등록 실패(무시): {error}")
 
-    def _on_mac_open_url(self, *args) -> None:
-        """Tk 가 aimax:// URL 을 전달할 때 호출(메인 스레드). URL 만 보류하고 즉시 반환한다."""
-        url = ""
-        for item in args:
-            text = str(item)
-            if "aimax" in text:
-                url = text
-                break
-        if not url and args:
-            url = str(args[0])
-        if url:
-            self._pending_mac_open_url = url
+    def _on_mac_open_url(self, url) -> None:
+        """GetURL Apple Event 콜백(메인 스레드). URL 만 보류하고 즉시 반환한다."""
+        text = str(url or "")
+        if text:
+            self._pending_mac_open_url = text
 
     def _pump_mac_events(self) -> None:
         """macOS 에서만: Tk 이벤트를 펌프해 GetURL Apple Event 가 처리되게 한다."""

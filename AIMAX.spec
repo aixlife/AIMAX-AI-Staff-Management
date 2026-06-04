@@ -21,6 +21,12 @@ hiddenimports += collect_submodules('local_agent')
 hiddenimports += collect_submodules('scraper')
 hiddenimports += collect_submodules('web_agent')
 hiddenimports += collect_submodules('yt_dlp')
+# macOS aimax:// (GetURL Apple Event) 수신 — local_agent/runtime.py 가 PyObjC Foundation 을
+# lazy import 하므로 명시 수집(미포함 시 맥 계정 불일치 자동감지 불능).
+import sys as _sys
+if _sys.platform == 'darwin':
+    hiddenimports += ['Foundation', 'objc']
+    hiddenimports += collect_submodules('objc')
 tmp_ret = collect_all('ttkbootstrap')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('selenium_stealth')
