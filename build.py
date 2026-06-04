@@ -10,6 +10,7 @@ CI 빌드:  GitHub Actions 에서 동일 명령 실행
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -166,10 +167,86 @@ def _patch_macos_bundle_metadata(app_artifact: Path) -> None:
     )
 
 
+# 빌드 산출물이 이 버전 미만이면 라이브 min_version(win v1.0.44 / mac v1.0.36) 정책에
+# 막혀 강제 업데이트 루프가 발생한다. 통합 정본 미만 빌드(예: 옛 fix 브랜치 v1.0.36)를 차단.
+_MIN_BUILD_VERSION = (1, 0, 44)
+
+
+def _parse_semver(value: str):
+    nums = re.findall(r"\d+", str(value or ""))
+    return tuple(int(n) for n in nums[:3]) + (0,) * (3 - len(nums[:3]))
+
+
+def _preflight_build_guard() -> None:
+    """잘못된 브랜치(러너 하드닝/통합 정본 누락)에서 회귀 번들이 출하되는 것을 막는 내용 기반 가드.
+
+    브랜치 이름은 바뀌므로 이름이 아니라 '소스에 하드닝 마커가 있는지'를 검증한다.
+    긴급 우회: AIMAX_BUILD_SKIP_GUARD=1 (경고 후 진행).
+    """
+    if os.getenv("AIMAX_BUILD_SKIP_GUARD", "").strip() in ("1", "true", "TRUE", "yes"):
+        print("[BUILD][WARN] AIMAX_BUILD_SKIP_GUARD 설정 — 빌드 가드를 건너뜁니다. 회귀 출하 위험을 직접 확인하세요.")
+        return
+
+    from aimax_compliance import APP_VERSION
+
+    failures = []
+
+    # 1) 버전 floor: 라이브 min_version 미만 빌드 차단
+    if _parse_semver(APP_VERSION) < _MIN_BUILD_VERSION:
+        failures.append(
+            f"APP_VERSION({APP_VERSION}) 이 최소 빌드 버전(v{'.'.join(map(str, _MIN_BUILD_VERSION))}) 미만 "
+            "— 옛/분기 브랜치를 빌드 중일 수 있습니다. 통합 정본 브랜치에서 빌드하세요."
+        )
+
+    # 2) 러너 하드닝/통합 마커 — 하나라도 없으면 옛 브랜치
+    checks = [
+        (ROOT / "local_agent" / "single_instance.py", "_lock_payload",
+         "single_instance 버전락(옛 코어 종료용) 누락"),
+        (ROOT / "app.py", "_auto_migrate_local_secrets_to_web",
+         "키 웹 자동이전 누락(전부 웹키 구조 깨짐)"),
+        (ROOT / "app.py", "_update_popup_open",
+         "업데이트 팝업 재진입 가드 누락(무한로딩 회귀)"),
+        (ROOT / "content" / "ai_text.py", "_normalize_gemini_model_id",
+         "모델 정규화 누락(Pro 모델 계약 불일치)"),
+    ]
+    for path, marker, why in checks:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as e:  # noqa: BLE001
+            failures.append(f"{path.name} 읽기 실패: {e}")
+            continue
+        if marker not in text:
+            failures.append(f"{path.name}: '{marker}' 없음 — {why}")
+
+    # 3) build.py 자기검증: 런처에 버전 주입 ldflags 가 있는지
+    if "main.launcherVersion" not in Path(__file__).read_text(encoding="utf-8"):
+        failures.append("build.py: 런처 ldflags(main.launcherVersion) 주입 누락 — 옛 코어 종료 무력화")
+
+    # git 브랜치/커밋 로깅(추적용, 실패해도 비차단)
+    try:
+        branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT,
+                                capture_output=True, text=True).stdout.strip()
+        commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
+                                capture_output=True, text=True).stdout.strip()
+        print(f"[BUILD] 소스 브랜치={branch or '?'} 커밋={commit or '?'} APP_VERSION={APP_VERSION}")
+    except Exception:
+        pass
+
+    if failures:
+        print("[BUILD][ABORT] 빌드 가드 실패 — 잘못된/옛 브랜치에서 빌드 중일 수 있습니다:", file=sys.stderr)
+        for f in failures:
+            print(f"  - {f}", file=sys.stderr)
+        print("  통합 정본 브랜치를 체크아웃하세요. (긴급 우회: AIMAX_BUILD_SKIP_GUARD=1)", file=sys.stderr)
+        raise SystemExit(2)
+    print("[BUILD] 빌드 가드 통과 — 러너 하드닝/모델 계약/버전 정상.")
+
+
 def main() -> int:
     if not ENTRY.exists():
         print(f"[ERROR] entry point 없음: {ENTRY}", file=sys.stderr)
         return 1
+
+    _preflight_build_guard()
 
     sep = ";" if IS_WIN else ":"
 

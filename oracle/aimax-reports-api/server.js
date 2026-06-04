@@ -62,7 +62,10 @@ const KEYCHAIN_ACCOUNT = String(process.env.AIMAX_KEYCHAIN_ACCOUNT || "minsu-api
 const LOCAL_KEYRING_SERVICE = String(process.env.AIMAX_KEYRING_SERVICE || "AIMAX").trim();
 const LEGACY_KEYRING_SERVICE = String(process.env.AIMAX_LEGACY_KEYRING_SERVICE || "NaverBlogAuto").trim();
 const SONGI_GEMINI_MODEL = String(process.env.AIMAX_SONGI_GEMINI_MODEL || "gemini-2.5-flash").trim();
-const YUNMI_DEFAULT_AI_MODEL = String(process.env.AIMAX_YUNMI_DEFAULT_AI_MODEL || "gemini-2.5-pro").trim();
+// 기본 fallback 은 무료 등급에서 동작하는 flash. 명시적 "Gemini 2.5 Pro" 선택은
+// normalizeYunmiAiModel 가 가격표 passthrough 로 그대로 honor 하므로 유료 옵션은 보존된다.
+// (모델 없는/레거시 API payload 가 유료 기본값으로 떨어져 무료키 사용자가 실패하던 문제 방지)
+const YUNMI_DEFAULT_AI_MODEL = String(process.env.AIMAX_YUNMI_DEFAULT_AI_MODEL || "gemini-2.5-flash").trim();
 const YUNMI_AI_MOCK_ENABLED = envFlag("AIMAX_YUNMI_AI_MOCK");
 const YUNMI_PUBLIC_ENABLED = envFlag("AIMAX_YUNMI_PUBLIC_ENABLED");
 const YUNMI_DEFAULT_ALLOWED_USERS = [

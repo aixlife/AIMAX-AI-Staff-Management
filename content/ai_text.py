@@ -97,7 +97,13 @@ def precheck_gemini_key(api_key):
         _gemini_key_precheck_ok.add(key)
         return None
     except Exception as e:
-        error, _ = _classify_provider_error("Gemini", e)
+        error, transient = _classify_provider_error("Gemini", e)
+        if transient:
+            # 순간 429(rate limit)/네트워크/5xx 같은 일시적 오류는 사전검증에서 차단하지 않는다.
+            # 유효한 키를 무료 등급 버스트 시점에 '한도 초과'로 오차단하는 것을 막고,
+            # 실제 생성(_generate_with_gemini)의 3회 재시도에 맡긴다. 인증실패/크레딧고갈만 즉시 차단.
+            logger.info("Gemini 키 사전검증 일시적 오류 — 차단하지 않고 생성으로 진행: %s", str(e)[:120])
+            return None
         return error
 
 
