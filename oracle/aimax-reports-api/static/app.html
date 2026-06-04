@@ -3458,6 +3458,10 @@
                         <label for="sangsuClientName">받는 곳</label>
                         <input id="sangsuClientName" placeholder="예: 고객사명 또는 담당자">
                       </div>
+                      <div class="field">
+                        <label for="sangsuClientEmail">이메일</label>
+                        <input id="sangsuClientEmail" type="email" placeholder="예: customer@example.com">
+                      </div>
                       <div class="field wide">
                         <label for="sangsuProjectName">프로젝트명</label>
                         <input id="sangsuProjectName" placeholder="예: 상세페이지 제작 견적">
@@ -4240,6 +4244,10 @@
       yeri: "예리",
       hyunju: "현주",
       songi: "송이",
+      yunmi: "윤미",
+      jieun: "지은",
+      nakyung: "나경",
+      hyojin: "효진",
       sangsu: "상수",
       blog_team: "블로그팀",
       bundle: "전체 통합",
@@ -4259,7 +4267,7 @@
       },
       yunmi_script: {
         label: "윤미 숏폼 스크립트",
-        required: "bundle",
+        required: "yunmi",
         worker: "윤미",
       },
       songi_research: {
@@ -4311,10 +4319,9 @@
         role: "판서",
         avatar: "/assets/avatar_nakyung.jpg",
         photo: "/assets/avatar_nakyung.jpg",
-        product: "free",
+        product: "nakyung",
         jobKind: "",
         status: "available",
-        accessPolicy: "public",
         execution: "external_download",
         type: "desktop_app",
         requiredSettings: [],
@@ -4382,23 +4389,22 @@
         role: "AI 오피스 지원",
         avatar: "/assets/avatar_jieun.jpg",
         photo: "/assets/avatar_jieun.jpg",
-        product: "free",
+        product: "jieun",
         jobKind: "",
         status: "available",
-        accessPolicy: "public",
         execution: "external_download",
         type: "desktop_app",
         requiredSettings: [],
         moduleKey: "office_support",
         repoUrl: "https://github.com/aixlife/aimax-viseo",
         releaseUrl: "",
-        setupDownloadUrl: "/downloads/AIMAX-Office-Manager-Setup-0.1.4.exe",
+        setupDownloadUrl: "/downloads/AIMAX-Office-Manager-Setup-0.1.5.exe",
         portableDownloadUrl: "/downloads/AIMAX-Office-Manager-portable.exe",
         downloadLabel: "Setup exe 다운로드",
         supportedPlatforms: ["windows"],
-        version: "0.1.4",
-        description: "화면 캡처, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
-        meta: ["화면 캡처", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+        version: "0.1.5",
+        description: "화면 캡처, 캡처 이미지 모자이크, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
+        meta: ["화면 캡처", "캡처 이미지 모자이크", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
       },
     };
 
@@ -5731,7 +5737,7 @@
       if (products.has("bundle")) {
         const bundledProducts = state.workers?.length
           ? state.workers.map((item) => item.product).filter((product) => product && product !== "free")
-          : ["yeri", "hyunju", "songi", "sangsu", "blog_team", "bundle"];
+          : ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
         bundledProducts.push("bundle", "blog_team");
         bundledProducts.forEach((product) => products.add(product));
       }
@@ -5750,6 +5756,10 @@
         if (products.has("hyunju")) visible.push("hyunju");
       }
       if (products.has("songi")) visible.push("songi");
+      if (products.has("yunmi")) visible.push("yunmi");
+      if (products.has("jieun")) visible.push("jieun");
+      if (products.has("nakyung")) visible.push("nakyung");
+      if (products.has("hyojin")) visible.push("hyojin");
       if (products.has("sangsu")) visible.push("sangsu");
       return visible;
     }
@@ -10123,6 +10133,7 @@
         quoteDate: todayDateValue(),
         issuerName: "",
         clientName: "",
+        clientEmail: "",
         projectName: "",
         validDuration: "견적일로부터 14일",
         deliverySchedule: "",
@@ -10162,6 +10173,7 @@
         quoteDate: "#sangsuQuoteDate",
         issuerName: "#sangsuIssuerName",
         clientName: "#sangsuClientName",
+        clientEmail: "#sangsuClientEmail",
         projectName: "#sangsuProjectName",
         validDuration: "#sangsuValidDuration",
         deliverySchedule: "#sangsuDeliverySchedule",
@@ -10279,6 +10291,10 @@
                 <td>${escapeHtml(data.issuerName || "공급자명")}</td>
                 <th>받는 곳</th>
                 <td>${escapeHtml(data.clientName || "고객명")}</td>
+              </tr>
+              <tr>
+                <th>이메일</th>
+                <td colspan="3">${escapeHtml(data.clientEmail || "-")}</td>
               </tr>
               <tr>
                 <th>프로젝트명</th>

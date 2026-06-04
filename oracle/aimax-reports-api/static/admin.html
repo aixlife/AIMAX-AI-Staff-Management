@@ -974,6 +974,9 @@
       invalid_order: "주문 정보를 확인해주세요.",
       ambiguous_product: "상품을 자동으로 판단하지 못했습니다.",
       unknown_product: "상품을 자동으로 판단하지 못했습니다.",
+      non_staff_product: "AIMAX 직원 판매 상품이 아니라 자동 제외했습니다.",
+      amount_mismatch: "직원 상품명과 결제 금액이 맞지 않습니다.",
+      product_not_ready: "직원 기능/출시 상태 확인이 필요합니다.",
       invalid_order_status: "주문 상태 값을 확인해주세요.",
       invalid_order_for_auto_process: "자동 처리할 수 없는 주문입니다. 이메일과 상품을 확인해주세요.",
       auto_process_failed: "자동 처리에 실패했습니다.",
@@ -1222,7 +1225,7 @@
       if (products.has("bundle")) {
         const bundledProducts = state.products.length
           ? state.products.map((item) => item.product).filter(Boolean)
-          : ["yeri", "hyunju", "songi", "sangsu", "blog_team", "bundle"];
+          : ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
         bundledProducts.forEach((product) => products.add(product));
       }
       return products;
@@ -1240,6 +1243,10 @@
         if (products.has("hyunju")) visible.push("hyunju");
       }
       if (products.has("songi")) visible.push("songi");
+      if (products.has("yunmi")) visible.push("yunmi");
+      if (products.has("jieun")) visible.push("jieun");
+      if (products.has("nakyung")) visible.push("nakyung");
+      if (products.has("hyojin")) visible.push("hyojin");
       if (products.has("sangsu")) visible.push("sangsu");
       return visible;
     }
@@ -1839,6 +1846,10 @@
       if (["yeri", "예리"].includes(raw)) return "yeri";
       if (["hyunju", "현주"].includes(raw)) return "hyunju";
       if (["songi", "송이", "research", "리서치", "자료조사"].includes(raw)) return "songi";
+      if (["yunmi", "윤미", "script", "스크립트", "스크립트작가"].includes(raw)) return "yunmi";
+      if (["jieun", "지은", "office", "오피스", "오피스매니저"].includes(raw)) return "jieun";
+      if (["nakyung", "나경", "pencil", "판서", "판서쌤"].includes(raw)) return "nakyung";
+      if (["hyojin", "효진", "video", "announcer", "영상제작", "아나운서"].includes(raw)) return "hyojin";
       if (["sangsu", "상수", "quote", "quotation", "estimate", "견적", "견적서"].includes(raw)) return "sangsu";
       if (["blog_team", "blogteam", "블로그팀", "블로그마케팅팀", "마케팅팀", "예리현주", "예리+현주", "현주예리", "현주+예리"].includes(raw)) return "blog_team";
       if (["bundle", "통합", "전체통합", "전체", "all", "올인원"].includes(raw)) return "bundle";

@@ -121,7 +121,7 @@ const APP_HTML_PATH = path.join(STATIC_DIR, "app.html");
 const ADMIN_HTML_PATH = path.join(STATIC_DIR, "admin.html");
 const SETUP_HTML_PATH = path.join(STATIC_DIR, "setup.html");
 const ADMIN_COOKIE_NAME = "aimax_admin_session";
-const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "sangsu", "blog_team", "bundle"];
+const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
 const PRODUCTS = new Set(PRODUCT_ORDER);
 const ACCOUNT_SEGMENTS = new Set(["paid_buyer", "makefamily_member", "member_and_buyer", "test", "operator"]);
 const ACCOUNT_SEGMENT_LABELS = {
@@ -243,12 +243,11 @@ const WORKERS = {
     label: "나경",
     role: "판서",
     category: "education",
-    product: "free",
+    product: "nakyung",
     jobKind: "",
     execution: "external_download",
     type: "desktop_app",
     status: "available",
-    accessPolicy: "public",
     requiredSettings: [],
     moduleKey: "pencil",
     profileImage: "/assets/avatar_nakyung.jpg",
@@ -308,7 +307,7 @@ const WORKERS = {
     label: "윤미",
     role: "스크립트작가",
     category: "content",
-    product: "bundle",
+    product: "yunmi",
     jobKind: "yunmi_script",
     execution: "web_module",
     type: "web_module",
@@ -348,12 +347,11 @@ const WORKERS = {
     label: "지은",
     role: "AI 오피스 지원",
     category: "operations",
-    product: "free",
+    product: "jieun",
     jobKind: "",
     execution: "external_download",
     type: "desktop_app",
     status: "available",
-    accessPolicy: "public",
     requiredSettings: [],
     moduleKey: "office_support",
     profileImage: "/assets/avatar_jieun.jpg",
@@ -382,7 +380,7 @@ const JOB_KINDS = {
   },
   yunmi_script: {
     label: "윤미 숏폼 스크립트",
-    requiredProduct: "bundle",
+    requiredProduct: "yunmi",
     workerCode: "yunmi_script_writer",
     apiMode: "job_api",
   },
@@ -1460,9 +1458,14 @@ function yeriServerGenerationTextModel(payload = {}) {
 
 function canUseYeriServerGeneration(user) {
   if (!YERI_SERVER_GENERATION_ALLOWED_USER_IDENTIFIERS.size) return true;
-  return userAccessIdentifierVariants(user).some((identifier) => (
+  if (userAccessIdentifierVariants(user).some((identifier) => (
     YERI_SERVER_GENERATION_ALLOWED_USER_IDENTIFIERS.has(identifier)
-  ));
+  ))) return true;
+  // 목표: "웹에 저장한 키로 모두가 사용". 허용목록 외에도, 본인 웹 AI 키를 저장한 사용자는
+  // 서버생성 허용(그 웹키로 생성). 키 없는 사용자는 false → 러너 로컬생성으로 폴백(안 깨짐).
+  const userId = user && user.id;
+  if (!userId) return false;
+  return hasUserSecret(userId, "gemini") || hasUserSecret(userId, "openai") || hasUserSecret(userId, "claude");
 }
 
 function yeriServerGenerationModeForUser(user) {
@@ -2189,6 +2192,7 @@ function adminProductCatalog() {
     {
       product: "yeri",
       label: "예리",
+      price_won: 33000,
       products: productList("yeri"),
       job_kinds: ["yeri_write"],
       download_product: "yeri",
@@ -2196,6 +2200,7 @@ function adminProductCatalog() {
     {
       product: "hyunju",
       label: "현주",
+      price_won: 33000,
       products: productList("hyunju"),
       job_kinds: ["hyunju_find"],
       download_product: "hyunju",
@@ -2203,8 +2208,41 @@ function adminProductCatalog() {
     {
       product: "songi",
       label: "송이",
+      price_won: 3300,
       products: productList("songi"),
       job_kinds: ["songi_research"],
+      download_product: "",
+    },
+    {
+      product: "yunmi",
+      label: "윤미",
+      price_won: 9900,
+      products: productList("yunmi"),
+      job_kinds: ["yunmi_script"],
+      download_product: "",
+    },
+    {
+      product: "jieun",
+      label: "지은",
+      price_won: 5500,
+      products: productList("jieun"),
+      job_kinds: [],
+      download_product: "",
+    },
+    {
+      product: "nakyung",
+      label: "나경",
+      price_won: 9900,
+      products: productList("nakyung"),
+      job_kinds: [],
+      download_product: "",
+    },
+    {
+      product: "hyojin",
+      label: "효진",
+      price_won: 33000,
+      products: productList("hyojin"),
+      job_kinds: [],
       download_product: "",
     },
     {
@@ -2217,6 +2255,7 @@ function adminProductCatalog() {
     {
       product: "blog_team",
       label: "블로그팀",
+      price_won: 66000,
       products: productList("blog_team"),
       job_kinds: ["yeri_write", "hyunju_find"],
       download_product: "bundle",
@@ -5307,23 +5346,50 @@ function maskPhone(value) {
   return `***-${digits.slice(-4)}`;
 }
 
+function normalizeCafe24ProductText(value) {
+  return String(value || "").toLowerCase().replace(/\s+/g, "");
+}
+
+const CAFE24_STAFF_PRODUCT_RULES = [
+  { product: "blog_team", priceWon: 66000, patterns: [/블로그마케팅팀|블로그마케팅.*예리.*현주|예리.*현주|현주.*예리|blogteam|blog_team/] },
+  { product: "yeri", priceWon: 33000, patterns: [/예리|yeri|블로그마케터/] },
+  { product: "hyunju", priceWon: 33000, patterns: [/현주|hyunju|영업사원/] },
+  { product: "songi", priceWon: 3300, patterns: [/송이|songi|자료조사|자료조사원|리서치|research/] },
+  { product: "yunmi", priceWon: 9900, patterns: [/윤미|yunmi|스크립트작가|스크립트/] },
+  { product: "jieun", priceWon: 5500, patterns: [/지은|jieun|오피스매니저|오피스지원|office/] },
+  { product: "nakyung", priceWon: 9900, patterns: [/나경|nakyung|판서쌤|판서|pencil/] },
+  { product: "hyojin", priceWon: 33000, reviewIssue: "product_not_ready", patterns: [/효진|hyojin|영상제작|아나운서/] },
+  { product: "sangsu", priceWon: 0, patterns: [/상수|sangsu|견적|견적서|quote|quotation|estimate/] },
+  { product: "bundle", priceWon: 0, patterns: [/전체통합|통합권한|통합설치|bundle|올인원|allinone/] },
+];
+
+const CAFE24_NON_STAFF_PRODUCT_PATTERNS = [
+  /회원가입을하셨습니다|회원가입|입금처리가확인/,
+  /ai로직원만드는법|ai로직원만드는/,
+  /일본구매대행/,
+  /창업프로그램2기/,
+  /제2의뇌|제의뇌|나같이생각하는ai비서/,
+  /공동구매수익화/,
+  /사업자pt/,
+  /평생회원제/,
+];
+
 function inferCafe24Product(productName, amountValue) {
   const amount = parseCafe24Amount(amountValue);
-  const normalized = String(productName || "").toLowerCase().replace(/\s+/g, "");
-  const hasYeri = /예리|yeri/.test(normalized);
-  const hasHyunju = /현주|hyunju/.test(normalized);
-  const hasSongi = /송이|songi|자료조사|자료조사원|리서치|research/.test(normalized);
-  const hasSangsu = /상수|견적|견적서|quote|quotation|estimate/.test(normalized);
-  const hasBlogTeam = /블로그팀|블로그마케팅팀|마케팅팀|예리.*현주|현주.*예리|blogteam|blog_team/.test(normalized) || (hasYeri && hasHyunju && !hasSongi);
-  const hasBundle = /전체통합|통합|bundle|패키지|올인원|all/.test(normalized);
-
-  if (hasBundle || amount === 60000) return { product: "bundle", confidence: "auto", issue: "" };
-  if (hasBlogTeam) return { product: "blog_team", confidence: "auto", issue: "" };
-  if (hasYeri && !hasHyunju && !hasSongi && !hasSangsu) return { product: "yeri", confidence: "auto", issue: "" };
-  if (hasHyunju && !hasYeri && !hasSongi && !hasSangsu) return { product: "hyunju", confidence: "auto", issue: "" };
-  if (hasSongi && !hasYeri && !hasHyunju && !hasSangsu) return { product: "songi", confidence: "auto", issue: "" };
-  if (hasSangsu && !hasYeri && !hasHyunju && !hasSongi) return { product: "sangsu", confidence: "auto", issue: "" };
-  if (amount === 33000) return { product: "", confidence: "needs_review", issue: "ambiguous_product" };
+  const normalized = normalizeCafe24ProductText(productName);
+  if (CAFE24_NON_STAFF_PRODUCT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+    return { product: "", confidence: "ignored", issue: "non_staff_product", status: "ignored" };
+  }
+  const rule = CAFE24_STAFF_PRODUCT_RULES.find((item) => item.patterns.some((pattern) => pattern.test(normalized)));
+  if (rule) {
+    if (rule.priceWon && amount && amount !== rule.priceWon) {
+      return { product: rule.product, confidence: "needs_review", issue: "amount_mismatch" };
+    }
+    if (rule.reviewIssue) {
+      return { product: rule.product, confidence: "needs_review", issue: rule.reviewIssue };
+    }
+    return { product: rule.product, confidence: "auto", issue: "" };
+  }
   return { product: "", confidence: "needs_review", issue: "unknown_product" };
 }
 
@@ -5353,8 +5419,12 @@ function buildCafe24Order(body, now) {
   const inferred = inferCafe24Product(productName, amount);
   const explicitProduct = String(row.aimax_product || row.aimaxProduct || row.product_code || row.productCode || "").trim();
   const product = PRODUCTS.has(explicitProduct) ? explicitProduct : inferred.product;
-  const issue = !isValidEmail(email) ? "invalid_email" : product ? "" : inferred.issue || "invalid_product";
-  const status = issue ? "needs_review" : "pending";
+  const issue = inferred.status === "ignored"
+    ? inferred.issue
+    : !isValidEmail(email)
+      ? "invalid_email"
+      : inferred.issue || (product ? "" : "invalid_product");
+  const status = inferred.status === "ignored" ? "ignored" : issue ? "needs_review" : "pending";
 
   return {
     id: crypto.randomUUID(),
@@ -5366,7 +5436,7 @@ function buildCafe24Order(body, now) {
     product_name: productName,
     amount,
     product,
-    product_confidence: product ? (PRODUCTS.has(explicitProduct) ? "explicit" : inferred.confidence) : "needs_review",
+    product_confidence: product ? (PRODUCTS.has(explicitProduct) ? "explicit" : inferred.confidence) : inferred.confidence || "needs_review",
     issue,
     status,
     order_date: compactText(row.order_date || row.orderDate || row.ordered_at || row.orderedAt || row.payment_date || row.paymentDate, 80),
@@ -5836,6 +5906,7 @@ function userAccessIdentifierVariants(user) {
 
 function canAccessYunmi(user) {
   if (YUNMI_PUBLIC_ENABLED) return true;
+  if (user && productAllowed(user, "yunmi")) return true;
   return userAccessIdentifierVariants(user).some((identifier) => YUNMI_ALLOWED_USER_IDENTIFIERS.has(identifier));
 }
 
@@ -5849,15 +5920,15 @@ function isYunmiJobKind(kind) {
 
 function workerVisibleToUser(worker, user) {
   if (worker?.accessPolicy === "public") return true;
-  return !isYunmiWorker(worker) || canAccessYunmi(user);
+  return true;
 }
 
 function jobKindVisibleToUser(kind, user) {
-  return !isYunmiJobKind(kind) || canAccessYunmi(user);
+  return true;
 }
 
 function jobVisibleToUser(job, user) {
-  return !isYunmiJobKind(job?.kind) || canAccessYunmi(user);
+  return true;
 }
 
 function isJobAllowed(user, kind) {
@@ -6174,16 +6245,36 @@ function yunmiPlain(value, fallback = "") {
   return compactText(String(value || fallback || "").replace(/\s+/g, " "), 160);
 }
 
+function yunmiInputSentences(input, limit = 4) {
+  const source = [input.reference_text, input.notes, input.objective, input.topic]
+    .filter(Boolean)
+    .join("\n");
+  return String(source || "")
+    .replace(/https?:\/\/\S+/gi, " ")
+    .split(/(?<=[.!?。！？])\s+|\n+/)
+    .map((line) => yunmiPlain(line, ""))
+    .filter((line) => line && !/^https?:\/\//i.test(line))
+    .slice(0, limit);
+}
+
+function yunmiSubject(input, keywords) {
+  return yunmiPlain(input.topic || keywords[0] || "이 주제", "이 주제");
+}
+
+function yunmiAudience(input) {
+  return yunmiPlain(input.target_audience || "이걸 고민하는 분들", "이걸 고민하는 분들");
+}
+
 function yunmiHookSample(code, input, keywords) {
-  const topic = input.topic || keywords[0] || "이 주제";
-  const audience = input.target_audience || "이걸 고민하는 분";
+  const topic = yunmiSubject(input, keywords);
+  const audience = yunmiAudience(input);
   const samples = {
-    A: `${audience}, 아직도 ${topic}을 설명부터 시작하고 계세요?`,
-    B: `${topic}, 10명 중 8명이 여기서 막힙니다.`,
-    C: `${topic}, 잘되는 사람들은 더 많이 하지 않습니다.`,
-    D: `${topic}, 이거 모르고 계속하면 시간만 날립니다.`,
-    E: `${topic}, 실제로 보니까 답은 겉보기와 달랐습니다.`,
-    F: `${topic}, 이 장면 하나 때문에 끝까지 봅니다.`,
+    A: `${audience}, 혹시 ${topic} 설명부터 시작하고 계세요?`,
+    B: `${topic}, 대부분 첫 3초에서 놓칩니다.`,
+    C: `잘되는 ${topic} 콘텐츠는 설명을 늦게 시작합니다.`,
+    D: `${topic}, 이 순서로 만들면 시간만 날립니다.`,
+    E: `실제로 만들어보면 ${topic}의 답은 겉보기와 다릅니다.`,
+    F: `${topic}, 이 장면 하나가 끝까지 보게 만듭니다.`,
   };
   return samples[code] || samples.A;
 }
@@ -6229,21 +6320,24 @@ function yunmiCtaText(input) {
 }
 
 function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
-  const topic = input.topic || keywords[0] || "이 주제";
-  const audience = input.target_audience || "이걸 고민하는 분";
+  const topic = yunmiSubject(input, keywords);
+  const audience = yunmiAudience(input);
   const core = yunmiCoreMessage(input, keywords);
   const evidence = yunmiEvidenceLine(input);
   const cta = yunmiCtaText(input);
   const hook = hookOption.sample;
+  const sourceLines = yunmiInputSentences(input, 3);
+  const firstContext = sourceLines[0] || evidence;
+  const secondContext = sourceLines[1] || core;
   const tension = optionNumber === 1
     ? "그런데 여기서 대부분 놓칩니다."
     : "문제는 이 다음입니다.";
   const solutionA = optionNumber === 1
-    ? "먼저 한 문장으로 문제를 좁히세요."
+    ? "먼저 문제를 한 문장으로 좁히세요."
     : "처음부터 설명하지 말고 장면을 먼저 보여주세요.";
   const solutionB = optionNumber === 1
-    ? "그다음 기준을 3개 이하로 줄이세요."
-    : "그리고 시청자가 바로 따라 할 기준을 하나만 주세요.";
+    ? "그다음 기준은 세 개 이하로 줄이세요."
+    : "그리고 바로 따라 할 기준을 하나만 주세요.";
   return [
     {
       time: "0~3초",
@@ -6256,15 +6350,15 @@ function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
     {
       time: "3~10초",
       screen: "원본 자료의 핵심 장면, 숫자, 댓글, 캡처 중 하나",
-      dialogue: `${evidence} 그래서 이건 단순 정보가 아니라, 구조 문제로 봐야 합니다.`,
-      subtitles: "요약이 아니라 구조를 봐야 합니다",
+      dialogue: `그냥 넘기는 순간은 거의 비슷합니다. ${firstContext}`,
+      subtitles: "그냥 넘기는 순간은 비슷합니다",
       anchor: "근거가 되는 자료 캡처",
-      bridge: evidence,
+      bridge: `이 장면이 훅이 과장이 아니라는 근거가 됩니다.`,
     },
     {
       time: "10~25초",
       screen: "손가락으로 1개 포인트를 짚거나 화면에 키워드 1개만 표시",
-      dialogue: `${audience}에게 중요한 건 전부 아는 게 아닙니다. ${core}. 이 메시지 하나만 남기면 됩니다.`,
+      dialogue: `${audience}에게 필요한 건 많은 설명이 아닙니다. ${core}. 이 메시지 하나만 남기면 됩니다.`,
       subtitles: "핵심 메시지는 하나만",
       anchor: "핵심 키워드 1개",
       bridge: `${core}.`,
@@ -6272,7 +6366,7 @@ function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
     {
       time: "25~40초",
       screen: "잘못된 흐름과 바꾼 흐름을 좌우로 비교",
-      dialogue: `${tension} 설명부터 시작하면 시청자는 내 얘기인지 모릅니다. 먼저 문제를 보여주고, 그다음 기준을 줘야 합니다.`,
+      dialogue: `${tension} ${secondContext} 그런데 설명부터 시작하면 시청자는 내 얘기인지 모릅니다.`,
       subtitles: "설명보다 먼저 문제를 보여주세요",
       anchor: "잘못된 순서 vs 바꾼 순서",
       bridge: tension,
@@ -6280,7 +6374,7 @@ function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
     {
       time: "40~55초",
       screen: "체크포인트 2개를 빠르게 띄우기",
-      dialogue: `${solutionA} ${solutionB} 마지막에는 행동 하나만 남기면 됩니다.`,
+      dialogue: `순서는 이렇게 가면 됩니다. ${solutionA} ${solutionB} 마지막에는 행동 하나만 남기세요.`,
       subtitles: "문제 1개 / 기준 1~3개 / 행동 1개",
       anchor: "체크포인트 2개",
       bridge: `${solutionA} ${solutionB}`,
@@ -6639,15 +6733,49 @@ function buildYunmiGenerationPrompt(input, model) {
   return [
     "너는 AIMAX의 숏폼/영상 스크립트 직원 윤미다. 사용자가 준 지침과 레퍼런스 메모를 바탕으로 한국어 대본을 만든다.",
     "반드시 JSON 객체 하나만 출력한다. 마크다운 코드블록, 설명 문장, 주석을 출력하지 않는다.",
-    "목표는 바로 촬영 가능한 숏폼 스크립트 2안을 만드는 것이다.",
+    "목표는 단순 요약이 아니라, 시청자가 첫 3초 안에 멈추고 끝까지 보게 만드는 바로 촬영 가능한 30~60초 숏폼 스크립트 2안을 만드는 것이다.",
+    "",
+    "반드시 따를 숏폼 스토리텔링 원칙:",
+    "- 첫 2~3초 안에 시청자가 멈출 만한 훅을 먼저 제시한다.",
+    "- 설명식 도입을 금지한다. 특히 '오늘은 ~에 대해 알아보겠습니다' 같은 문장으로 시작하지 않는다.",
+    "- 정보 요약이 아니라 장면, 문제, 반전, 숫자, 손해, 궁금증 중 하나로 시작한다.",
+    "- 문장은 짧게 쓴다. 한 문장에 하나의 메시지만 담는다.",
+    "- 실제 사람이 말하는 구어체로 쓴다. 번역투, 보고서체, 과한 AI 문체를 금지한다.",
+    "- 핵심 메시지는 하나만 잡는다.",
+    "- CTA 전에 반드시 공감 또는 연결 문장을 넣어 흐름이 끊기지 않게 한다.",
+    "- 시각 요소와 대사 요소를 함께 설계한다.",
+    "- 촬영자가 실제보다 20~30% 더 높은 에너지로 말할 수 있게 리듬감 있게 쓴다.",
+    "- 각 구간의 대사는 앞 구간의 감정과 논리를 받아 자연스럽게 이어져야 한다. 구간마다 새로 시작하는 보고서 문장처럼 쓰지 않는다.",
+    "- 브릿지는 대사를 그대로 반복하지 말고 다음 장면으로 넘어가는 연결 문장으로 쓴다.",
+    "",
+    "후킹 방식은 아래 중 원본 자료에 맞는 것을 2개 이상 제안하고, 각 스크립트에 서로 다른 1개를 적용한다:",
+    "- A. 불편한 질문형: 아직도 이렇게 하고 계세요?",
+    "- B. 숫자 충격형: 10명 중 8명이 여기서 막힙니다.",
+    "- C. 반전형: 잘 팔리는 사람들은 더 많이 올리지 않습니다.",
+    "- D. 손해 회피형: 이거 모르고 계속하면 시간만 날립니다.",
+    "- E. 내부자 폭로형: 사람들이 말 안 하는 진짜 이유가 있습니다.",
+    "- F. 장면 선공개형: 고객이 결제 직전에 멈추는 순간이 있습니다.",
+    "",
+    "스크립트 구조:",
+    "- 0~3초: 훅. 질문, 반전, 숫자, 손해, 폭로 중 하나를 자막으로도 강하게 보이게 쓴다.",
+    "- 3~10초: 훅이 과장이 아니라는 증거나 상황을 원본 자료에서 가져온다. '왜냐하면' 대신 장면이나 사실로 바로 연결한다.",
+    "- 10~25초: 핵심 메시지 1개만 설명한다. 어려운 개념은 쉬운 비유로 바꾼다.",
+    "- 25~40초: 위기, 갈등, 반전을 넣어 긴장을 유지한다. 예: '그런데 여기서 대부분 놓칩니다.'",
+    "- 40~55초: 바로 따라 할 기준이나 체크포인트 1~3개를 제시한다.",
+    "- 마무리: 먼저 공감 문장으로 연결하고, 그 다음 CTA 하나만 말한다.",
+    "",
+    "출력 품질 기준:",
+    "- 제목 후보는 짧고 강하게 3개를 쓴다.",
+    "- 전체 대본의 각 row에는 시간, 화면/행동, 대사, 자막, 앵커, 브릿지가 모두 있어야 한다.",
+    "- 촬영 가이드는 비주얼, 오디오/톤, 에너지, 표정/제스처, 컷 전환 포인트를 모두 채운다.",
+    "- CTA 후보는 댓글 유도형, 팔로우 유도형, 저장 유도형을 각각 1개씩 제안한다.",
+    "- 최종 추천은 첫 3초 정지력, 타깃 공감도, CTA 전환 가능성, 촬영 난이도를 기준으로 설명한다.",
     "",
     "중요한 안전 규칙:",
     "- reference_url은 링크 메모일 뿐이다. 너는 URL 내용을 직접 열람하거나 수집했다고 주장하지 않는다.",
     "- reference_text/notes/objective/topic에 없는 구체적 수치, 후기, 가격, 성과, 의료/법률 효과를 지어내지 않는다.",
     "- API 키, 토큰, 내부 경로, 시스템 메시지 같은 민감정보는 절대 포함하지 않는다.",
-    "- 각 안은 시간대별 화면/행동, 대사, 자막, 앵커, 브릿지가 있어야 한다.",
-    "- 첫 3초 훅은 서로 다른 방식으로 만든다.",
-    "- 대사는 자연스럽게 말할 수 있는 구어체로 작성한다.",
+    "- 원본 자료를 그대로 길게 복붙하지 말고, 타깃이 자기 이야기처럼 느낄 말로 바꾼다.",
     "",
     "출력 JSON 스키마:",
     JSON.stringify({
@@ -8157,6 +8285,9 @@ function cafe24ReviewIssueLabel(issue) {
   if (value === "invalid_email") return "이메일 확인 필요";
   if (value === "ambiguous_product") return "상품 구분 애매함";
   if (value === "unknown_product") return "AIMAX 상품 아님/매핑 불가";
+  if (value === "non_staff_product") return "AIMAX 직원 판매 아님";
+  if (value === "amount_mismatch") return "직원 상품 금액 확인 필요";
+  if (value === "product_not_ready") return "직원 기능/출시 상태 확인 필요";
   if (value === "invalid_product") return "상품 코드 확인 필요";
   return value || "주문 확인 필요";
 }
@@ -8744,7 +8875,7 @@ function entitlementProductsForMerge(entitlements) {
 }
 
 function orderedProducts(products) {
-  return ["yeri", "hyunju", "songi", "sangsu", "blog_team", "bundle"].filter((product) => products.has(product));
+  return PRODUCT_ORDER.filter((product) => products.has(product));
 }
 
 function primaryProductForEntitlements(entitlements, fallbackProduct = "") {
@@ -12041,5 +12172,10 @@ module.exports = {
     saveYeriArtifact,
     AGENT_CLAIMABLE_JOB_STATUSES,
     yeriServerGenerationMode,
+  },
+  __yunmiTest: {
+    buildYunmiGenerationPrompt,
+    buildYunmiScriptResult,
+    normalizeYunmiScriptPayload,
   },
 };
