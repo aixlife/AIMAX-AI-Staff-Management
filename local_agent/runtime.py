@@ -100,6 +100,20 @@ def agent_start_account() -> str:
     return _account_from_args(sys.argv[1:])
 
 
+def _kind_from_url(url: str) -> str:
+    """aimax:// URL 에서 요청 종류(connect/status/open_settings)를 추론한다.
+
+    macOS 는 URL 이 sys.argv 가 아니라 Apple Event(GetURL)로 전달되므로,
+    agent_start_request_kind(argv 기반)가 아니라 URL 문자열에서 직접 추론한다.
+    """
+    low = str(url or "").lower()
+    if "open_settings" in low or "open-settings" in low or "settings" in low:
+        return "open_settings"
+    if "status" in low:
+        return "status"
+    return "connect"
+
+
 class HeadlessAgentMixin:
     """Mixin layered before NaverBlogApp to avoid creating any Tk window."""
 
@@ -164,6 +178,10 @@ class HeadlessAgentMixin:
         self._headless_last_status = ""
         self._headless_tk_root = None
         self._single_instance_request_mtime_ns = 0
+        # macOS: aimax:// URL 은 argv/요청파일이 아니라 Apple Event(GetURL)로 전달된다.
+        # Tk 핸들러가 받은 URL 을 여기에 보류해 두고 메인 루프가 처리한다.
+        self._pending_mac_open_url = None
+        self._mac_url_handler_registered = False
 
         try:
             self._load_web_agent_state()
@@ -192,6 +210,8 @@ class HeadlessAgentMixin:
                 self._log(f"[경고] 중복 실행 잠금을 확인하지 못했습니다: {error}")
         self._log("AIMAX Local Agent headless mode started.")
         self._reset_single_instance_request_cursor()
+        # macOS 는 aimax:// URL 이 Apple Event 로 오므로 Tk URL 핸들러를 등록한다(맥 전용, 실패 무해).
+        self._register_mac_url_handler()
         self._restore_web_agent_session()
         startup_request = agent_start_request_kind()
         startup_account = agent_start_account()
@@ -213,6 +233,8 @@ class HeadlessAgentMixin:
             while not self.web_agent_stop_event.is_set():
                 self._process_headless_queue()
                 self._process_single_instance_requests()
+                self._pump_mac_events()          # macOS: Apple Event(GetURL) 펌프
+                self._process_pending_mac_url()   # macOS: 수신한 aimax:// URL 처리
                 if once and time.monotonic() - started_at >= once_seconds:
                     break
                 time.sleep(0.1)
@@ -293,6 +315,64 @@ class HeadlessAgentMixin:
             self._single_instance_request_mtime_ns = latest[0] if latest else 0
         except Exception:
             self._single_instance_request_mtime_ns = 0
+
+    # ── macOS aimax:// URL 수신 (Apple Event/GetURL) ──────────────────────────
+    # Windows 는 Go 런처가 URL 을 요청파일에 써서 _process_single_instance_requests
+    # 가 처리하지만, macOS 는 URL 이 Apple Event 로 앱에 전달된다. Tk 의
+    # ::tk::mac::OpenURL 핸들러로 받아 보류해 두고, 메인 루프가 기존 connect 핸들러로
+    # 라우팅한다(=Windows 와 동일한 계정 불일치 감지/재로그인 경로 재사용).
+    def _register_mac_url_handler(self) -> None:
+        if sys.platform != "darwin" or getattr(self, "_mac_url_handler_registered", False):
+            return
+        try:
+            root = self._get_headless_tk_root()
+            root.createcommand("::tk::mac::OpenURL", self._on_mac_open_url)
+            self._mac_url_handler_registered = True
+            self._log("[웹앱 연결] macOS aimax:// URL 핸들러 등록됨.")
+        except Exception as error:
+            # 실패해도 기존 연결 흐름에는 영향 없음(수동 '다른 계정으로 로그인' 경로 유지).
+            self._log(f"[웹앱 연결] macOS URL 핸들러 등록 실패(무시): {error}")
+
+    def _on_mac_open_url(self, *args) -> None:
+        """Tk 가 aimax:// URL 을 전달할 때 호출(메인 스레드). URL 만 보류하고 즉시 반환한다."""
+        url = ""
+        for item in args:
+            text = str(item)
+            if "aimax" in text:
+                url = text
+                break
+        if not url and args:
+            url = str(args[0])
+        if url:
+            self._pending_mac_open_url = url
+
+    def _pump_mac_events(self) -> None:
+        """macOS 에서만: Tk 이벤트를 펌프해 GetURL Apple Event 가 처리되게 한다."""
+        if sys.platform != "darwin":
+            return
+        root = getattr(self, "_headless_tk_root", None)
+        if root is None:
+            return
+        try:
+            root.update()
+        except Exception:
+            pass
+
+    def _process_pending_mac_url(self) -> None:
+        url = getattr(self, "_pending_mac_open_url", None)
+        if not url:
+            return
+        self._pending_mac_open_url = None
+        kind = _kind_from_url(url)
+        expected_account = _account_from_url(url)
+        self._log(f"[웹앱 연결] macOS aimax:// 수신 (kind={kind}).")
+        try:
+            if kind == "open_settings":
+                self._handle_agent_open_settings_request(expected_account=expected_account)
+            else:
+                self._handle_agent_connect_request(expected_account=expected_account)
+        except Exception as error:
+            self._log(f"[웹앱 연결] macOS URL 처리 실패: {error}")
 
     def _process_single_instance_requests(self) -> None:
         try:
