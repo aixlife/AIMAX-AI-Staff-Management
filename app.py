@@ -2038,6 +2038,14 @@ class NaverBlogApp:
             self._auto_migrate_local_secrets_to_web(client)
         except Exception:
             pass
+        # 연결 직후 1회: 오프라인에서 쌓인 데스크톱 오류 보고를 서버로 재전송(flush).
+        try:
+            from diagnostics.error_reporter import flush_pending_reports
+            flushed = flush_pending_reports()
+            if flushed.get("flushed"):
+                self.queue.put(("log", f"[오류 보고] 대기 중이던 보고 {flushed['flushed']}건을 서버로 전송했습니다."))
+        except Exception:
+            pass
         next_heartbeat_at = 0.0
         next_version_check_at = time.monotonic() + version_check_seconds
         while not self.web_agent_stop_event.is_set() and getattr(self, "_web_agent_poll_generation", generation) == generation:

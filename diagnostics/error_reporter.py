@@ -141,11 +141,37 @@ def default_report_token() -> str:
     return os.environ.get(REPORT_TOKEN_ENV, "").strip()
 
 
-def post_report(report: dict[str, Any], endpoint: str, timeout: int = 8) -> dict[str, Any]:
+def _web_agent_report_target() -> tuple[str, dict[str, str]]:
+    """연결된 웹 세션이 있으면 (서버 /api/reports endpoint, Bearer 인증 헤더)를 반환한다.
+
+    실행기는 연결 시 사용자 세션 토큰을 보유하므로, 빌드 산출물에 시크릿을 박지 않고도
+    그 토큰으로 서버에 오류 보고를 인증 전송할 수 있다. 서버 handleReport 는 활성 세션을
+    받아 보고를 사용자에게 귀속한다. 연결 안 됐으면 ("", {}) 반환.
+    """
+    try:
+        from web_agent.client import load_state, load_session_token
+    except Exception:
+        return "", {}
+    try:
+        token = (load_session_token() or "").strip()
+        if not token:
+            return "", {}
+        base = str(load_state().get("base_url") or "").rstrip("/")
+        if not base:
+            return "", {}
+        return f"{base}/api/reports", {"authorization": f"Bearer {token}"}
+    except Exception:
+        return "", {}
+
+
+def post_report(report: dict[str, Any], endpoint: str, timeout: int = 8,
+                extra_headers: dict[str, str] | None = None) -> dict[str, Any]:
     headers = {}
     token = default_report_token()
     if token:
         headers["X-AIMAX-Report-Token"] = token
+    if extra_headers:
+        headers.update(extra_headers)
     response = requests.post(endpoint, json=report, headers=headers, timeout=timeout)
     ok = 200 <= response.status_code < 300
     try:
@@ -176,7 +202,14 @@ def submit_error_report(
         driver=driver,
     )
 
+    # 전송 대상 결정 우선순위: 명시 endpoint > 환경변수(AIMAX_REPORT_ENDPOINT) > 연결된 웹 세션.
+    # 웹 세션 경로는 빌드에 시크릿 없이 사용자 세션 토큰(Bearer)으로 /api/reports 에 인증 전송.
+    extra_headers: dict[str, str] = {}
     endpoint = (endpoint if endpoint is not None else default_endpoint()).strip()
+    if not endpoint:
+        wa_endpoint, wa_headers = _web_agent_report_target()
+        if wa_endpoint:
+            endpoint, extra_headers = wa_endpoint, wa_headers
     if not endpoint:
         path = save_report(report, PENDING_REPORTS_DIR)
         return {
@@ -187,9 +220,14 @@ def submit_error_report(
         }
 
     try:
-        result = post_report(report, endpoint)
+        result = post_report(report, endpoint, extra_headers=extra_headers)
         if result["ok"]:
             path = save_report(report, SENT_REPORTS_DIR)
+            # 전송 성공 시 그동안 쌓인 pending 도 기회적으로 함께 비운다.
+            try:
+                flush_pending_reports()
+            except Exception:
+                pass
             return {
                 "status": "sent",
                 "report_id": report["report_id"],
@@ -212,3 +250,46 @@ def submit_error_report(
             "report_id": report["report_id"],
             "path": str(path),
         }
+
+
+def flush_pending_reports(max_reports: int = 25) -> dict[str, Any]:
+    """PENDING_REPORTS_DIR 에 쌓인 보고를 연결된 웹 세션(또는 env endpoint)으로 재전송한다.
+
+    연결 전 오프라인에서 누적된 보고를, 연결 직후 1회 호출로 서버에 올려보낸다.
+    성공한 보고는 SENT_REPORTS_DIR 로 이동(중복 전송 방지). 연결 안 됐으면 아무것도 안 함.
+    """
+    endpoint = default_endpoint().strip()
+    extra_headers: dict[str, str] = {}
+    if not endpoint:
+        endpoint, extra_headers = _web_agent_report_target()
+    if not endpoint:
+        return {"flushed": 0, "failed": 0, "reason": "no_endpoint"}
+
+    try:
+        files = sorted(PENDING_REPORTS_DIR.glob("*.json"))[:max_reports]
+    except Exception:
+        return {"flushed": 0, "failed": 0, "reason": "no_pending"}
+
+    sent = failed = 0
+    for fp in files:
+        try:
+            with fp.open("r", encoding="utf-8") as f:
+                report = json.load(f)
+        except Exception:
+            continue
+        try:
+            result = post_report(report, endpoint, extra_headers=extra_headers)
+        except Exception:
+            failed += 1
+            continue
+        if result.get("ok"):
+            try:
+                save_report(report, SENT_REPORTS_DIR)
+                fp.unlink()
+            except Exception:
+                pass
+            sent += 1
+        else:
+            failed += 1
+            # 인증/권한 외 일시 오류면 다음 기회에 재시도하도록 남겨둔다.
+    return {"flushed": sent, "failed": failed}
