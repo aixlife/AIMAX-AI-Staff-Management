@@ -5,13 +5,16 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const { __yunmiTest } = require("../oracle/aimax-reports-api/server.js");
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-yunmi-alpha-smoke-"));
 const port = 19700 + Math.floor(Math.random() * 500);
 const baseUrl = `http://127.0.0.1:${port}`;
-const email = "yunmi-smoke@example.test";
+const email = "demo@aimax.ai.kr";
 const password = "SmokePassword123!";
 const fakeGeminiSecret = "smoke-yunmi-gemini-key-1234567890";
 const yunmiRequestId = "yunmi-smoke-request-20260523";
@@ -32,7 +35,7 @@ writeJson(path.join(tmpDir, "users.json"), {
   users: [{
     id: "yunmi-smoke-user-id",
     email,
-    name: "Yunmi Smoke User",
+    name: "AIMAX Demo",
     status: "active",
     must_change_password: false,
     password_hash: hashPassword(password),
@@ -59,7 +62,7 @@ const child = childProcess.spawn(process.execPath, ["oracle/aimax-reports-api/se
     AIMAX_KEYCHAIN_ACCOUNT: "smoke-no-keychain-account",
     AIMAX_KEYRING_SERVICE: "smoke-no-keyring-service",
     AIMAX_LEGACY_KEYRING_SERVICE: "smoke-no-legacy-keyring",
-    AIMAX_YUNMI_PUBLIC_ENABLED: "1",
+    AIMAX_YUNMI_AI_MOCK: "1",
     GEMINI_API_KEY: "",
     AIMAX_GEMINI_API_KEY: "",
   },
@@ -110,6 +113,43 @@ async function waitForServer() {
 }
 
 try {
+  const yunmiPrompt = __yunmiTest.buildYunmiGenerationPrompt(__yunmiTest.normalizeYunmiScriptPayload({
+    topic: "학부모 설명회 오프닝",
+    target_audience: "처음 참석한 학부모",
+    objective: "긴장감을 낮추고 오늘 들을 내용을 기대하게 만들기",
+    reference_text: "처음 10초에 분위기를 풀고, 오늘 얻어갈 수 있는 결과를 먼저 말한다.",
+    cta: "설명회 자료가 필요하면 댓글에 자료라고 남겨주세요.",
+  }), "gemini-2.5-flash");
+  for (const phrase of [
+    "첫 2~3초",
+    "오늘은 ~에 대해 알아보겠습니다",
+    "CTA 전에 반드시 공감",
+    "0~3초: 훅",
+    "후킹 방식은 아래 중",
+    "최종 추천은 첫 3초 정지력",
+  ]) {
+    if (!yunmiPrompt.includes(phrase)) {
+      throw new Error(`Yunmi generation prompt missing meta prompt phrase: ${phrase}`);
+    }
+  }
+  const noPaidPreview = __yunmiTest.buildYunmiScriptResult({
+    topic: "학부모 설명회 오프닝",
+    target_audience: "처음 참석한 학부모",
+    objective: "긴장감을 낮추고 오늘 들을 내용을 기대하게 만들기",
+    reference_text: "처음 10초에 분위기를 풀고, 오늘 얻어갈 수 있는 결과를 먼저 말한다.",
+    cta: "설명회 자료가 필요하면 댓글에 자료라고 남겨주세요.",
+  });
+  const noPaidDialogue = (noPaidPreview.variants || [])
+    .flatMap((variant) => variant.rows || [])
+    .map((row) => row.dialogue || "")
+    .join("\n");
+  if (/오늘은|알아보겠습니다/.test(noPaidDialogue)) {
+    throw new Error("Yunmi no-paid script uses banned explanatory intro");
+  }
+  if (!noPaidDialogue.includes("그냥 넘기는 순간은") || !noPaidDialogue.includes("지금 막막한 게 정상입니다")) {
+    throw new Error("Yunmi no-paid script does not use the revised spoken flow");
+  }
+
   await waitForServer();
   const login = await request("/api/auth/login", {
     method: "POST",
@@ -123,8 +163,8 @@ try {
     throw new Error("Yunmi worker is not exposed as a web_module job");
   }
   const jobKind = workers.job_kinds.find((item) => item.kind === "yunmi_script");
-  if (!jobKind || jobKind.required_product !== "bundle") {
-    throw new Error("Yunmi job kind is missing bundle entitlement");
+  if (!jobKind || jobKind.required_product !== "yunmi") {
+    throw new Error("Yunmi job kind is missing yunmi entitlement");
   }
 
   let emptyFailed = false;
@@ -139,6 +179,25 @@ try {
   }
   if (!emptyFailed) {
     throw new Error("empty Yunmi job did not fail with yunmi_source_required");
+  }
+
+  let urlOnlyFailed = false;
+  try {
+    await request("/api/jobs", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({
+        kind: "yunmi_script",
+        payload: {
+          reference_url: "https://www.instagram.com/reel/example/",
+        },
+      }),
+    });
+  } catch (error) {
+    urlOnlyFailed = error.status === 400 && error.body?.error === "yunmi_source_required";
+  }
+  if (!urlOnlyFailed) {
+    throw new Error("URL-only Yunmi job did not fail with yunmi_source_required");
   }
 
   const created = await request("/api/jobs", {
@@ -160,11 +219,29 @@ try {
   if (result.mode !== "no_paid_alpha" || result.cost?.total_won !== 0) {
     throw new Error("Yunmi alpha job should be no-paid");
   }
-  if (!Array.isArray(result.variants) || result.variants.length !== 3) {
-    throw new Error("Yunmi alpha job did not return A/B/C variants");
+  if (!Array.isArray(result.variants) || result.variants.length < 2) {
+    throw new Error("Yunmi alpha job did not return script options");
   }
-  if (!String(result.copy_text || "").includes("윤미 스크립트 초안")) {
-    throw new Error("Yunmi copy_text missing");
+  if (!String(result.copy_text || "").includes("## 숏폼 스크립트 1안") || !String(result.copy_text || "").includes("## 최종 추천")) {
+    throw new Error("Yunmi structured copy_text missing");
+  }
+
+  const withUrl = await request("/api/jobs", {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      kind: "yunmi_script",
+      payload: {
+        topic: "제 2의 뇌 만들기",
+        objective: "AI 비서를 만들어 준다는 내용을 구조적으로 설명하기",
+        target_audience: "AI 자동화에 관심 있는 사람들",
+        reference_url: "https://www.instagram.com/reel/example/",
+      },
+    }),
+  });
+  const urlDialogue = String(withUrl.job.result?.variants?.[0]?.rows?.[1]?.dialogue || "");
+  if (/https?:\/\//i.test(urlDialogue)) {
+    throw new Error("Yunmi URL leaked into script dialogue");
   }
 
   let unconfirmedFailed = false;
@@ -176,8 +253,8 @@ try {
         kind: "yunmi_script",
         payload: {
           mode: "ai_beta",
-          topic: "AI 베타 확인 없는 요청",
-          reference_text: "확인 없이 paid-ready 경로가 열리면 안 됩니다.",
+          topic: "AI 생성 확인 없는 요청",
+          reference_text: "확인 없이 AI 생성 경로가 열리면 안 됩니다.",
         },
       }),
     });
@@ -185,7 +262,7 @@ try {
     unconfirmedFailed = error.status === 402 && error.body?.error === "yunmi_paid_confirmation_required";
   }
   if (!unconfirmedFailed) {
-    throw new Error("Yunmi AI beta request without confirm_paid was not blocked");
+    throw new Error("Yunmi AI generation request without confirm_paid was not blocked");
   }
 
   let missingKeyFailed = false;
@@ -198,10 +275,10 @@ try {
         payload: {
           mode: "ai_beta",
           confirm_paid: true,
-          request_id: "yunmi-smoke-key-missing-20260523",
+          request_id: "yunmi-smoke-missing-key",
           ai_model: "gemini-2.5-pro",
-          topic: "AI 베타 키 누락 요청",
-          reference_text: "provider key 없이 paid-ready 경로가 열리면 안 됩니다.",
+          topic: "AI 생성 키 없는 요청",
+          reference_text: "확인은 했지만 provider key가 없으면 막혀야 합니다.",
         },
       }),
     });
@@ -209,7 +286,7 @@ try {
     missingKeyFailed = error.status === 409 && error.body?.error === "yunmi_ai_key_missing";
   }
   if (!missingKeyFailed) {
-    throw new Error("Yunmi AI beta request without provider key was not blocked");
+    throw new Error("Yunmi AI generation request without provider key was not blocked");
   }
 
   await request("/api/user/secrets/gemini", {
@@ -227,19 +304,19 @@ try {
         confirm_paid: true,
         request_id: yunmiRequestId,
         ai_model: "gemini-2.5-pro",
-        topic: "윤미 AI 베타 요청",
+        topic: "윤미 AI 생성 요청",
         target_audience: "라이브 강의를 준비하는 강사",
         objective: "오프닝 30초를 더 명확하게 만들기",
         reference_text: "첫 문장에서 오늘 얻어갈 결과를 말하고, 사례를 하나만 보여준다.",
       },
     }),
   });
-  if (paidReady.job.status !== "done") throw new Error("Yunmi paid-ready mock job did not finish");
-  if (paidReady.job.result?.mode !== "paid_ready_mock") throw new Error("Yunmi paid-ready mock result mode missing");
-  if (paidReady.job.result?.paid_call?.executed !== false) throw new Error("Yunmi paid-ready smoke must not execute a paid call");
+  if (paidReady.job.status !== "done") throw new Error("Yunmi AI mock job did not finish");
+  if (paidReady.job.result?.mode !== "paid_ready_mock") throw new Error("Yunmi AI mock result mode missing");
+  if (paidReady.job.result?.paid_call?.executed !== false) throw new Error("Yunmi AI mock smoke must not execute a paid call");
   if (paidReady.job.result?.paid_call?.request_id !== yunmiRequestId) throw new Error("Yunmi request id missing from result");
   if (!paidReady.job.result?.cost?.estimated_total_won || paidReady.job.result?.cost?.total_won !== 0) {
-    throw new Error("Yunmi paid-ready cost guard is wrong");
+    throw new Error("Yunmi AI mock cost guard is wrong");
   }
   const duplicate = await request("/api/jobs", {
     method: "POST",
@@ -251,7 +328,7 @@ try {
         confirm_paid: true,
         request_id: yunmiRequestId,
         ai_model: "gemini-2.5-pro",
-        topic: "윤미 AI 베타 요청",
+        topic: "윤미 AI 생성 요청",
         reference_text: "같은 request id는 같은 job을 돌려줘야 합니다.",
       },
     }),
@@ -271,26 +348,26 @@ try {
     throw new Error("Yunmi form markers missing from app HTML");
   }
   if (!appHtml.includes("yunmiGenerationMode") || !appHtml.includes("data-yunmi-report-error")) {
-    throw new Error("Yunmi paid-ready UI markers missing from app HTML");
+    throw new Error("Yunmi AI generation UI markers missing from app HTML");
   }
   const persistedJobs = fs.readFileSync(path.join(tmpDir, "jobs.json"), "utf8");
   if (persistedJobs.includes(fakeGeminiSecret)) {
     throw new Error("raw Gemini key leaked into Yunmi jobs persistence");
   }
 
-  let chromium = null;
+  let playwright = null;
   try {
-    ({ chromium } = await import("playwright"));
-  } catch (error) {
-    if (error?.code !== "ERR_MODULE_NOT_FOUND") throw error;
+    playwright = await import("playwright");
+  } catch (_error) {
     console.log("YUNMI_UI_BROWSER_SMOKE_SKIPPED_NO_PLAYWRIGHT");
   }
-  if (chromium) {
-    const browser = await chromium.launch({ headless: true });
+  if (playwright?.chromium) {
+    const browser = await playwright.chromium.launch({ headless: true });
     try {
       const page = await browser.newPage({ viewport: { width: 1280, height: 920 } });
       await page.addInitScript(() => {
         window.localStorage.setItem("aimax_web_secret_notice_20260522", "1");
+        window.localStorage.setItem("aimax_service_notice_20260530_yeri_hyunju_june1", "1");
       });
       await page.goto(`${baseUrl}/app`);
       await page.fill("#email", email);
@@ -308,25 +385,32 @@ try {
       await page.click("#yunmiSubmitBtn");
       await page.waitForSelector("#yunmiJobResult:not(.hidden)", { timeout: 8000 });
       const resultText = await page.textContent("#yunmiJobResult");
-      if (!resultText.includes("A안") || !resultText.includes("B안") || !resultText.includes("C안")) {
-        throw new Error("Yunmi UI result did not render A/B/C variants");
+      if (!resultText.includes("숏폼 스크립트 1안") || !resultText.includes("숏폼 스크립트 2안") || !resultText.includes("최종 추천")) {
+        throw new Error("Yunmi UI result did not render structured script options");
+      }
+      const jobsTableText = await page.textContent("#jobsTable");
+      if (jobsTableText.includes("실패 원인을 정리했습니다") || jobsTableText.includes("중 오류")) {
+        throw new Error("Yunmi completed job was rendered as a failure in the jobs table");
+      }
+      if (!jobsTableText.includes("숏폼 스크립트 1안/2안")) {
+        throw new Error("Yunmi completed job log did not use the new structured script wording");
       }
       await page.selectOption("#yunmiGenerationMode", "ai_beta");
       await page.waitForFunction(() => (document.querySelector("#yunmiCostEstimate")?.textContent || "").includes("예상 원가"), null, { timeout: 8000 });
       page.once("dialog", async (dialog) => {
         const message = dialog.message();
-        if (!message.includes("실제 유료 AI 호출 없이") || !message.includes("자동 유료 재시도는 하지 않습니다")) {
-          throw new Error("Yunmi AI beta confirm did not include paid safety copy");
+        if (!message.includes("저장된 Gemini API 키로 실제 유료 AI 호출") || !message.includes("자동 유료 재시도는 하지 않고")) {
+          throw new Error("Yunmi AI generation confirm did not include paid safety copy");
         }
         await dialog.accept();
       });
-      await page.fill("#yunmiTopic", "AI 베타 UI 스모크");
-      await page.fill("#yunmiReferenceText", "UI에서 비용 확인 후 mock path만 실행한다.");
+      await page.fill("#yunmiTopic", "AI 생성 UI 스모크");
+      await page.fill("#yunmiReferenceText", "UI에서 비용 확인 후 테스트 mock 플래그만 실행한다.");
       await page.click("#yunmiSubmitBtn");
-      await page.waitForFunction(() => (document.querySelector("#yunmiJobResult")?.textContent || "").includes("AI beta mock"), null, { timeout: 8000 });
+      await page.waitForFunction(() => (document.querySelector("#yunmiJobResult")?.textContent || "").includes("AI mock"), null, { timeout: 8000 });
       const paidText = await page.textContent("#yunmiJobResult");
       if (!paidText.includes("유료 호출 없음") || !paidText.includes("요청 ID")) {
-        throw new Error("Yunmi paid-ready UI result did not expose request id/no-paid status");
+        throw new Error("Yunmi AI mock UI result did not expose request id/no-paid status");
       }
     } finally {
       await browser.close();
@@ -334,7 +418,7 @@ try {
   }
 
   console.log("YUNMI_ALPHA_SMOKE_OK");
-  console.log("YUNMI_PAID_READY_SMOKE_OK");
+  console.log("YUNMI_AI_MOCK_SMOKE_OK");
 } finally {
   child.kill("SIGTERM");
   await new Promise((resolve) => setTimeout(resolve, 100));

@@ -1,0 +1,109 @@
+{
+  "desktop": {
+    "viewport": {
+      "width": 1365,
+      "height": 900
+    },
+    "floor": {
+      "width": 971,
+      "height": 546,
+      "ratio": 1.78
+    },
+    "faceCount": 4,
+    "allFacesLoaded": true,
+    "faceWidthRatio": 0.169,
+    "faces": [
+      {
+        "src": "/assets/avatar_yeri_circle.png",
+        "width": 164,
+        "height": 164,
+        "x": 504,
+        "y": 329,
+        "animationName": "faceFloat"
+      },
+      {
+        "src": "/assets/avatar_hyunju_circle.png",
+        "width": 164,
+        "height": 164,
+        "x": 642,
+        "y": 537,
+        "animationName": "faceFloat"
+      },
+      {
+        "src": "/assets/avatar_songi.jpg",
+        "width": 164,
+        "height": 164,
+        "x": 888,
+        "y": 370,
+        "animationName": "faceFloat"
+      },
+      {
+        "src": "/assets/avatar_yunmi.jpg",
+        "width": 164,
+        "height": 164,
+        "x": 993,
+        "y": 487,
+        "animationName": "faceFloat"
+      }
+    ],
+    "pixelCount": 0,
+    "hasPixelAssetRefs": false,
+    "hasMyStaffHeading": false,
+    "hasCheckItemsHeading": false,
+    "brainVisible": true
+  },
+  "mobile": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "floor": {
+      "width": 373,
+      "height": 210,
+      "ratio": 1.78
+    },
+    "faceCount": 4,
+    "allFacesLoaded": true,
+    "faceWidthRatio": 0.177,
+    "faces": [
+      {
+        "src": "/assets/avatar_yeri_circle.png",
+        "width": 66,
+        "height": 66,
+        "x": 102,
+        "y": 660,
+        "animationName": "faceFloat"
+      },
+      {
+        "src": "/assets/avatar_hyunju_circle.png",
+        "width": 66,
+        "height": 66,
+        "x": 132,
+        "y": 752,
+        "animationName": "faceFloat"
+      },
+      {
+        "src": "/assets/avatar_songi.jpg",
+        "width": 66,
+        "height": 66,
+        "x": 256,
+        "y": 680,
+        "animationName": "faceFloat"
+      },
+      {
+        "src": "/assets/avatar_yunmi.jpg",
+        "width": 66,
+        "height": 66,
+        "x": 280,
+        "y": 723,
+        "animationName": "faceFloat"
+      }
+    ],
+    "pixelCount": 0,
+    "hasPixelAssetRefs": false,
+    "hasMyStaffHeading": false,
+    "hasCheckItemsHeading": false,
+    "brainVisible": true
+  },
+  "errors": []
+}

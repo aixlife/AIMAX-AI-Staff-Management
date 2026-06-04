@@ -256,6 +256,40 @@
     .pill.warn { background: #fff4d8; color: var(--warn); border-color: #ead69b; }
     .pill.bad { background: #fff0ec; color: var(--bad); border-color: #edc6bc; }
 
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .catalog-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfb;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .catalog-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .catalog-card-title {
+      display: grid;
+      gap: 2px;
+    }
+
+    .catalog-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
     .notice {
       border: 1px solid #cbe7d9;
       background: #e9f6ef;
@@ -588,6 +622,10 @@
             <select id="buyerProduct" required></select>
           </div>
           <div class="field">
+            <label for="buyerAccountSegment">계정 구분</label>
+            <select id="buyerAccountSegment"></select>
+          </div>
+          <div class="field">
             <label for="buyerExpires">만료일</label>
             <input id="buyerExpires" type="date">
           </div>
@@ -628,12 +666,16 @@
             <select id="bulkProduct" required></select>
           </div>
           <div class="field">
+            <label for="bulkAccountSegment">기본 계정 구분</label>
+            <select id="bulkAccountSegment"></select>
+          </div>
+          <div class="field">
             <label for="bulkExpires">공통 만료일</label>
             <input id="bulkExpires" type="date">
           </div>
           <div class="field">
             <label for="bulkBuyers">구매자 목록</label>
-            <textarea id="bulkBuyers" placeholder="buyer1@example.com, 홍길동&#10;buyer2@example.com, 김민수&#10;buyer3@example.com, 이예리, yeri"></textarea>
+            <textarea id="bulkBuyers" placeholder="buyer1@example.com, 홍길동&#10;member1@example.com, 김민수, 상수, , 메이크패밀리&#10;buyer3@example.com, 이예리, yeri, , 유료"></textarea>
           </div>
           <label class="row" style="justify-content:flex-start;">
             <input id="bulkResetPassword" type="checkbox" style="width:auto;">
@@ -659,13 +701,26 @@
         <div class="row">
           <div>
             <h2>직원 권한 일괄 추가</h2>
-            <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 직원 권한만 추가합니다.</p>
+            <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 유료/권한형 직원 권한만 추가합니다. 무료 공개 직원은 기존/신규 계정에 자동 제공됩니다.</p>
           </div>
           <div class="actions">
+            <button id="grantBundleAllBtn" class="btn primary" type="button">메이크패밀리 원회원에게 전체 통합 권한 추가</button>
             <button id="grantSongiAllBtn" class="btn primary" type="button">활성 사용자에게 송이 권한 추가</button>
+            <button id="grantSangsuMembersBtn" class="btn primary" type="button">메이크패밀리 원회원에게 상수 권한 추가</button>
           </div>
         </div>
-        <div id="grantProductResult" class="notice warn">아직 일괄 권한 작업이 없습니다.</div>
+        <div id="grantProductResult" class="notice warn">무료 공개 직원은 별도 일괄 권한 작업 없이 모든 로그인 사용자에게 자동 적용됩니다.</div>
+      </section>
+
+      <section class="panel stack">
+        <div class="row">
+          <div>
+            <h2>직원 카탈로그</h2>
+            <p class="small">운영 서버 기준 직원, 실행 방식, 작업 연결 상태입니다.</p>
+          </div>
+          <span id="catalogSummary" class="pill">확인 중</span>
+        </div>
+        <div id="workerCatalogGrid" class="catalog-grid"></div>
       </section>
 
       <section class="panel">
@@ -684,6 +739,10 @@
           <div class="field">
             <label for="productFilter">상품</label>
             <select id="productFilter"></select>
+          </div>
+          <div class="field">
+            <label for="segmentFilter">계정 구분</label>
+            <select id="segmentFilter"></select>
           </div>
           <div class="field">
             <label for="statusFilter">상태</label>
@@ -722,7 +781,7 @@
           <div class="row">
             <div>
               <h2>카페24 주문 대기열</h2>
-              <p class="small">카페24 주문 메일에서 넘어온 이름과 이메일을 확인한 뒤 계정을 생성하고 안내 메일을 보냅니다.</p>
+              <p class="small">정상 주문은 자동으로 계정 생성과 안내 메일 발송까지 처리됩니다. 확인 필요/실패 주문만 여기서 정정하거나 재시도합니다.</p>
             </div>
             <div class="actions">
               <button id="refreshCafe24OrdersBtn" class="btn" type="button">갱신</button>
@@ -863,6 +922,13 @@
   <script>
     const $ = (selector) => document.querySelector(selector);
     const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+    const accountSegments = [
+      ["paid_buyer", "AIMAX 유료 구매자"],
+      ["makefamily_member", "메이크패밀리 원회원"],
+      ["member_and_buyer", "원회원+구매자"],
+      ["test", "테스트/운영"],
+      ["operator", "운영자"],
+    ];
     const state = {
       products: [],
       users: [],
@@ -874,6 +940,8 @@
       cafe24Stats: {},
       lastCafe24Guides: [],
       reports: [],
+      workers: [],
+      jobKinds: [],
       selectedReport: null,
       selectedReportDetail: null,
       activeTab: "buyers",
@@ -906,7 +974,12 @@
       invalid_order: "주문 정보를 확인해주세요.",
       ambiguous_product: "상품을 자동으로 판단하지 못했습니다.",
       unknown_product: "상품을 자동으로 판단하지 못했습니다.",
+      non_staff_product: "AIMAX 직원 판매 상품이 아니라 자동 제외했습니다.",
+      amount_mismatch: "직원 상품명과 결제 금액이 맞지 않습니다.",
+      product_not_ready: "직원 기능/출시 상태 확인이 필요합니다.",
       invalid_order_status: "주문 상태 값을 확인해주세요.",
+      invalid_order_for_auto_process: "자동 처리할 수 없는 주문입니다. 이메일과 상품을 확인해주세요.",
+      auto_process_failed: "자동 처리에 실패했습니다.",
       report_not_found: "오류 보고를 찾을 수 없습니다.",
       invalid_report_status: "오류 보고 상태 값을 확인해주세요.",
       report_update_failed: "오류 보고 상태 변경에 실패했습니다.",
@@ -931,6 +1004,21 @@
 
     function labelForProduct(product) {
       return state.products.find((item) => item.product === product)?.label || product || "-";
+    }
+
+    function labelForAccountSegment(segment) {
+      return accountSegments.find(([value]) => value === segment)?.[1] || segment || "-";
+    }
+
+    function normalizeAccountSegment(value) {
+      const raw = String(value || "").trim().toLowerCase();
+      if (!raw) return "";
+      if (["buyer", "paid", "paid_buyer", "유료", "구매자"].includes(raw)) return "paid_buyer";
+      if (["makefamily", "member", "student", "course", "수강생", "원회원", "메이크패밀리"].includes(raw)) return "makefamily_member";
+      if (["both", "member_and_buyer", "원회원+구매자"].includes(raw)) return "member_and_buyer";
+      if (["test", "demo", "테스트"].includes(raw)) return "test";
+      if (["operator", "admin", "운영자"].includes(raw)) return "operator";
+      return raw;
     }
 
     function apiError(error) {
@@ -998,6 +1086,12 @@
       $("#buyerProduct").innerHTML = options;
       $("#bulkProduct").innerHTML = options;
       $("#productFilter").innerHTML = `<option value="">전체</option>${options}`;
+      const segmentOptions = accountSegments.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join("");
+      $("#buyerAccountSegment").innerHTML = segmentOptions;
+      $("#bulkAccountSegment").innerHTML = segmentOptions;
+      $("#segmentFilter").innerHTML = `<option value="">전체</option>${segmentOptions}`;
+      $("#buyerAccountSegment").value = "paid_buyer";
+      $("#bulkAccountSegment").value = "paid_buyer";
     }
 
     function renderStats() {
@@ -1008,6 +1102,90 @@
       $("#statAgents").textContent = stats.connected_agents || 0;
       $("#statActive").textContent = stats.active || 0;
       $("#statExpired").textContent = stats.expired || 0;
+    }
+
+    function jobKindForWorker(worker) {
+      return state.jobKinds.find((item) => item.kind === worker.job_kind) || null;
+    }
+
+    function workerStatusPill(worker) {
+      if (worker.status === "available") return `<span class="pill ok">사용 가능</span>`;
+      if (worker.status === "beta") return `<span class="pill warn">베타</span>`;
+      if (worker.status === "needs_setup") return `<span class="pill warn">설정 필요</span>`;
+      return `<span class="pill">확인</span>`;
+    }
+
+    function executionPill(value) {
+      if (value === "local_agent") return `<span class="pill warn">로컬 실행기</span>`;
+      if (value === "web_module") return `<span class="pill ok">웹 실행</span>`;
+      if (value === "external_download") return `<span class="pill ok">직접 다운로드</span>`;
+      if (value === "planned") return `<span class="pill">준비 중</span>`;
+      return `<span class="pill">${escapeHtml(value || "미지정")}</span>`;
+    }
+
+    function workerAccessPills(worker) {
+      const pills = [];
+      if (worker.access_policy === "public") {
+        pills.push(`<span class="pill ok">무료 공개</span>`);
+        pills.push(`<span class="pill ok">신규 계정 자동 제공</span>`);
+      } else {
+        pills.push(`<span class="pill warn">권한 필요</span>`);
+      }
+      const platforms = Array.isArray(worker.supported_platforms) ? worker.supported_platforms : [];
+      if (platforms.length === 1 && platforms[0] === "windows") {
+        pills.push(`<span class="pill warn">Windows 전용</span>`);
+      } else if (platforms.length) {
+        pills.push(`<span class="pill">${escapeHtml(platforms.join(", "))}</span>`);
+      }
+      if (worker.version) pills.push(`<span class="pill">v${escapeHtml(worker.version)}</span>`);
+      return pills.join("");
+    }
+
+    function workerCatalogDetail(worker, jobKind, queue) {
+      if (worker.execution === "external_download") {
+        const label = worker.download_label || "다운로드";
+        const link = worker.release_url || worker.setup_download_url || worker.repo_url || "";
+        const safeLink = escapeHtml(link);
+        const linkHtml = link
+          ? `<a href="${safeLink}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+          : escapeHtml(label);
+        return `무료 공개 직원 · 계정 생성 시 자동 사용 가능 · ${linkHtml}`;
+      }
+      return `${escapeHtml(worker.job_kind || "연결된 작업 없음")} · ${escapeHtml(queue)}${jobKind?.required_product ? ` · 권한 ${escapeHtml(jobKind.required_product)}` : ""}`;
+    }
+
+    function renderWorkerCatalog() {
+      const workers = state.workers || [];
+      const jobKinds = state.jobKinds || [];
+      const localCount = workers.filter((worker) => worker.execution === "local_agent").length;
+      const webCount = workers.filter((worker) => worker.execution === "web_module").length;
+      const downloadCount = workers.filter((worker) => worker.execution === "external_download").length;
+      const publicCount = workers.filter((worker) => worker.access_policy === "public").length;
+      $("#catalogSummary").textContent = `${workers.length}명 · 작업 ${jobKinds.length}개 · 로컬 ${localCount} · 웹 ${webCount} · 다운로드 ${downloadCount} · 무료 공개 ${publicCount}`;
+      $("#workerCatalogGrid").innerHTML = workers.length ? workers.map((worker) => {
+        const jobKind = jobKindForWorker(worker);
+        const apiMode = jobKind?.api_mode || "-";
+        const queue = jobKind ? (jobKind.queue === false ? "큐 아님" : "큐 사용") : "작업 없음";
+        return `
+          <article class="catalog-card">
+            <div class="catalog-card-head">
+              <div class="catalog-card-title">
+                <strong>${escapeHtml(worker.name || worker.label || worker.staff_code || worker.code)}</strong>
+                <span class="small muted">${escapeHtml(worker.role || worker.code || "-")}</span>
+              </div>
+              ${workerStatusPill(worker)}
+            </div>
+            <div class="catalog-pills">
+              ${executionPill(worker.execution || worker.type)}
+              <span class="pill">${escapeHtml(worker.product || "-")}</span>
+              <span class="pill">${escapeHtml(apiMode)}</span>
+              <span class="pill ${jobKind?.queue === false ? "ok" : ""}">${escapeHtml(queue)}</span>
+              ${workerAccessPills(worker)}
+            </div>
+            <div class="small muted">${workerCatalogDetail(worker, jobKind, queue)}</div>
+          </article>
+        `;
+      }).join("") : `<div class="notice warn">직원 카탈로그를 불러오지 못했습니다.</div>`;
     }
 
     function productPill(user) {
@@ -1045,25 +1223,31 @@
         products.add("hyunju");
       }
       if (products.has("bundle")) {
-        products.add("yeri");
-        products.add("hyunju");
-        products.add("songi");
-        products.add("blog_team");
+        const bundledProducts = state.products.length
+          ? state.products.map((item) => item.product).filter(Boolean)
+          : ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
+        bundledProducts.forEach((product) => products.add(product));
       }
       return products;
     }
 
     function displayProducts(user) {
       const products = userProducts(user);
-      if (products.has("bundle")) return ["bundle"];
       const visible = [];
-      if (products.has("blog_team")) {
+      if (products.has("bundle")) {
+        return ["bundle"];
+      } else if (products.has("blog_team")) {
         visible.push("blog_team");
       } else {
         if (products.has("yeri")) visible.push("yeri");
         if (products.has("hyunju")) visible.push("hyunju");
       }
       if (products.has("songi")) visible.push("songi");
+      if (products.has("yunmi")) visible.push("yunmi");
+      if (products.has("jieun")) visible.push("jieun");
+      if (products.has("nakyung")) visible.push("nakyung");
+      if (products.has("hyojin")) visible.push("hyojin");
+      if (products.has("sangsu")) visible.push("sangsu");
       return visible;
     }
 
@@ -1093,9 +1277,11 @@
           <td>
             <strong>${escapeHtml(user.email)}</strong>
             <div class="small muted">${escapeHtml(user.name || "-")}</div>
+            <div class="small muted">${escapeHtml(user.account_segment_label || labelForAccountSegment(user.account_segment || "paid_buyer"))}</div>
           </td>
           <td>
             ${productPill(user)}
+            ${user.yunmi_access ? `<span class="pill ok">윤미 허용</span>` : ""}
             <div class="small muted">${escapeHtml(user.expires_at ? `만료 ${user.expires_at}` : "만료 없음")}</div>
           </td>
           <td>${accountPill(user)}</td>
@@ -1167,6 +1353,36 @@
       return amount ? `${amount.toLocaleString("ko-KR")}원` : "-";
     }
 
+    function cafe24AutoStageText(stage) {
+      const value = String(stage || "");
+      if (value === "locked") return "자동 처리 시작";
+      if (value === "provisioning") return "계정 생성/권한 부여";
+      if (value === "setup_link") return "설정 링크 생성";
+      if (value === "mail_sending") return "안내 메일 발송";
+      if (value === "sent") return "발송 완료";
+      if (value === "failed") return "실패";
+      return value;
+    }
+
+    function cafe24OrderRecoveryActions(order) {
+      const status = String(order.status || "pending");
+      const id = escapeHtml(order.id);
+      const canRetry = !order.sent_at && (
+        ["failed", "provisioned"].includes(status)
+        || Boolean(order.auto_process_error)
+        || (status === "pending" && !order.auto_process_started_at)
+      );
+      const canResend = status === "sent";
+      const buttons = [];
+      if (canRetry) {
+        buttons.push(`<button class="btn compact" type="button" data-order-retry="${id}">자동 재시도</button>`);
+      }
+      if (canResend) {
+        buttons.push(`<button class="btn compact" type="button" data-order-resend="${id}">설정 링크 재발송</button>`);
+      }
+      return buttons.length ? `<div class="actions" style="margin-top:6px; gap:6px; flex-wrap:wrap;">${buttons.join("")}</div>` : "";
+    }
+
     function renderCafe24Orders() {
       const openCount = Number(state.cafe24Stats?.open || 0);
       $("#orderTabCount").textContent = openCount || state.cafe24Orders.length || 0;
@@ -1197,6 +1413,14 @@
             <td class="order-status-col">
               ${orderStatusPill(order)}
               ${issueText ? `<div class="small muted">${escapeHtml(issueText)}</div>` : ""}
+              ${order.review_alert_sent_at ? `<div class="small muted">알림 ${escapeHtml(formatTime(order.review_alert_sent_at))}</div>` : ""}
+              ${order.review_alert_error ? `<div class="small muted">알림 실패: ${escapeHtml(order.review_alert_error)}</div>` : ""}
+              ${order.auto_process_started_at ? `<div class="small muted">자동 처리 ${escapeHtml(formatTime(order.auto_process_started_at))}${order.auto_process_stage ? ` · ${escapeHtml(cafe24AutoStageText(order.auto_process_stage))}` : ""}${order.auto_process_attempts ? ` · ${Number(order.auto_process_attempts)}회` : ""}</div>` : ""}
+              ${order.auto_process_error ? `<div class="small muted">자동 실패: ${escapeHtml(order.auto_process_error)}</div>` : ""}
+              ${order.auto_process_error_stage ? `<div class="small muted">실패 단계: ${escapeHtml(cafe24AutoStageText(order.auto_process_error_stage))}</div>` : ""}
+              ${order.auto_process_alert_sent_at ? `<div class="small muted">실패 알림 ${escapeHtml(formatTime(order.auto_process_alert_sent_at))}</div>` : ""}
+              ${order.auto_process_alert_error ? `<div class="small muted">실패 알림 오류: ${escapeHtml(order.auto_process_alert_error)}</div>` : ""}
+              ${cafe24OrderRecoveryActions(order)}
             </td>
             <td class="order-time-col">
               <div>${escapeHtml(formatTime(order.created_at || order.received_at))}</div>
@@ -1211,6 +1435,12 @@
       $$("[data-order-product]").forEach((select) => {
         select.addEventListener("change", () => updateCafe24OrderProduct(select.dataset.orderProduct, select.value).catch((error) => alert(apiError(error))));
       });
+      $$("[data-order-retry]").forEach((button) => {
+        button.addEventListener("click", () => retryCafe24Order(button.dataset.orderRetry, "retry", button).catch((error) => alert(apiError(error))));
+      });
+      $$("[data-order-resend]").forEach((button) => {
+        button.addEventListener("click", () => retryCafe24Order(button.dataset.orderResend, "resend", button).catch((error) => alert(apiError(error))));
+      });
     }
 
     function renderCafe24Guides(results) {
@@ -1219,7 +1449,7 @@
       const summary = rows.map((row) => {
         const order = row.order || {};
         const user = row.user || {};
-        return `${user.email || order.email || "-"} | ${labelForProduct(row.product || user.product || order.product)} | ${row.temporary_password_visible_once ? "임시 비밀번호 생성" : "기존 비밀번호 유지"}`;
+        return `${user.email || order.email || "-"} | ${labelForProduct(row.product || user.product || order.product)} | ${row.guide?.setup_url_visible_once ? "설정 링크 생성" : row.temporary_password_visible_once ? "임시 비밀번호 생성" : "기존 비밀번호 유지"}`;
       });
       $("#cafe24OrderResult").classList.remove("warn");
       $("#cafe24OrderResult").textContent = [
@@ -1318,10 +1548,50 @@
       return raw?.system?.agent || raw?.agent_context || raw?.web_context?.agent || {};
     }
 
+    function reportJobLine(report, raw) {
+      const source = report || {};
+      const summaryParts = [
+        source.job_id ? `job=${source.job_id}` : "",
+        source.job_kind ? `kind=${source.job_kind}` : "",
+        source.job_worker ? `worker=${source.job_worker}` : "",
+        source.job_status ? `status=${source.job_status}` : "",
+        source.job_stage ? `stage=${source.job_stage}` : "",
+        source.job_failed_keyword ? `keyword=${source.job_failed_keyword}` : "",
+      ].filter(Boolean);
+      if (summaryParts.length) return summaryParts.join(" / ");
+      const jobs = raw?.system?.agent?.jobs_recent || raw?.agent_context?.jobs_recent || raw?.jobs_recent || [];
+      const list = Array.isArray(jobs) ? jobs : [];
+      const job = list.find((item) => ["failed", "cancelled", "running"].includes(String(item?.status || ""))) || list[0];
+      if (!job) return "";
+      return [
+        job.id ? `job=${job.id}` : "",
+        job.kind ? `kind=${job.kind}` : "",
+        job.worker_code ? `worker=${job.worker_code}` : "",
+        job.status ? `status=${job.status}` : "",
+        (job.failed_stage || job.result?.failed_stage || job.result?.stage) ? `stage=${job.failed_stage || job.result?.failed_stage || job.result?.stage}` : "",
+        (job.failed_keyword || job.result?.failed_keyword) ? `keyword=${job.failed_keyword || job.result?.failed_keyword}` : "",
+      ].filter(Boolean).join(" / ");
+    }
+
+    function reportMediaToolLine(report, raw) {
+      const source = report || {};
+      if (source.media_tools_missing) return `누락: ${source.media_tools_missing}`;
+      if (source.media_tools_ready === "ready") return "영상 도구 준비됨";
+      const tools = raw?.system?.research?.media_tools || raw?.research?.media_tools || raw?.media_tools || {};
+      const missing = [
+        tools.video_download?.available === false ? "yt-dlp" : "",
+        tools.frame_extract?.available === false ? "ffmpeg" : "",
+      ].filter(Boolean);
+      if (missing.length) return `누락: ${missing.join(", ")}`;
+      return tools.video_file_analysis_ready === true ? "영상 도구 준비됨" : "";
+    }
+
     function reportCopyText(report, detail = null) {
       const source = report || {};
       const raw = detail?.report || null;
       const agent = reportAgent(raw);
+      const jobLine = reportJobLine(source, raw);
+      const mediaToolLine = reportMediaToolLine(source, raw);
       const agentText = agent.version
         ? `${agent.connected === false ? "미연결" : "연결"} / ${agent.version} / ${agent.platform || "-"}`
         : "-";
@@ -1333,6 +1603,8 @@
         `상품: ${labelForProduct(source.product) || source.product || "-"}`,
         `작업: ${source.work_context || "-"}`,
         `화면 오류: ${source.visible_error || "-"}`,
+        `작업 ID/단계: ${jobLine || "-"}`,
+        `영상 도구: ${mediaToolLine || "-"}`,
         `사용자 안내: ${source.public_message || "-"}`,
         `다음 안내: ${source.next_update_message || "-"}`,
         `앱/OS: ${reportAppVersion(source, raw) || "-"} / ${reportOs(source, raw) || "-"}`,
@@ -1349,6 +1621,8 @@
       const source = report || {};
       const raw = detail?.report || null;
       const agent = reportAgent(raw);
+      const jobLine = reportJobLine(source, raw);
+      const mediaToolLine = reportMediaToolLine(source, raw);
       const agentText = agent.version
         ? `${agent.connected === false ? "미연결" : "연결"} / ${agent.version} / ${agent.platform || "-"}`
         : "-";
@@ -1360,6 +1634,8 @@
         `상품: ${labelForProduct(source.product) || source.product || "-"}`,
         `작업: ${source.work_context || "-"}`,
         `화면 오류: ${source.visible_error || "-"}`,
+        `작업 ID/단계: ${jobLine || "-"}`,
+        `영상 도구: ${mediaToolLine || "-"}`,
         `사용자 안내: ${source.public_message || "-"}`,
         `다음 안내: ${source.next_update_message || "-"}`,
         `앱/OS: ${reportAppVersion(source, raw) || "-"} / ${reportOs(source, raw) || "-"}`,
@@ -1468,6 +1744,8 @@
             <div class="report-main">
               <div class="report-error-title">${escapeHtml(report.work_context || "오류 보고")}</div>
               <div class="report-error-text">${escapeHtml(report.visible_error || "-")}</div>
+              ${reportJobLine(report) ? `<div class="small muted">${escapeHtml(reportJobLine(report))}</div>` : ""}
+              ${reportMediaToolLine(report) ? `<div class="small muted">${escapeHtml(reportMediaToolLine(report))}</div>` : ""}
               <div class="mono report-id-line" title="${escapeHtml(report.report_id)}">${escapeHtml(report.report_id)}</div>
             </div>
           </td>
@@ -1568,6 +1846,11 @@
       if (["yeri", "예리"].includes(raw)) return "yeri";
       if (["hyunju", "현주"].includes(raw)) return "hyunju";
       if (["songi", "송이", "research", "리서치", "자료조사"].includes(raw)) return "songi";
+      if (["yunmi", "윤미", "script", "스크립트", "스크립트작가"].includes(raw)) return "yunmi";
+      if (["jieun", "지은", "office", "오피스", "오피스매니저"].includes(raw)) return "jieun";
+      if (["nakyung", "나경", "pencil", "판서", "판서쌤"].includes(raw)) return "nakyung";
+      if (["hyojin", "효진", "video", "announcer", "영상제작", "아나운서"].includes(raw)) return "hyojin";
+      if (["sangsu", "상수", "quote", "quotation", "estimate", "견적", "견적서"].includes(raw)) return "sangsu";
       if (["blog_team", "blogteam", "블로그팀", "블로그마케팅팀", "마케팅팀", "예리현주", "예리+현주", "현주예리", "현주+예리"].includes(raw)) return "blog_team";
       if (["bundle", "통합", "전체통합", "전체", "all", "올인원"].includes(raw)) return "bundle";
       return raw;
@@ -1585,7 +1868,8 @@
             name: parts[1] || "",
             product: normalizeBulkProduct(parts[2]) || defaultProduct,
             expires_at: parts[3] || null,
-            admin_note: parts.slice(4).join(" ").trim(),
+            account_segment: normalizeAccountSegment(parts[4]) || $("#bulkAccountSegment").value || "paid_buyer",
+            admin_note: parts.slice(5).join(" ").trim(),
           };
         });
     }
@@ -1653,13 +1937,17 @@
     async function loadCatalog() {
       const catalog = await api("/api/admin/catalog");
       state.products = catalog.products || [];
+      state.workers = catalog.workers || [];
+      state.jobKinds = catalog.job_kinds || [];
       renderProductOptions();
+      renderWorkerCatalog();
     }
 
     async function loadUsers() {
       const params = new URLSearchParams();
       if ($("#searchInput").value.trim()) params.set("query", $("#searchInput").value.trim());
       if ($("#productFilter").value) params.set("product", $("#productFilter").value);
+      if ($("#segmentFilter").value) params.set("segment", $("#segmentFilter").value);
       if ($("#statusFilter").value) params.set("status", $("#statusFilter").value);
       const data = await api(`/api/admin/users?${params.toString()}`);
       state.users = data.users || [];
@@ -1691,6 +1979,48 @@
         renderCafe24Orders();
       }
       return updated;
+    }
+
+    async function retryCafe24Order(orderId, mode, button) {
+      if (!orderId) return;
+      const resend = mode === "resend";
+      if (resend && !confirm("설정 링크를 새로 만들고 안내 메일을 다시 발송할까요?")) return;
+      const original = button?.textContent || "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = resend ? "재발송 중" : "재시도 중";
+      }
+      try {
+        const result = await api("/api/admin/cafe24-orders/retry", {
+          method: "POST",
+          body: JSON.stringify({
+            order_ids: [orderId],
+            mode: resend ? "resend" : "retry",
+            resend_guide: resend,
+          }),
+        });
+        const rows = result.results || [];
+        const errors = result.errors || [];
+        rows.forEach((row) => {
+          if (row.order?.id) {
+            state.cafe24Orders = state.cafe24Orders.map((item) => item.id === row.order.id ? row.order : item);
+          }
+        });
+        $("#cafe24OrderResult").classList.toggle("warn", Boolean(errors.length));
+        $("#cafe24OrderResult").textContent = [
+          `${resend ? "재발송" : "자동 재시도"} 완료: ${rows.length}건`,
+          errors.length ? `실패: ${errors.length}건` : "",
+          ...errors.slice(0, 8).map((item) => `${item.email || item.order_id || "-"}: ${statusLabels[item.error] || item.error}${item.stage ? ` (${cafe24AutoStageText(item.stage)})` : ""}`),
+        ].filter(Boolean).join("\n");
+        renderCafe24Orders();
+        await loadUsers();
+        await loadCafe24Orders();
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = original;
+        }
+      }
     }
 
     async function provisionCafe24Orders() {
@@ -1896,10 +2226,11 @@
       return result;
     }
 
-    async function grantProductToActiveUsers(product, button = null) {
+    async function grantProductToUsers(product, scope = "active", button = null) {
       if (!product) return;
       const label = labelForProduct(product);
-      if (!confirm(`활성 사용자 전체에게 ${label} 권한을 추가할까요? 기존 상품 권한은 유지됩니다.`)) return;
+      const scopeLabel = scope === "makefamily_members" ? "메이크패밀리 원회원" : "활성 사용자 전체";
+      if (!confirm(`${scopeLabel}에게 ${label} 권한을 추가할까요? 기존 상품 권한은 유지됩니다.`)) return;
       const previous = button?.textContent || "";
       if (button) {
         button.disabled = true;
@@ -1908,10 +2239,10 @@
       try {
         const result = await api("/api/admin/users/grant-product", {
           method: "POST",
-          body: JSON.stringify({ product, scope: "active" }),
+          body: JSON.stringify({ product, scope }),
         });
         $("#grantProductResult").classList.remove("warn");
-        $("#grantProductResult").textContent = `${label} 권한 추가 완료: 대상 ${result.scanned_count || 0}명 중 ${result.updated_count || 0}명 갱신`;
+        $("#grantProductResult").textContent = `${label} 권한 추가 완료: ${scopeLabel} 대상 ${result.scanned_count || 0}명 중 ${result.updated_count || 0}명 갱신`;
         await loadUsers();
       } catch (error) {
         $("#grantProductResult").classList.add("warn");
@@ -1927,12 +2258,19 @@
     async function updateUserProduct(email, product, button = null) {
       if (!email || !product) return;
       const original = button?.textContent || "";
+      const label = labelForProduct(product);
       try {
         if (button) {
           button.disabled = true;
-          button.textContent = "저장 중";
+          button.textContent = "추가 중";
         }
-        await provision({ email, product, source: "admin_product_change" });
+        await api("/api/admin/users/grant-product", {
+          method: "POST",
+          body: JSON.stringify({ email, product }),
+        });
+        $("#grantProductResult").classList.remove("warn");
+        $("#grantProductResult").textContent = `${email} 계정에 ${label} 권한을 추가했습니다. 기존 상품 권한은 유지됩니다.`;
+        await loadUsers();
       } catch (error) {
         alert(apiError(error));
       } finally {
@@ -2018,6 +2356,7 @@
         email: $("#buyerEmail").value.trim(),
         name: $("#buyerName").value.trim(),
         product: $("#buyerProduct").value,
+        account_segment: $("#buyerAccountSegment").value || "paid_buyer",
         expires_at: $("#buyerExpires").value || null,
         admin_note: $("#buyerNote").value.trim(),
         reset_password: $("#buyerResetPassword").checked,
@@ -2040,6 +2379,7 @@
       const buyers = parseBulkBuyers($("#bulkBuyers").value, $("#bulkProduct").value);
       const payload = {
         product: $("#bulkProduct").value,
+        account_segment: $("#bulkAccountSegment").value || "paid_buyer",
         expires_at: $("#bulkExpires").value || null,
         reset_password: $("#bulkResetPassword").checked,
         source: "admin_batch_page",
@@ -2080,7 +2420,9 @@
     });
 
     $("#openUserAppBtn").addEventListener("click", () => window.open("/app", "_blank", "noopener"));
-    $("#grantSongiAllBtn").addEventListener("click", (event) => grantProductToActiveUsers("songi", event.currentTarget));
+    $("#grantBundleAllBtn").addEventListener("click", (event) => grantProductToUsers("bundle", "makefamily_members", event.currentTarget));
+    $("#grantSongiAllBtn").addEventListener("click", (event) => grantProductToUsers("songi", "active", event.currentTarget));
+    $("#grantSangsuMembersBtn").addEventListener("click", (event) => grantProductToUsers("sangsu", "makefamily_members", event.currentTarget));
     $("#refreshBtn").addEventListener("click", () => refreshAll().catch((error) => alert(apiError(error))));
     $("#refreshReportsBtn").addEventListener("click", () => loadReports().catch((error) => alert(apiError(error))));
     $("#refreshCafe24OrdersBtn").addEventListener("click", () => loadCafe24Orders().catch((error) => alert(apiError(error))));

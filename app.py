@@ -150,8 +150,8 @@ _USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot"
 _GEMINI_IMAGE_PRICE_USD = 0.039
 _OPENAI_IMAGE_PRICE_USD = 0.042
 _AI_TEXT_PRICE_USD_PER_1M = {
-    # gemini-3.1-pro 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
-    "gemini-3.1-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 3.1 Pro"},
+    # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
+    "gemini-3.1-pro-preview": {"input": 1.25, "output": 10.00, "label": "Gemini 3.1 Pro Preview"},
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 2.5 Pro"},
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50, "label": "Gemini 2.5 Flash"},
     "claude": {"input": 3.00, "output": 15.00, "label": "Claude Sonnet"},
@@ -160,13 +160,14 @@ _AI_TEXT_PRICE_USD_PER_1M = {
 }
 _LEGACY_AI_MODEL_MAP = {
     "gemini": _DEFAULT_AI_MODEL,
-    "gemini-pro": "gemini-2.5-flash",
+    "gemini-pro": "gemini-3.1-pro-preview",
     "gemini-flash": "gemini-2.5-flash",
-    # 현행 선택지는 gemini-3.1-pro(유료/고급) 와 gemini-2.5-flash(기본) 뿐.
-    # 그 외 비선택 레거시값(2.5 Pro, 3.1 Pro Preview 등)은 무료 등급 동작 flash 로 매핑.
-    # gemini-3.1-pro 는 whitelist passthrough 라 명시 재선택 시 보존됨.
+    # 구버전 기본값/접미사 없는 레거시값(2.5 Pro, 3.1 Pro 등)은 무료 등급에서 동작하는
+    # 기본값(2.5 Flash)으로 매핑한다. UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)이므로
+    # 접미사 없는 "gemini-3.1-pro"는 사용자의 명시 선택이 아니라 자동/레거시값 → flash 가 안전.
+    # (무료 키 사용자가 기본값/레거시값으로 대량 실패하던 문제 방지)
     "gemini-2.5-pro": "gemini-2.5-flash",
-    "gemini-3.1-pro-preview": "gemini-2.5-flash",
+    "gemini-3.1-pro": "gemini-2.5-flash",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -191,7 +192,7 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-3.1-pro", "gemini-2.5-flash", "gpt-5.4-mini", "gpt-5-mini"):
+    if value in ("claude", "gemini-3.1-pro-preview", "gemini-2.5-flash", "gpt-5.4-mini", "gpt-5-mini"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 
@@ -228,6 +229,21 @@ def _normalize_image_count(value):
     except (TypeError, ValueError):
         count = 3
     return max(0, min(8, count))
+
+
+def _payload_image_count(payload, default=3):
+    if not isinstance(payload, dict):
+        return _normalize_image_count(default)
+    for key in ("image_count", "images"):
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return _normalize_image_count(value)
+    return _normalize_image_count(default)
 
 
 def _normalize_target_char_count(value):
@@ -858,18 +874,19 @@ def repair_accidental_provider_clear_markers():
 
 
 def migrate_forced_pro_preview_default():
-    """기본값이 유료 모델(gemini-3.1-pro / 2.5 Pro / 3.1 Pro Preview)이던 기간에 설정을
-    저장한 사용자는 settings.json 에 유료 모델이 강제로 박혀 무료 등급에서 글 생성이 실패한다.
+    """기본값이 gemini-3.1-pro-preview 로 깔렸던 기간에 설정을 저장한 사용자는
+    settings.json 에 pro-preview 가 강제로 박혀 무료 등급에서 글 생성이 실패한다.
 
-    저장된 유료-기본값을 무료 기본값(gemini-2.5-flash)으로 '1회만' 되돌린다.
-    마이그레이션 이후 사용자가 다시 'Gemini 3.1 Pro(유료/고급)'를 명시적으로 고르면
-    그 선택은 그대로 유지된다(_normalize_ai_model whitelist 는 건드리지 않음).
+    저장된 pro-preview 를 무료 기본값(gemini-2.5-flash)으로 '1회만' 되돌린다.
+    마이그레이션 이후 사용자가 다시 'Gemini 3.1 Pro Preview (유료/고급)'를 명시적으로
+    고르면 그 선택은 그대로 유지된다(_normalize_ai_model 화이트리스트는 건드리지 않음).
     영향 받은 경우 True 를 반환한다.
     """
     data = _load_settings_data()
     if not data or data.get("forced_pro_preview_default_migrated"):
         return False
-    migrated = data.get("ai_model") in ("gemini-3.1-pro", "gemini-3.1-pro-preview", "gemini-2.5-pro")
+    # 접미사 있는 pro-preview, 접미사 없는 레거시 gemini-3.1-pro / gemini-2.5-pro 모두 무료 flash 로 복귀.
+    migrated = data.get("ai_model") in ("gemini-3.1-pro-preview", "gemini-3.1-pro", "gemini-2.5-pro")
     if migrated:
         data["ai_model"] = "gemini-2.5-flash"
     data["forced_pro_preview_default_migrated"] = True
@@ -896,7 +913,7 @@ def _legacy_plain_secret(data, storage_key, data_key):
 
 
 def load_settings():
-    # 저장된 강제 유료-기본값을 무료 flash 로 1회 마이그레이션한 뒤 읽는다.
+    # 저장된 강제 pro-preview 기본값을 무료 flash 로 1회 마이그레이션한 뒤 읽는다.
     migrate_forced_pro_preview_default()
     data = _load_settings_data()
     if not data:
@@ -2938,7 +2955,7 @@ class NaverBlogApp:
                     raise ValueError("AI API 키가 없습니다. 웹 설정 또는 로컬 실행기에서 키를 추가해주세요.")
             artifact_image_count = 0
             if artifact:
-                requested_images = _normalize_image_count(payload.get("image_count") or payload.get("images") or 3)
+                requested_images = _payload_image_count(payload)
                 artifact_image_count = min(self._remote_artifact_image_count(artifact), requested_images)
             if artifact_image_count > 0 and not self._has_local_or_web_image_key(web_secrets):
                 raise ValueError("서버에서 글은 생성되었지만 이미지 생성을 위한 Gemini 또는 OpenAI API Key가 없습니다.")
@@ -3004,7 +3021,7 @@ class NaverBlogApp:
             "schedule_hour": str(payload.get("schedule_hour") or "").strip() or None,
             "schedule_interval": str(payload.get("schedule_interval") or "").strip() or None,
             "word_count": word_count,
-            "image_count": _normalize_image_count(payload.get("image_count") or payload.get("images") or 3),
+            "image_count": _payload_image_count(payload),
             "font_name": str(payload.get("font_name") or "").strip() or None,
             "ai_model": _normalize_ai_model(payload.get("ai_model") or payload.get("model") or self.ai_model_var.get()),
             "seo_brief": payload.get("seo_brief") if isinstance(payload.get("seo_brief"), dict) else None,
@@ -3955,7 +3972,7 @@ class NaverBlogApp:
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
             ("gemini-2.5-flash",       "Gemini 2.5 Flash  (~11원/글)  ★ 기본"),
-            ("gemini-3.1-pro",         "Gemini 3.1 Pro  (~44원/글, 유료/고급)"),
+            ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (~44원/글, 유료/고급)"),
             ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
             ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),
             ("claude",                 "Claude Sonnet  (~70원/글)"),
@@ -4182,7 +4199,7 @@ class NaverBlogApp:
         cost_text = (
             "[ 글 생성 — 텍스트, 모델별 실측 ]\n"
             "  • Gemini 2.5 Flash          ~11원/글  ★ 기본\n"
-            "  • Gemini 3.1 Pro             ~44원/글  (유료/고급)\n"
+            "  • Gemini 3.1 Pro Preview    ~44원/글  (유료/고급)\n"
             "  • GPT-5.4 mini              ~21원/글\n"
             "  • GPT-5 mini                ~9원/글\n"
             "  • Claude Sonnet             ~70원/글\n"
