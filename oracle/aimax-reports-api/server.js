@@ -1755,18 +1755,23 @@ function classifyYeriProviderError(provider, error) {
   }
 
   if (status === 429 || /(quota|insufficient|credit|billing|rate limit|resource_exhausted|limit: 0)/i.test(detail)) {
-    const hardQuota = /(insufficient_quota|credit|billing|limit: 0|expired|quota exceeded)/i.test(detail);
+    // 진짜 결제 고갈(유료 크레딧 소진)만 hard quota 로 분류한다. 무료 티어 일일/분당 한도
+    // (quota exceeded / RESOURCE_EXHAUSTED / limit: 0)는 결제 문제가 아니므로 '결제 확인'으로
+    // 오안내하지 않고 대기/유료키 등록 안내로 보낸다(무료 사용자 혼란·중복 보고 방지).
+    const billingDead = /(insufficient_quota|billing|payment|balance|out of credit|결제)/i.test(detail);
+    if (billingDead) {
+      return yeriProviderError(
+        provider,
+        "server_generation_quota_exceeded",
+        `${label} 결제/요금제 한도 초과 - 결제/크레딧 상태를 확인해주세요.`,
+        { status, detail, transient: false },
+      );
+    }
     return yeriProviderError(
       provider,
-      hardQuota ? "server_generation_quota_exceeded" : "server_generation_rate_limited",
-      hardQuota
-        ? `${label} 사용량/요금제 한도 초과 - 결제/사용량 한도를 확인해주세요.`
-        : `${label} 요청 제한이 걸렸습니다. 잠시 뒤 다시 시도해주세요.`,
-      {
-        status,
-        detail,
-        transient: !hardQuota,
-      },
+      "server_generation_rate_limited",
+      `${label} 무료 사용량 한도에 도달했습니다. 분당 한도면 잠시 후, 일일 한도면 내일 다시 시도하거나, 본인 유료 API 키를 등록하면 해소됩니다. (여러 글을 한 번에 몰아 보내면 한도에 더 빨리 도달합니다)`,
+      { status, detail, transient: true },
     );
   }
 
@@ -1945,8 +1950,8 @@ function yeriGenerationFailureMessage(error) {
   if (code === "yeri_openai_key_missing") return "OpenAI API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.";
   if (code === "yeri_gemini_key_missing") return "Gemini API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.";
   if (code === "server_generation_auth_failed") return "API 키 인증 실패입니다. 웹 설정의 AI/API 연결에서 키를 확인하거나 갱신해주세요.";
-  if (code === "server_generation_quota_exceeded") return "사용량/요금제 한도 초과입니다. 결제/쿼터 상태를 확인해주세요.";
-  if (code === "server_generation_rate_limited") return "AI 제공자 요청 제한이 걸렸습니다. 잠시 뒤 다시 시도해주세요.";
+  if (code === "server_generation_quota_exceeded") return "결제/요금제 한도 초과입니다. 결제/크레딧 상태를 확인해주세요.";
+  if (code === "server_generation_rate_limited") return "AI 무료 사용량 한도에 도달했습니다. 분당 한도면 잠시 후, 일일 한도면 내일 다시 시도하거나 본인 유료 API 키를 등록해주세요. 여러 글을 한 번에 몰아 보내면 한도에 빨리 도달합니다.";
   if (code === "server_generation_provider_transient") return "AI 제공자 일시적 오류입니다. 잠시 뒤 다시 시도해주세요.";
   if (code === "server_generation_timeout") return "AI 글 생성 시간이 초과되었습니다. 글 분량을 줄이거나 잠시 뒤 다시 시도해주세요.";
   if (code === "server_generation_invalid_response") return "AI 응답을 글 형식으로 해석하지 못했습니다. 모델을 바꾸거나 다시 시도해주세요.";
