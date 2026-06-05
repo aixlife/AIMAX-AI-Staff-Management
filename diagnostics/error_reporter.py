@@ -283,11 +283,16 @@ def flush_pending_reports(max_reports: int = 25) -> dict[str, Any]:
             failed += 1
             continue
         if result.get("ok"):
+            # 전송 성공분은 pending→sent 로 atomic move 해 중복 재전송(서버 index/Telegram 중복)을 막는다.
+            # save+unlink 2단계는 unlink 실패 시 다음 flush 에서 재전송되는 창이 있어 os.replace 로 대체.
             try:
-                save_report(report, SENT_REPORTS_DIR)
-                fp.unlink()
+                SENT_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+                os.replace(str(fp), str(SENT_REPORTS_DIR / fp.name))
             except Exception:
-                pass
+                try:
+                    fp.unlink()  # 이동 실패해도 최소한 pending 에서 제거(중복 방지)
+                except Exception:
+                    pass
             sent += 1
         else:
             failed += 1
