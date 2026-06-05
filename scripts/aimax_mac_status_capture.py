@@ -135,7 +135,7 @@ def is_approval_review_text(text: str) -> bool:
 def extract_paths(text: str) -> list[str]:
     patterns = [
         r"/Users/aixlife/[^\s\]\)\"']+",
-        r"(?:docs|scripts|handoffs|oracle|local_agent|split_version)/[^\s\]\)\"']+",
+        r"(?:docs|scripts|handoffs|oracle|local_agent)/[^\s\]\)\"']+",
         r"WINDOWS_[A-Z0-9_]+\.md",
         r"aimax-[^\s\]\)\"']+",
     ]
