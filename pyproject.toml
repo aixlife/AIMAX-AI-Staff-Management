@@ -1,0 +1,38 @@
+[project]
+name = "naverblogauto"
+version = "1.0.49"
+description = "AIMAX NaverBlogAuto - 네이버 블로그 자동화 데스크톱 앱"
+# uv 관리형 Python(python-build-standalone)은 tkinter/tcl-tk 가 번들로 포함되어
+# 시스템 Python 탐색 실패·macOS Tk 3.9 문제·brew python-tk 단계가 사라진다.
+# 3.9 는 macOS 시스템 Python(Tk 호환성) 문제로 제외, 3.14 는 의존성 미검증으로 제외.
+requires-python = ">=3.10,<3.14"
+
+# requirements.txt 에서 그대로 이관 — 버전 제약 동일(동작 변화 방지).
+dependencies = [
+    "selenium>=4.15.0",
+    "undetected-chromedriver>=3.5.0",
+    "selenium-stealth>=1.0.6",
+    "pyperclip>=1.8.0",
+    "keyring>=25.0.0",
+    "google-genai>=1.0.0",
+    "anthropic>=0.30.0",
+    "Pillow>=10.0.0",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+    "click>=8.1.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.0",
+    "ttkbootstrap>=1.10.0",
+    "requests>=2.31.0",
+    "setuptools>=70.0.0",
+    "packaging>=23.0",
+    # Windows 전용 — 클립보드 이미지 업로드(win32clipboard).
+    "pywin32>=306; sys_platform == 'win32'",
+    # macOS 전용 — aimax:// (GetURL Apple Event) 수신용 NSAppleEventManager 후킹.
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+]
+
+[tool.uv]
+# app.py 는 패키지가 아닌 플랫 스크립트 — 프로젝트 자체는 빌드/설치하지 않고
+# 의존성만 환경에 설치한다. 실행: uv run python app.py
+package = false
