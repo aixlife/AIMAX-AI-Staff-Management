@@ -9633,6 +9633,33 @@ async function handleAdminExpireUser(req, res) {
   });
 }
 
+// 지원용: 특정 사용자의 웹 AI/API 키 "사용 가능 여부"(서버 복호화 성공 boolean)와 에이전트 readiness 확인.
+// 키 값/원문은 절대 반환하지 않는다(publicUserSecretStatuses 는 configured/source/fingerprint/updated_at 만).
+async function handleAdminUserSecretStatus(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const email = normalizeEmail(body.email);
+  if (!isValidEmail(email)) {
+    json(req, res, 400, { ok: false, error: "invalid_email" });
+    return;
+  }
+  const users = loadUsers();
+  const user = users.users.find((item) => item.email === email);
+  if (!user) {
+    json(req, res, 404, { ok: false, error: "user_not_found" });
+    return;
+  }
+  const agents = loadAgents();
+  const agent = agents.agents.find((item) => item.user_id === user.id);
+  json(req, res, 200, {
+    ok: true,
+    user: adminUserRow(user, agent),
+    secrets: publicUserSecretStatuses(user.id),
+    server_generation: publicYeriServerGenerationConfig(user),
+  });
+}
+
 async function handleAdminDeleteUser(req, res) {
   if (!requireAdmin(req, res)) return;
   const body = await readJsonBody(req, res);
@@ -11091,9 +11118,17 @@ async function handleCreateJob(req, res) {
     });
     return;
   }
-  const requestedYeriServerGeneration = kind === "yeri_write" && body.server_generation === true;
-  const yeriGenerationMode = requestedYeriServerGenerationMode(kind, body, auth.user);
-  if (requestedYeriServerGeneration && !yeriGenerationMode) {
+  const explicitYeriServerGeneration = kind === "yeri_write" && body.server_generation === true;
+  // 자동 서버생성: 웹 AI 키를 가진(서버가 복호화 가능한) 사용자는 서버생성을 기본으로 한다.
+  // 러너가 웹키를 'ai_keys ready'로 보고해 웹이 로컬생성으로 보내지만, 러너 로컬엔 실제 키 값이
+  // 없어 "API 키가 없습니다"로 실패하던 함정을 우회한다(서버가 본인 웹키로 생성, 비용 동일).
+  // 웹키가 없는 로컬전용 사용자는 canUseYeriServerGeneration=false → 자동 적용 안 됨(무영향).
+  const autoYeriServerGeneration = kind === "yeri_write"
+    && !explicitYeriServerGeneration
+    && yeriServerGenerationModeForUser(auth.user) === "gemini";
+  const requestedYeriServerGeneration = explicitYeriServerGeneration || autoYeriServerGeneration;
+  const yeriGenerationMode = requestedYeriServerGeneration ? yeriServerGenerationModeForUser(auth.user) : "";
+  if (explicitYeriServerGeneration && !yeriGenerationMode) {
     json(req, res, 403, {
       ok: false,
       error: "yeri_server_generation_not_allowed",
@@ -11114,7 +11149,7 @@ async function handleCreateJob(req, res) {
     });
     return;
   }
-  if (yeriGenerationMode === "gemini" && body.confirm_paid !== true) {
+  if (yeriGenerationMode === "gemini" && explicitYeriServerGeneration && body.confirm_paid !== true) {
     json(req, res, 402, {
       ok: false,
       error: "yeri_paid_confirmation_required",
@@ -11949,6 +11984,10 @@ function route(req, res) {
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/grant-product") {
     handleAdminGrantProduct(req, res);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/admin/users/secret-status") {
+    handleAdminUserSecretStatus(req, res);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/setup-links") {
