@@ -10,6 +10,9 @@ venv/
 env/
 .venv/
 
+# uv 설치 경로 런타임 산출물 (접근성 안내 1회 sentinel)
+.accessibility_notified
+
 # Build artifacts
 dist/
 build/
