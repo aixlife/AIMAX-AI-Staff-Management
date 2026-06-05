@@ -19,7 +19,6 @@ DEFAULT_PATHS = [
     "dist/AIMAX.app",
     "dist/AIMAX",
     "dist/upload_installers",
-    "split_version/dist",
     "build",
     "venv",
 ]

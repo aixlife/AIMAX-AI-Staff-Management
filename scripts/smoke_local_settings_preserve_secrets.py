@@ -19,7 +19,6 @@ for name in (
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import app  # noqa: E402
-import split_version.app as split_app  # noqa: E402
 
 
 def check_module(module) -> None:
@@ -68,8 +67,8 @@ def check_module(module) -> None:
 
 
 def main() -> None:
+    # split_version 포크 통합(Phase C) 이후 단일 app.py 만 검증한다.
     check_module(app)
-    check_module(split_app)
     print("LOCAL_SETTINGS_PRESERVE_SECRETS_OK")
 
 

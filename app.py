@@ -18,6 +18,46 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
+def _ensure_tcl_tk_library():
+    """uv/venv 로 실행 시 Tcl 이 base Python 의 tcl/tk 라이브러리를 못 찾아
+    Tk() 생성이 'Can't find a usable init.tcl' 로 실패하는 문제를 보정한다.
+    (sys.executable 이 .venv/bin/python 이면 Tcl 의 기본 탐색이 venv 기준이 되어
+     base Python 의 lib/tcl8.x 를 못 찾는다.)
+    PyInstaller 프리즌 번들은 자체적으로 처리하므로 건드리지 않는다.
+    """
+    if getattr(sys, "frozen", False) or "__compiled__" in globals():
+        return
+    if os.environ.get("TCL_LIBRARY") and os.environ.get("TK_LIBRARY"):
+        return
+    import glob
+    base = getattr(sys, "base_prefix", sys.prefix)
+    if base == sys.prefix:
+        return  # venv 가 아니면 표준 탐색으로 충분
+    # python-build-standalone 레이아웃: macOS/Linux 는 base/lib/tcl8.x,
+    # Windows 는 base/tcl/tcl8.x. 양쪽 모두 탐색한다.
+    tcl_globs = [os.path.join(base, "lib", "tcl8.*"), os.path.join(base, "tcl", "tcl8.*")]
+    tk_globs = [os.path.join(base, "lib", "tk8.*"), os.path.join(base, "tcl", "tk8.*")]
+    if not os.environ.get("TCL_LIBRARY"):
+        for pattern in tcl_globs:
+            for tcl_dir in sorted(glob.glob(pattern), reverse=True):
+                if os.path.exists(os.path.join(tcl_dir, "init.tcl")):
+                    os.environ["TCL_LIBRARY"] = tcl_dir
+                    break
+            if os.environ.get("TCL_LIBRARY"):
+                break
+    if not os.environ.get("TK_LIBRARY"):
+        for pattern in tk_globs:
+            for tk_dir in sorted(glob.glob(pattern), reverse=True):
+                if os.path.exists(os.path.join(tk_dir, "tk.tcl")):
+                    os.environ["TK_LIBRARY"] = tk_dir
+                    break
+            if os.environ.get("TK_LIBRARY"):
+                break
+
+
+_ensure_tcl_tk_library()
+
+
 _EARLY_AGENT_LOCK = None
 
 
@@ -1012,8 +1052,106 @@ COLORS = {
 # 메인 앱
 # ──────────────────────────────────────────────
 class NaverBlogApp:
-    def __init__(self):
-        self.app_mode = os.environ.get("APP_MODE", "all").strip().lower() or "all"
+    # 모드별 브랜딩/구성. split_version 포크를 흡수한 결과로, 단일 app.py 가
+    # APP_MODE 에 따라 통합앱(all) 또는 기능별 앱(find/engage_write 등)으로 동작한다.
+    # "all" 값은 통합 메인앱의 기존 라이브 문구를 정확히 보존한다(동작 불변).
+    MODE_CONFIG = {
+        "all": {
+            "title": aimax.APP_VERSION_LABEL,
+            "employee_name": "블로거 예리님",
+            "brand_subtitle": "메이크패밀리 블로그 직원",
+            "employee_initial": "예",
+            "avatar_file": "avatar_yeri.png",
+            "casual_name": "예리",
+            "settings_subtitle": "블로그팀 로컬 작업에 필요한 네이버 계정과 이 PC용 AI 키를 등록해 주세요",
+            "default_panel": "settings",
+            "nav_items": [
+                ("find_keyword", "고객을 찾아올게요", "잠재 고객 찾아 서로이웃 신청"),
+                ("engage", "고객과 친해질게요", "공감·댓글로 소통"),
+                ("write", "고객을 설득할게요", "글을 써서 마음을 움직여요"),
+            ],
+        },
+        "find": {
+            "title": "AIMAX-현주씨-영업사원",
+            "employee_name": "현주씨",
+            "brand_subtitle": "메이크패밀리 영업사원",
+            "employee_initial": "현",
+            "avatar_file": "avatar_hyunju_circle.png",
+            "casual_name": "현주씨",
+            "settings_subtitle": "현주씨가 일할 네이버 계정과 이 PC용 AI 키를 등록해 주세요",
+            "default_panel": "find_keyword",
+            "startup_name": "영업사원 현주씨",
+            "nav_items": [
+                ("find_keyword", "고객을 찾아볼게요", "키워드·블로거 링크로 찾기"),
+            ],
+        },
+        "engage_write": {
+            "title": "AIMAX-예리씨-블로그글쓰기",
+            "employee_name": "예리씨",
+            "brand_subtitle": "소통·글쓰기 전담",
+            "employee_initial": "예",
+            "avatar_file": "avatar_yeri_circle.png",
+            "casual_name": "예리씨",
+            "settings_subtitle": "예리씨가 일할 네이버 계정과 이 PC용 AI 키를 등록해 주세요",
+            "default_panel": "engage",
+            "startup_name": "소통·글쓰기 예리씨",
+            "nav_items": [
+                ("engage", "고객과 친해질게요", "공감·댓글로 소통"),
+                ("write", "고객을 설득할게요", "글을 써서 마음을 움직여요"),
+            ],
+        },
+        "engage": {
+            "title": "AIMAX-예리씨-블로그글쓰기",
+            "employee_name": "예리씨",
+            "brand_subtitle": "소통·글쓰기 전담",
+            "employee_initial": "예",
+            "avatar_file": "avatar_yeri_circle.png",
+            "casual_name": "예리씨",
+            "settings_subtitle": "예리씨가 일할 네이버 계정과 이 PC용 AI 키를 등록해 주세요",
+            "default_panel": "engage",
+            "startup_name": "소통·글쓰기 예리씨",
+            "nav_items": [
+                ("engage", "고객과 친해질게요", "공감·댓글로 소통"),
+            ],
+        },
+        "write": {
+            "title": "AIMAX-예리씨-블로그글쓰기",
+            "employee_name": "예리씨",
+            "brand_subtitle": "소통·글쓰기 전담",
+            "employee_initial": "예",
+            "avatar_file": "avatar_yeri_circle.png",
+            "casual_name": "예리씨",
+            "settings_subtitle": "예리씨가 일할 네이버 계정과 이 PC용 AI 키를 등록해 주세요",
+            "default_panel": "write",
+            "startup_name": "소통·글쓰기 예리씨",
+            "nav_items": [
+                ("write", "고객을 설득할게요", "글을 써서 마음을 움직여요"),
+            ],
+        },
+    }
+
+    def _normalize_app_mode(self, value):
+        value = (value or "all").strip().lower()
+        if value in self.MODE_CONFIG:
+            return value
+        return "all"
+
+    def _mode_allows_panel(self, panel_key):
+        if panel_key == "settings" or self.app_mode == "all":
+            return True
+        if self.app_mode == "find":
+            return panel_key in {"find_keyword", "find_link"}
+        if self.app_mode == "engage":
+            return panel_key == "engage"
+        if self.app_mode == "engage_write":
+            return panel_key in {"engage", "write"}
+        if self.app_mode == "write":
+            return panel_key == "write"
+        return False
+
+    def __init__(self, app_mode=None):
+        self.app_mode = self._normalize_app_mode(app_mode or os.environ.get("APP_MODE", "all"))
+        self.mode_config = self.MODE_CONFIG[self.app_mode]
         self.root = self._create_root_window()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         if not self._ensure_aimax_consent():
@@ -1071,7 +1209,7 @@ class NaverBlogApp:
         self._poll_queue()
 
         # 초기 패널 표시 (INIT_PANEL 환경변수로 오버라이드 가능)
-        _init_panel = os.environ.get("INIT_PANEL", "settings")
+        _init_panel = os.environ.get("INIT_PANEL", self.mode_config["default_panel"])
         self._show_panel(_init_panel)
         self.root.after(700, self._recover_missing_settings_for_gui)
 
@@ -1079,8 +1217,12 @@ class NaverBlogApp:
         if sys.platform == "darwin":
             self.root.after(200, self._focus_root_for_macos_scroll)
 
-        # 시작 환영 메시지
-        self._log(f"{aimax.APP_VERSION_LABEL} 블로거 예리님이 출근했습니다 🟢")
+        # 시작 환영 메시지 (all=메인앱 기존 문구 보존, 그 외=모드별 직원)
+        if self.app_mode == "all":
+            self._log(f"{aimax.APP_VERSION_LABEL} 블로거 예리님이 출근했습니다 🟢")
+        else:
+            _startup_name = self.mode_config.get("startup_name", self.mode_config["employee_name"])
+            self._log(f"{aimax.APP_VERSION_LABEL} {_startup_name} 직원이 출근했습니다 🟢")
         self._log("좌측 [직원 설정]에서 계정을 등록한 후, 1~3 단계 작업을 시켜보세요.")
         self._restore_web_agent_session()
 
@@ -1092,7 +1234,7 @@ class NaverBlogApp:
     def _create_root_window(self):
         if sys.platform == "darwin":
             root = tk.Tk()
-            root.title(aimax.APP_VERSION_LABEL)
+            root.title(self.mode_config["title"])
             root.geometry("1080x760")
             root.resizable(True, True)
             root.minsize(960, 680)
@@ -1100,7 +1242,7 @@ class NaverBlogApp:
             return root
 
         root = ttk.Window(
-            title=aimax.APP_VERSION_LABEL,
+            title=self.mode_config["title"],
             themename="flatly",
             size=(1080, 760),
             resizable=(True, True),
@@ -3117,11 +3259,11 @@ class NaverBlogApp:
         self._build_employee_avatar(brand_frame)
 
         tk.Label(
-            brand_frame, text="블로거 예리님", font=(FONT_UI, 13, "bold"),
+            brand_frame, text=self.mode_config["employee_name"], font=(FONT_UI, 13, "bold"),
             bg=COLORS["sidebar_bg"], fg=COLORS["text_primary"],
         ).pack(pady=(10, 2))
         tk.Label(
-            brand_frame, text="메이크패밀리 블로그 직원", font=(FONT_UI, 8),
+            brand_frame, text=self.mode_config["brand_subtitle"], font=(FONT_UI, 8),
             bg=COLORS["sidebar_bg"], fg=COLORS["text_muted"],
         ).pack()
         # 근무 상태 표시
@@ -3138,11 +3280,7 @@ class NaverBlogApp:
             (None, [
                 ("settings", "직원 설정", "계정·API 키"),
             ]),
-            ("작업 지시", [
-                ("find_keyword", "고객을 찾아올게요", "잠재 고객 찾아 서로이웃 신청"),
-                ("engage", "고객과 친해질게요", "공감·댓글로 소통"),
-                ("write", "고객을 설득할게요", "글을 써서 마음을 움직여요"),
-            ]),
+            ("작업 지시", self.mode_config["nav_items"]),
         ]
 
         nav_frame = tk.Frame(self.sidebar, bg=COLORS["sidebar_bg"])
@@ -3233,33 +3371,40 @@ class NaverBlogApp:
         # nav: 설정 / 찾아올게요 / 친해질게요 / 설득할게요
         # 찾아올게요는 2탭: find_keyword(활성) / find_link(B안 준비중)
         # find_keyword 패널이 기존 neighbor 패널과 동일 (search+add 체인)
+        # APP_MODE 에 맞는 기능 패널만 생성한다(all 모드는 전체 생성 = 기존 동작).
         self._build_settings_panel(FONT)
-        self._build_find_keyword_panel(FONT)
-        self._build_find_link_panel(FONT)
-        self._build_engage_panel(FONT)
-        self._build_write_panel(FONT)
+        if self.app_mode in ("all", "find"):
+            self._build_find_keyword_panel(FONT)
+            self._build_find_link_panel(FONT)
+        if self.app_mode in ("all", "engage", "engage_write"):
+            self._build_engage_panel(FONT)
+        if self.app_mode in ("all", "write", "engage_write"):
+            self._build_write_panel(FONT)
         # scraper, bulk, like, comment 패널은 lazy 빌드 (현재 노출 안 함)
 
     # ── 직원 아바타 ──
     def _build_employee_avatar(self, parent):
-        """assets/avatar_yeri.png가 있으면 사용, 없으면 이니셜 원형"""
+        """모드별 아바타 PNG가 있으면 사용, 없으면 이니셜 원형 (all=avatar_yeri.png 보존)"""
         from paths import BUNDLE_DIR
+        avatar_file = self.mode_config.get("avatar_file", "avatar_yeri.png")
         try:
             from PIL import Image, ImageTk
-            avatar_path = BUNDLE_DIR / "assets" / "avatar_yeri.png"
-            if avatar_path.exists():
-                img = Image.open(avatar_path).resize((72, 72), Image.LANCZOS)
-                self._avatar_photo = ImageTk.PhotoImage(img)
-                tk.Label(
-                    parent, image=self._avatar_photo,
-                    bg=COLORS["sidebar_bg"], borderwidth=0,
-                ).pack()
-                return
+            # 모드 지정 파일 우선, 없으면 통합앱 기본 아바타로 폴백
+            for file_name in dict.fromkeys([avatar_file, "avatar_yeri.png"]):
+                avatar_path = BUNDLE_DIR / "assets" / file_name
+                if avatar_path.exists():
+                    img = Image.open(avatar_path).resize((72, 72), Image.LANCZOS)
+                    self._avatar_photo = ImageTk.PhotoImage(img)
+                    tk.Label(
+                        parent, image=self._avatar_photo,
+                        bg=COLORS["sidebar_bg"], borderwidth=0,
+                    ).pack()
+                    return
         except Exception:
             pass
         # 폴백: 이니셜 원형
         tk.Label(
-            parent, text="예", font=(FONT_UI, 22, "bold"),
+            parent, text=self.mode_config.get("employee_initial", "예"), font=(FONT_UI, 22, "bold"),
             bg="#FF6B9D", fg="white", width=3, height=1,
         ).pack()
 
@@ -3311,6 +3456,10 @@ class NaverBlogApp:
         return self.PANEL_NAV_PARENT.get(panel_key, panel_key)
 
     def _show_panel(self, key):
+        # 현재 모드가 허용하지 않는 패널 요청 시 기본 패널로 (all 모드는 전부 허용)
+        if not self._mode_allows_panel(key):
+            key = self.mode_config["default_panel"]
+
         # 이전 패널 숨기기
         if self.current_panel and self.current_panel in self.panels:
             self.panels[self.current_panel].pack_forget()
@@ -3654,7 +3803,7 @@ class NaverBlogApp:
             else:
                 # 마지막 단계 — 종료 버튼만
                 ttk.Button(
-                    btn_frame, text="오늘도 수고했어요, 예리!",
+                    btn_frame, text=f"오늘도 수고했어요, {self.mode_config['casual_name']}!",
                     bootstyle="primary",
                     command=popup.destroy,
                 ).pack()
@@ -3950,7 +4099,7 @@ class NaverBlogApp:
     # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     def _build_settings_panel(self, font):
-        panel, content = self._make_panel("settings", "직원 설정", "블로그팀 로컬 작업에 필요한 네이버 계정과 이 PC용 AI 키를 등록해 주세요")
+        panel, content = self._make_panel("settings", "직원 설정", self.mode_config["settings_subtitle"])
 
         card = self._make_card(content)
         card.columnconfigure(1, weight=1)
@@ -6166,7 +6315,7 @@ class NaverBlogApp:
                 from tkinter import messagebox
                 messagebox.showinfo(
                     "프로필이 없어요",
-                    "예리가 대표님 블로그를 아직 몰라서 멘트를 쓸 수 없어요.\n\n"
+                    f"{self.mode_config['casual_name']}가 대표님 블로그를 아직 몰라서 멘트를 쓸 수 없어요.\n\n"
                     "[직원 설정] 탭에서 '내 블로그 프로필'을 먼저 입력해 주세요!",
                 )
             except Exception:
@@ -6190,7 +6339,7 @@ class NaverBlogApp:
 
         # UI 잠금 + 로딩 메시지
         self.ai_ment_btn.configure(state="disabled")
-        self.ai_ment_status.configure(text="예리가 멘트를 고민하고 있어요…", fg="#FF6B9D")
+        self.ai_ment_status.configure(text=f"{self.mode_config['casual_name']}가 멘트를 고민하고 있어요…", fg="#FF6B9D")
         self._log("[AI 멘트] 프로필 기반 멘트 10개 생성 중...")
 
         def _worker():
@@ -6606,8 +6755,9 @@ class NaverBlogApp:
 
 
 class HeadlessNaverBlogAgent(HeadlessAgentMixin, NaverBlogApp):
-    def __init__(self):
-        self.app_mode = os.environ.get("APP_MODE", "all").strip().lower() or "all"
+    def __init__(self, app_mode=None):
+        self.app_mode = self._normalize_app_mode(app_mode or os.environ.get("APP_MODE", "all"))
+        self.mode_config = self.MODE_CONFIG[self.app_mode]
         self._init_headless_agent(
             settings_loader=load_settings,
             settings_saver=save_settings,
