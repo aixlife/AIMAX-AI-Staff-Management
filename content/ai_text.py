@@ -39,12 +39,16 @@ def _classify_provider_error(provider, exc):
         "authentication", "invalid x-api-key", "api key", "api_key_invalid", "api key expired", "permission")):
         return AiQuotaError(f"{provider} API 키 인증 실패 - 키를 확인/갱신해주세요. ({msg[:160]})", hard_stop=True), False
 
-    # 사용량/요금제 - 결제/크레딧 고갈은 재시도 무의미, 순간 rate limit 은 재시도 가치 있음
+    # 사용량/요금제 - 진짜 결제 고갈(유료 크레딧 소진)만 비-transient. 무료 티어 일일/분당 한도
+    # (quota/RESOURCE_EXHAUSTED/limit:0)는 결제 문제가 아니라 무료 사용량 한도 → 대기/유료키 안내.
     if status == 429 or any(k in low for k in (
         "quota", "insufficient", "credit", "billing", "rate limit", "resource_exhausted", "limit: 0")):
-        credit_dead = any(k in low for k in ("insufficient_quota", "credit", "billing", "limit: 0", "expired"))
-        transient = (not credit_dead) and (status == 429 or "rate" in low)
-        return AiQuotaError(f"{provider} 사용량/요금제 한도 초과 - 결제/사용량 한도를 확인해주세요. ({msg[:160]})", hard_stop=True), transient
+        billing_dead = any(k in low for k in ("insufficient_quota", "billing", "payment", "balance", "out of credit"))
+        if billing_dead:
+            return AiQuotaError(f"{provider} 결제/요금제 한도 초과 - 결제/크레딧 상태를 확인해주세요. ({msg[:160]})", hard_stop=True), False
+        return AiQuotaError(
+            f"{provider} 무료 사용량 한도에 도달했습니다. 분당 한도면 잠시 후, 일일 한도면 내일 다시 시도하거나 본인 유료 API 키를 등록해주세요. ({msg[:160]})",
+            hard_stop=False), True
 
     # 일시적 서버/네트워크 오류 - 재시도 가치 있음
     if status in (500, 502, 503, 529) or any(k in low for k in (
