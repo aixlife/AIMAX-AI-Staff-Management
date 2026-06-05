@@ -17,6 +17,14 @@ import sys
 import plistlib
 from pathlib import Path
 
+# Windows cp949 콘솔에서 한글/em-dash(—) 출력이 UnicodeEncodeError 로 빌드를 크래시시키지
+# 않도록 stdout/stderr 를 UTF-8 로 강제한다(PYTHONUTF8=1 환경변수 없이도 안전).
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parent
 ENTRY = ROOT / "app.py"
 APP_NAME = "AIMAX"
