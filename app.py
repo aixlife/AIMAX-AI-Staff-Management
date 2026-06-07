@@ -271,6 +271,15 @@ def _normalize_image_count(value):
     return max(0, min(8, count))
 
 
+def _abort_on_image_prompt_shortfall():
+    """이미지 프롬프트가 요청 수보다 부족할 때 작업을 통째로 중단할지 여부.
+    기본값 True = 기존 동작 보존(이미지 없는 글 발행 방지). 환경변수로만 완화 허용.
+    AIMAX_IMAGE_PROMPT_SHORTFALL=warn|soft|proceed|0|false 이면 0장일 때도 진행."""
+    return str(os.environ.get("AIMAX_IMAGE_PROMPT_SHORTFALL", "abort")).strip().lower() not in (
+        "warn", "soft", "proceed", "0", "false",
+    )
+
+
 def _payload_image_count(payload, default=3):
     if not isinstance(payload, dict):
         return _normalize_image_count(default)
@@ -516,6 +525,7 @@ def _build_write_result(
             "provider_counts": image_totals.get("providers") if isinstance(image_totals.get("providers"), dict) else {},
             "failure_count": len(_safe_image_failures(image_totals.get("failures"))),
             "failures": _safe_image_failures(image_totals.get("failures")),
+            "shortfall_accepted": bool(image_totals.get("shortfall_accepted")),
         },
         "posts": (posts or [])[-20:],
     }
@@ -5731,10 +5741,17 @@ class NaverBlogApp:
                     content_list = _limit_image_blocks(content_list, image_count)
                     image_block_count = sum(1 for item in content_list if item and item[0] == "image")
                     if image_count > 0 and image_block_count < image_count:
-                        raise RuntimeError(
-                            f"이미지 프롬프트 생성 실패: 요청 {image_count}장 중 {image_block_count}장만 준비되었습니다. "
-                            "글이 이미지 없이 저장되지 않도록 작업을 중단했습니다."
+                        shortfall_msg = (
+                            f"이미지 프롬프트 생성 실패: 요청 {image_count}장 중 {image_block_count}장만 준비되었습니다."
                         )
+                        if image_block_count == 0 and _abort_on_image_prompt_shortfall():
+                            # 한 장도 준비 못 한 경우만 기본 중단(글이 이미지 없이 나가는 것 방지)
+                            raise RuntimeError(shortfall_msg + " 글이 이미지 없이 저장되지 않도록 작업을 중단했습니다.")
+                        # 부분 부족(>=1장) 또는 완화 모드: 중단 없이 준비된 이미지만으로 진행.
+                        # 서버가 done→failed 로 뒤집지 않도록 '의도적 수용' 플래그를 결과에 남긴다.
+                        self._log(f"[주의] {shortfall_msg} 준비된 {image_block_count}장으로 계속 진행합니다.")
+                        image_count = image_block_count
+                        image_totals["shortfall_accepted"] = True
 
                     if not self.running:
                         break

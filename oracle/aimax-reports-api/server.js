@@ -25,6 +25,10 @@ const SETUP_TOKEN_TTL_DAYS = Number(process.env.AIMAX_SETUP_TOKEN_TTL_DAYS || 7)
 const AGENT_JOB_CLAIM_TTL_SECONDS = Number(process.env.AIMAX_AGENT_JOB_CLAIM_TTL_SECONDS || 24 * 60 * 60);
 const AGENT_JOB_START_TIMEOUT_SECONDS = Number(process.env.AIMAX_AGENT_JOB_START_TIMEOUT_SECONDS || 3 * 60);
 const YERI_GENERATING_STALE_MS = Number(process.env.AIMAX_YERI_GENERATING_STALE_MS || 30 * 60 * 1000);
+// running/ready_for_publish 잡이 러너 중단으로 좀비가 되는 것을 막는 스윕 임계값.
+// updated_at(모든 로그/상태 갱신 시 전진) 기준 무진행 한계 + 러너 하트비트 끊김 유예.
+const YERI_RUNNING_STALE_MS = Number(process.env.AIMAX_YERI_RUNNING_STALE_MS || 45 * 60 * 1000);
+const YERI_RUNNER_HEARTBEAT_GRACE_MS = Number(process.env.AIMAX_YERI_RUNNER_HEARTBEAT_GRACE_MS || 10 * 60 * 1000);
 const YERI_RETRY_LIMIT = Number(process.env.AIMAX_YERI_RETRY_LIMIT || 3);
 const YERI_SERVER_GENERATION_ENABLED = envFlag("AIMAX_YERI_SERVER_GENERATION_ENABLED");
 const YERI_SERVER_GENERATION_MOCK = envFlag("AIMAX_YERI_SERVER_GENERATION_MOCK");
@@ -1967,21 +1971,31 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
     const artifact = mode === "mock"
       ? buildYeriMockArtifact(job)
       : await generateYeriSelectedModelArtifact(job, userId);
-    const meta = attachYeriArtifactToJob(job, artifact);
-    job.status = "ready_for_publish";
-    job.updated_at = nowIso();
-    appendJobLog(job, "info", `서버 글 생성이 완료되었습니다. artifact=${meta.artifact_id}`, job.updated_at);
-    saveJobs(jobs);
-    return { ok: true, job, artifact: meta };
+    // 긴 await 동안 다른 핸들러/스윕이 jobs.json 을 바꿨을 수 있으므로, 저장 직전 재로드해
+    // 해당 잡만 in-place 패치한다(전체 스냅샷 덮어쓰기로 동시 변경을 잃거나 좀비를 되살리는 것 방지).
+    const fresh = loadJobs();
+    const target = fresh.jobs.find((item) => item.id === jobId && item.user_id === userId);
+    if (!target) return { ok: false, error: "job_not_found" };
+    if (target.status !== "generating") return { ok: false, error: "job_state_changed", status: target.status };
+    const meta = attachYeriArtifactToJob(target, artifact);
+    target.status = "ready_for_publish";
+    target.updated_at = nowIso();
+    appendJobLog(target, "info", `서버 글 생성이 완료되었습니다. artifact=${meta.artifact_id}`, target.updated_at);
+    saveJobs(fresh);
+    return { ok: true, job: target, artifact: meta };
   } catch (error) {
     const failureCode = yeriGenerationFailureCode(error);
     const failureMessage = yeriGenerationFailureMessage(error);
     const provider = error?.provider || yeriAiProviderForModel(yeriSelectedModel(job.payload || {}));
     const model = yeriServerGenerationTextModel(job.payload || {});
-    job.status = "failed";
-    job.failed_stage = YERI_CONTENT_GENERATION_STAGE;
-    job.failed_reason = failureCode;
-    job.result = {
+    const fresh = loadJobs();
+    const target = fresh.jobs.find((item) => item.id === jobId && item.user_id === userId);
+    if (!target) return { ok: false, error: failureCode };
+    if (target.status !== "generating") return { ok: false, error: failureCode, status: target.status };
+    target.status = "failed";
+    target.failed_stage = YERI_CONTENT_GENERATION_STAGE;
+    target.failed_reason = failureCode;
+    target.result = {
       ok: false,
       stage: YERI_CONTENT_GENERATION_STAGE,
       error: failureCode,
@@ -1992,12 +2006,12 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
       transient: Boolean(error?.transient),
       detail_code: String(error?.code || "").slice(0, 120),
     };
-    job.finished_at = nowIso();
-    job.updated_at = job.finished_at;
-    delete job.claim_expires_at;
-    appendJobLog(job, "error", `서버 글 생성에 실패했습니다: ${failureMessage}`, job.updated_at);
-    saveJobs(jobs);
-    return { ok: false, error: failureCode, job };
+    target.finished_at = nowIso();
+    target.updated_at = target.finished_at;
+    delete target.claim_expires_at;
+    appendJobLog(target, "error", `서버 글 생성에 실패했습니다: ${failureMessage}`, target.updated_at);
+    saveJobs(fresh);
+    return { ok: false, error: failureCode, job: target };
   }
 }
 
@@ -2097,6 +2111,67 @@ function markRunnerStartTimeouts(jobs, options = {}) {
       error: "runner_start_not_reported",
     };
     appendJobLog(job, "error", "실행기가 작업을 받은 뒤 시작 상태를 보내지 않아 작업을 실패 처리했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.", now);
+    recovered += 1;
+  }
+  return recovered;
+}
+
+// 시작은 보고했으나(runner_started_at 설정됨) 러너가 도중에 죽어 영원히 running 으로 남는
+// 좀비 잡을 자동 실패 처리한다. markRunnerStartTimeouts(시작 미보고 3분용)와 별개의 추가 스윕.
+//
+// 안전 원칙(레드팀 반영):
+//  - 대상은 status==="running" + runner_started_at 있는 '실제 진행 중' 잡만. ready_for_publish/
+//    generating 은 건드리지 않는다(ready_for_publish 는 서버생성 산출물이 러너 발행을 기다리는
+//    정상 대기 상태 — 시간만으로 죽이면 유료 산출물을 폐기하게 됨).
+//  - 러너 생존은 '하트비트'가 1차 신호다(러너는 작업 중에도 ~20s 마다 하트비트). 소유 러너의
+//    하트비트가 살아있으면(grace 내) 작업이 오래 걸려도 절대 죽이지 않는다 — 러너가 _worker_write
+//    동안 중간 잡 업데이트를 안 보내 updated_at 이 멈추는 정상 케이스를 보호.
+//  - agent 매칭은 잡이 실제로 들고 있는 target_platform/target_device_label 로 한다.
+//  - 러너 기록 자체가 없을 때만(영영 사라짐) updated_at 무진행 시간 백스톱으로 정리.
+function failStaleRunningJobs(jobs, options = {}) {
+  const nowMs = options.referenceMs || Date.now();
+  const now = new Date(nowMs).toISOString();
+  const ceilingMs = Math.max(1, YERI_RUNNING_STALE_MS); // 러너 기록 부재 시 백스톱
+  const graceMs = Math.max(1, YERI_RUNNER_HEARTBEAT_GRACE_MS); // 하트비트 끊김 판정 유예
+  let agents = null; // lazy 로드
+  let recovered = 0;
+  for (const job of jobs.jobs || []) {
+    if (job.status !== "running") continue; // ready_for_publish/generating 은 제외
+    if (!job.runner_started_at) continue; // 시작 미보고는 markRunnerStartTimeouts 담당
+    if (options.userId && job.user_id !== options.userId) continue;
+    if (options.platform || options.deviceLabel) {
+      if (!jobMatchesAgentTarget(job, options.platform || "", options.deviceLabel || "")) continue;
+    }
+    const progressMs = Date.parse(job.updated_at || job.runner_started_at || job.assigned_at || job.created_at || "");
+    if (!Number.isFinite(progressMs)) continue; // 시각 불명 → 함부로 죽이지 않음
+    const noProgressMs = nowMs - progressMs;
+    // 소유 러너 생존 판정 — target 필드로 agent 조회(jobMatchesAgentTarget 와 동일 필드).
+    if (!agents) agents = options.agents || loadAgents();
+    const agent = findHeartbeatAgent(agents, job.user_id, job.target_platform || "", job.target_device_label || "");
+    const agentSeenMs = agent ? Date.parse(agent.last_seen_at || agent.updated_at || "") : NaN;
+    let runnerDead;
+    if (Number.isFinite(agentSeenMs)) {
+      // 러너가 살아있으면(grace 내 하트비트) 작업이 오래 걸려도 절대 죽이지 않는다.
+      runnerDead = nowMs - agentSeenMs >= graceMs;
+    } else {
+      // 러너 기록 자체가 없음 → 넉넉한 무진행 시간 백스톱으로만 정리.
+      runnerDead = noProgressMs >= ceilingMs;
+    }
+    // 러너가 죽었다고 판단돼도, 막 끊긴 직후 즉시 죽이지 않도록 최소 유예만큼 무진행을 확인.
+    if (!runnerDead || noProgressMs < graceMs) continue;
+    job.status = "failed";
+    job.failed_stage = "runner_stopped";
+    job.failed_reason = "runner_stopped_heartbeating_or_timed_out";
+    job.finished_at = now;
+    job.updated_at = now;
+    delete job.claim_expires_at;
+    job.result = {
+      ...(job.result || {}),
+      ok: false,
+      stage: "runner_stopped",
+      error: "runner_stopped_heartbeating_or_timed_out",
+    };
+    appendJobLog(job, "error", "실행기가 작업 도중 응답을 멈춰 작업을 실패 처리했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.", now);
     recovered += 1;
   }
   return recovered;
@@ -7216,6 +7291,9 @@ function requestedImageCount(job) {
 function imageCompletionIssue(job, result) {
   const requested = requestedImageCount(job);
   if (!requested || !result || typeof result !== "object") return "";
+  // 러너가 이미지 부족을 의도적으로 수용하고 발행/저장을 완료한 경우(신규 러너의 부분 이미지 진행)
+  // done 을 failed 로 뒤집지 않는다. 기존 러너는 이 플래그를 보내지 않으므로 동작 변화 없음.
+  if (result.image_shortfall_accepted === true || result.images?.shortfall_accepted === true) return "";
   const images = result.images && typeof result.images === "object" ? result.images : {};
   const attempted = safeInt(images.attempted, 0, 100);
   const inserted = safeInt(images.inserted, 0, 100);
@@ -10960,7 +11038,13 @@ async function handleAgentHeartbeat(req, res) {
     platform,
     deviceLabel,
   });
-  if (timedOut) saveJobs(jobs);
+  const stale = failStaleRunningJobs(jobs, {
+    userId: auth.user.id,
+    platform,
+    deviceLabel,
+    agents,
+  });
+  if (timedOut || stale) saveJobs(jobs);
   json(req, res, 200, { ok: true, agent: publicAgent(agent) });
 }
 
@@ -11221,7 +11305,8 @@ function handleListJobs(req, res) {
   if (!auth) return;
   const jobs = loadJobs();
   const timedOut = markRunnerStartTimeouts(jobs, { userId: auth.user.id });
-  if (timedOut) saveJobs(jobs);
+  const stale = failStaleRunningJobs(jobs, { userId: auth.user.id });
+  if (timedOut || stale) saveJobs(jobs);
   const rows = jobs.jobs
     .filter((job) => job.user_id === auth.user.id)
     .filter((job) => jobVisibleToUser(job, auth.user))
@@ -11355,6 +11440,11 @@ function handleAgentNextJob(req, res) {
     platform: agentPlatform,
     deviceLabel: agentDeviceLabel,
   });
+  const stale = failStaleRunningJobs(jobs, {
+    userId: auth.user.id,
+    platform: agentPlatform,
+    deviceLabel: agentDeviceLabel,
+  });
   const job = jobs.jobs
     .filter((item) => item.user_id === auth.user.id && AGENT_CLAIMABLE_JOB_STATUSES.has(item.status))
     .filter((item) => isJobAllowed(auth.user, item.kind))
@@ -11374,7 +11464,7 @@ function handleAgentNextJob(req, res) {
       message: "작업이 실행기에 전달되었습니다.",
     });
   }
-  if (timedOut || job) saveJobs(jobs);
+  if (timedOut || stale || job) saveJobs(jobs);
   json(req, res, 200, { ok: true, job: job ? agentJob(job) : null });
 }
 
@@ -12134,6 +12224,13 @@ function route(req, res) {
 function startServer() {
   ensureDirs();
   recoverStaleGeneratingJobs();
+  // 기존 running/ready_for_publish 좀비(러너 중단)도 부팅 시 1회 정리
+  try {
+    const bootJobs = loadJobs();
+    if (failStaleRunningJobs(bootJobs)) saveJobs(bootJobs);
+  } catch (error) {
+    console.error("failStaleRunningJobs boot sweep failed", error);
+  }
   const server = http.createServer((req, res) => {
     Promise.resolve(route(req, res)).catch((error) => {
       console.error("request_error", error);
@@ -12219,6 +12316,11 @@ module.exports = {
     saveYeriArtifact,
     AGENT_CLAIMABLE_JOB_STATUSES,
     yeriServerGenerationMode,
+    markRunnerStartTimeouts,
+    failStaleRunningJobs,
+    findHeartbeatAgent,
+    imageCompletionIssue,
+    requestedImageCount,
   },
   __yunmiTest: {
     buildYunmiGenerationPrompt,
