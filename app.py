@@ -6071,7 +6071,7 @@ class NaverBlogApp:
             from content.ai_text import generate_blog_content
             from content.markdown_parser import parse_markdown
             from posting.editor import navigate_to_editor, input_title, input_content
-            from posting.publisher import publish_now, schedule_publish
+            from posting.publisher import save_draft, publish_now, schedule_publish
             from utils.delays import random_delay
             import time
 
@@ -6113,6 +6113,19 @@ class NaverBlogApp:
                     content_list, repaired_image_prompts = _repair_empty_image_prompts(content_list, title, keyword)
                     if repaired_image_prompts:
                         self._log(f"  빈 이미지 프롬프트 {repaired_image_prompts}개를 제목 기반 기본 프롬프트로 보정했습니다.")
+                    # [보호] 이미지 블록이 있는데 유효한 이미지 키가 없으면 공개 발행 대신 임시저장으로 강등
+                    # (_worker_write 와 동일 규약 — 이미지 없는 글이 조용히 공개 발행되는 것을 막는다)
+                    image_block_count = sum(1 for item in content_list if item and item[0] == "image")
+                    downgrade_to_draft = image_block_count > 0 and not (
+                        _is_real_secret(image_api_key) or _is_real_secret(fallback_image_api_key)
+                    )
+                    if downgrade_to_draft:
+                        # 이미지 키가 없으면 이미지 블록을 떼어내 본문만 임시저장 (_worker_write 의 image_count=0 강등과 동일)
+                        content_list = [item for item in content_list if not (item and item[0] == "image")]
+                        self._log(
+                            "  [보호] 이미지 키가 없어 공개 발행 대신 본문만 임시저장으로 전환합니다. "
+                            "(AI/API 연결에서 유료 이미지 키 등록 후 다시 발행하세요)"
+                        )
                     self.driver = create_stealth_driver()
                     login(self.driver, account_id, account_pw)
                     navigate_to_editor(self.driver, account_id, account_pw)
@@ -6125,13 +6138,15 @@ class NaverBlogApp:
                         fallback_api_key=fallback_image_api_key,
                     )
 
-                    if schedule:
+                    if downgrade_to_draft:
+                        save_draft(self.driver)
+                    elif schedule:
                         schedule_publish(self.driver)
                     else:
                         publish_now(self.driver)
 
                     success += 1
-                    self._log(f"  성공: {keyword}")
+                    self._log(f"  {'임시저장' if downgrade_to_draft else '성공'}: {keyword}")
                 except Exception as e:
                     self._log(f"  실패: {keyword} - {e}")
                 finally:
