@@ -248,11 +248,12 @@ def _generate_once(prompt, api_key, model):
 
 def _normalize_gemini_model_id(model):
     value = str(model or "").strip()
-    # 기본/제네릭/구버전 기본값은 무료 등급에서 동작하는 2.5 Flash 로 통일한다.
+    # 기본/제네릭/구버전 기본값은 검증된 무료 등급 2.5 Flash 로 통일한다.
     # 명시적 3.1 Pro 선택만 유료 프리뷰로 유지 (app.py _LEGACY_AI_MODEL_MAP 과 일치).
     aliases = {
         "gemini": "gemini-2.5-flash",
         "gemini-pro": "gemini-3.1-pro-preview",
+        "gemini-flash": "gemini-2.5-flash",
         "gemini-2.5-pro": "gemini-2.5-flash",
         "gemini-3.1-pro": "gemini-2.5-flash",
     }

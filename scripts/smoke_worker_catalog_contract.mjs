@@ -136,9 +136,10 @@ assert(jieun?.execution === "external_download", "jieun_execution_contract_missi
 assert(jieun?.product === "jieun", "jieun_product_contract_missing");
 assert(!jieun?.access_policy, "jieun_should_not_be_public_after_paid_launch");
 assert(jieun?.supported_platforms?.includes("windows"), "jieun_windows_only_missing");
-assert(jieun?.version === "0.1.5", "jieun_version_missing");
-assert(jieun?.setup_download_url === "https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-Setup-0.1.5.exe", "jieun_setup_download_missing");
+assert(jieun?.version === "0.1.6", "jieun_version_missing");
+assert(jieun?.setup_download_url === "https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe", "jieun_setup_download_missing");
 assert(jieun?.capabilities?.includes("캡처 이미지 모자이크"), "jieun_mosaic_capability_missing");
+assert(jieun?.capabilities?.includes("Windows 종료"), "jieun_shutdown_capability_missing");
 assert(jieun?.profile_image === "/assets/avatar_jieun.jpg", "jieun_profile_image_missing");
 const nakyung = publicWorkers.find((worker) => worker.staff_code === "nakyung");
 assert(nakyung?.name === "나경", "nakyung_worker_name_missing");

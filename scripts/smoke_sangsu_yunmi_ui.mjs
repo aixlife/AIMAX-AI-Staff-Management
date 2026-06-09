@@ -104,6 +104,10 @@ try {
 
     await page.click("#jobEmployeeSwitch [data-job-kind='sangsu_quote']");
     await page.waitForSelector("#sangsuJobForm:not(.hidden)", { timeout: 8000 });
+    const sangsuLayout = await page.locator("#sangsuJobForm .job-workspace").evaluate((node) => getComputedStyle(node).gridTemplateColumns);
+    if (!sangsuLayout || sangsuLayout.split(" ").length < 2) {
+      throw new Error("Sangsu two-column job workspace missing");
+    }
     await page.fill("#sangsuClientName", "테스트 고객사");
     await page.fill("#sangsuClientEmail", "client@example.com");
     await page.fill("#sangsuProjectName", "윤미/상수 UI 개선 견적");
@@ -112,16 +116,25 @@ try {
 
     await page.click("#jobEmployeeSwitch [data-job-kind='yunmi_script']");
     await page.waitForSelector("#yunmiJobForm:not(.hidden)", { timeout: 8000 });
+    const removedYunmiFields = await page.locator("#yunmiGenerationMode,#yunmiPlatform,#yunmiFormat,#yunmiDuration,#yunmiAudience,#yunmiTone,#yunmiCta").count();
+    if (removedYunmiFields !== 0) {
+      throw new Error("Yunmi simplified input still exposes removed option fields");
+    }
     await page.fill("#yunmiTopic", "학부모 설명회 오프닝");
-    await page.fill("#yunmiAudience", "처음 참석한 학부모");
     await page.fill("#yunmiObjective", "긴장감을 낮추고 오늘 들을 내용을 기대하게 만들기");
     await page.fill("#yunmiReferenceText", "처음 10초에 분위기를 풀고, 오늘 얻어갈 수 있는 결과를 먼저 말한다. 설명회가 막막한 이유는 정보가 부족해서가 아니라 무엇을 먼저 봐야 하는지 모르기 때문이다.");
-    await page.fill("#yunmiCta", "설명회 자료가 필요하면 댓글에 자료라고 남겨주세요.");
     await page.click("#yunmiSubmitBtn");
     await page.waitForSelector("#yunmiJobResult:not(.hidden)", { timeout: 8000 });
+    await page.waitForFunction(() => document.querySelector("#yunmiJobPlaceholder")?.classList.contains("hidden"), null, { timeout: 8000 });
     const resultText = await page.textContent("#yunmiJobResult");
-    if (!resultText.includes("숏폼 스크립트 1안") || !resultText.includes("숏폼 스크립트 2안") || !resultText.includes("최종 추천")) {
+    if (!resultText.includes("숏폼 스크립트 1안") || !resultText.includes("숏폼 스크립트 2안") || !resultText.includes("숏폼 스크립트 3안") || !resultText.includes("최종 추천")) {
       throw new Error("Yunmi structured result missing");
+    }
+    if (!resultText.includes("A 타깃") || !resultText.includes("B 타깃") || !resultText.includes("C 타깃")) {
+      throw new Error("Yunmi target-based variants missing");
+    }
+    if (!resultText.includes("근거 보기")) {
+      throw new Error("Yunmi condensed details disclosure missing");
     }
     if (/오늘은|알아보겠습니다/.test(resultText)) {
       throw new Error("Yunmi result contains banned intro");
@@ -130,6 +143,15 @@ try {
       throw new Error("Yunmi revised spoken flow missing");
     }
     await page.screenshot({ path: path.join(evidenceDir, "yunmi-result.png"), fullPage: false });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.click("#jobEmployeeSwitch [data-job-kind='sangsu_quote']");
+    await page.waitForSelector("#sangsuJobForm:not(.hidden)", { timeout: 8000 });
+    const mobileSangsuLayout = await page.locator("#sangsuJobForm .job-workspace").evaluate((node) => getComputedStyle(node).gridTemplateColumns);
+    if (!mobileSangsuLayout || mobileSangsuLayout.split(" ").length !== 1) {
+      throw new Error("Sangsu mobile job workspace did not collapse to one column");
+    }
+    await page.screenshot({ path: path.join(evidenceDir, "sangsu-mobile.png"), fullPage: false });
   } finally {
     await browser.close();
   }

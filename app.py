@@ -187,10 +187,11 @@ API_KEY_GUIDE_URL = os.environ.get(
 _KEYCHAIN_READ_UNAVAILABLE = False
 _USD_KRW_RATE = 1476
 _USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot"
-_GEMINI_IMAGE_PRICE_USD = 0.039
+_GEMINI_IMAGE_PRICE_USD = 0.067
 _OPENAI_IMAGE_PRICE_USD = 0.042
 _AI_TEXT_PRICE_USD_PER_1M = {
     # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
+    "gemini-3.5-flash": {"input": 1.50, "output": 9.00, "label": "Gemini 3.5 Flash"},
     "gemini-3.1-pro-preview": {"input": 1.25, "output": 10.00, "label": "Gemini 3.1 Pro Preview"},
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 2.5 Pro"},
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50, "label": "Gemini 2.5 Flash"},
@@ -201,13 +202,13 @@ _AI_TEXT_PRICE_USD_PER_1M = {
 _LEGACY_AI_MODEL_MAP = {
     "gemini": _DEFAULT_AI_MODEL,
     "gemini-pro": "gemini-3.1-pro-preview",
-    "gemini-flash": "gemini-2.5-flash",
+    "gemini-flash": _DEFAULT_AI_MODEL,
     # 구버전 기본값/접미사 없는 레거시값(2.5 Pro, 3.1 Pro 등)은 무료 등급에서 동작하는
-    # 기본값(2.5 Flash)으로 매핑한다. UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)이므로
+    # 기본값(3.5 Flash)으로 매핑한다. UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)이므로
     # 접미사 없는 "gemini-3.1-pro"는 사용자의 명시 선택이 아니라 자동/레거시값 → flash 가 안전.
     # (무료 키 사용자가 기본값/레거시값으로 대량 실패하던 문제 방지)
-    "gemini-2.5-pro": "gemini-2.5-flash",
-    "gemini-3.1-pro": "gemini-2.5-flash",
+    "gemini-2.5-pro": _DEFAULT_AI_MODEL,
+    "gemini-3.1-pro": _DEFAULT_AI_MODEL,
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -232,7 +233,7 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-3.1-pro-preview", "gemini-2.5-flash", "gpt-5.4-mini", "gpt-5-mini"):
+    if value in ("claude", "gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash", "gpt-5.4-mini", "gpt-5-mini"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 
@@ -411,10 +412,12 @@ def _safe_image_failures(raw, limit=20):
         failures.append({
             "index": max(0, _usage_number(item.get("index"))),
             "stage": str(item.get("stage") or "image_completion")[:80],
-            "error_code": str(item.get("error_code") or "image_not_inserted")[:80],
+            "error_code": str(item.get("error_code") or item.get("error") or "image_not_inserted")[:80],
             "provider": str(item.get("provider") or "")[:40],
             "method": str(item.get("method") or "")[:40],
             "message": str(item.get("message") or "")[:180],
+            "user_actionable": bool(item.get("user_actionable")),
+            "admin_action_required": bool(item.get("admin_action_required")),
         })
     return failures
 
@@ -440,7 +443,55 @@ def _image_failure_message(requested, inserted, failures):
     code_text = f" 원인 코드: {', '.join(codes[:3])}." if codes else ""
     return (
         f"{stage_labels.get(stage, '이미지 첨부 실패')}: 요청 {requested}장 중 {inserted}장만 첨부되었습니다."
-        f"{code_text} 글이 이미지 없이 저장되지 않도록 작업을 중단했습니다."
+        f"{code_text} 생성된 본문은 보존합니다."
+    )
+
+
+def _diagnose_local_failure(stage, error):
+    text = f"{stage or ''} {error or ''}".lower()
+    if "api_key_missing" in text or "no api key" in text or "api key가 없습니다" in text or "키가 없습니다" in text:
+        return (
+            "AI/API 키 등록 필요",
+            "작업에 필요한 API 키가 저장되어 있지 않습니다.\n웹 설정의 AI/API 연결에서 키를 등록한 뒤 다시 시도해주세요.",
+        )
+    if "api_key_invalid" in text or "invalid key" in text or "unauthorized" in text or "인증 실패" in text:
+        return (
+            "API 키 인증 실패",
+            "저장된 API 키가 유효하지 않거나 제공자가 거절했습니다.\n새 키를 발급받아 AI/API 연결에서 교체해주세요.",
+        )
+    if "rate_limited" in text or "rate limit" in text or "429" in text or "무료 사용량" in text:
+        return (
+            "무료 사용량 한도 도달",
+            "무료 티어의 분당 또는 일일 요청 한도에 도달했습니다.\n잠시 기다리거나 유료 키를 연결한 뒤 다시 시도해주세요.",
+        )
+    if "quota_exceeded" in text or "billing" in text or "credit" in text or "결제" in text or "크레딧" in text:
+        return (
+            "결제/크레딧 확인 필요",
+            "유료 API의 결제 계정, 크레딧, 쿼터 상태 때문에 요청이 막혔습니다.\n결제 상태를 확인한 뒤 다시 시도해주세요.",
+        )
+    if "model_not_found" in text or "model not found" in text or "unsupported model" in text:
+        return (
+            "AI 모델 사용 불가",
+            "모델명이 잘못되었거나 이 계정에서 사용할 수 없는 모델입니다.\nAIMAX 기본 모델로 전환한 뒤 다시 시도해주세요.",
+        )
+    if "image_paid_required" in text or "flash-image" in text or "이미지 생성은 유료" in text:
+        return (
+            "이미지 생성은 유료 키 필요",
+            "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지가 건너뛰어질 수 있습니다.\n이미지 수를 0장으로 바꾸거나 유료 키를 연결해주세요.",
+        )
+    if "naver_login" in text or "네이버 로그인" in text:
+        return (
+            "네이버 로그인 필요",
+            "네이버 로그인 또는 추가 인증 화면에서 자동 진행이 막혔습니다.\n네이버 재로그인 후 다시 시도해주세요.",
+        )
+    if stage in {"smart_editor_input", "smart_editor_open", "image_upload", "image_insert_exception", "browser_start"}:
+        return (
+            "AIMAX 관리자 조치 필요",
+            "사용자가 설정으로 해결하기 어려운 실행기/네이버 에디터 처리 오류입니다.\n오류 보고를 보내주시면 AIMAX 관리자가 확인합니다.",
+        )
+    return (
+        "작업 실패 원인 확인 필요",
+        "로그를 기준으로 원인을 확인해야 합니다.\n오류 보고를 보내주시면 AIMAX 관리자가 확인합니다.",
     )
 
 
@@ -526,6 +577,9 @@ def _build_write_result(
             "failure_count": len(_safe_image_failures(image_totals.get("failures"))),
             "failures": _safe_image_failures(image_totals.get("failures")),
             "shortfall_accepted": bool(image_totals.get("shortfall_accepted")),
+            "soft_failure_accepted": bool(image_totals.get("soft_failure_accepted")),
+            "image_skipped_no_key": bool(image_totals.get("image_skipped_no_key")),
+            "mode_overridden_to_save": bool(image_totals.get("mode_overridden_to_save")),
         },
         "posts": (posts or [])[-20:],
     }
@@ -938,7 +992,7 @@ def migrate_forced_pro_preview_default():
     # 접미사 있는 pro-preview, 접미사 없는 레거시 gemini-3.1-pro / gemini-2.5-pro 모두 무료 flash 로 복귀.
     migrated = data.get("ai_model") in ("gemini-3.1-pro-preview", "gemini-3.1-pro", "gemini-2.5-pro")
     if migrated:
-        data["ai_model"] = "gemini-2.5-flash"
+        data["ai_model"] = _DEFAULT_AI_MODEL
     data["forced_pro_preview_default_migrated"] = True
     data["forced_pro_preview_default_migrated_at"] = datetime.now(timezone.utc).isoformat()
     _save_settings_data(data)
@@ -3118,7 +3172,10 @@ class NaverBlogApp:
                 requested_images = _payload_image_count(payload)
                 artifact_image_count = min(self._remote_artifact_image_count(artifact), requested_images)
             if artifact_image_count > 0 and not self._has_local_or_web_image_key(web_secrets):
-                raise ValueError("서버에서 글은 생성되었지만 이미지 생성을 위한 Gemini 또는 OpenAI API Key가 없습니다.")
+                self._log(
+                    "[웹앱 작업] 이미지 생성 키가 없어 이미지는 건너뜁니다. "
+                    "서버에서 생성된 글 원고는 보존하고 네이버 입력을 계속 진행합니다."
+                )
 
             client.update_job(
                 job_id,
@@ -3749,8 +3806,9 @@ class NaverBlogApp:
         """작업 완료 팝업 — 대표님 호칭 + 다음 단계 이동 제안"""
         try:
             from tkinter import Toplevel
+            is_failure = any(token in str(title or "") for token in ("실패", "오류", "필요", "불가"))
             popup = Toplevel(self.root)
-            popup.title("작업 완료")
+            popup.title("오류 진단" if is_failure else "작업 완료")
             popup.configure(bg=COLORS["card_bg"])
             popup.transient(self.root)
             popup.grab_set()
@@ -3769,8 +3827,8 @@ class NaverBlogApp:
 
             # 체크마크 + 타이틀
             tk.Label(
-                popup, text="✓", font=(FONT_UI, 36, "bold"),
-                bg=COLORS["card_bg"], fg="#5cb85c",
+                popup, text="!" if is_failure else "✓", font=(FONT_UI, 36, "bold"),
+                bg=COLORS["card_bg"], fg="#C0392B" if is_failure else "#5cb85c",
             ).pack(pady=(18, 0))
             tk.Label(
                 popup, text=title,
@@ -4138,7 +4196,8 @@ class NaverBlogApp:
             bg=COLORS["card_bg"], fg=COLORS["text_secondary"], anchor="w",
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
-            ("gemini-2.5-flash",       "Gemini 2.5 Flash  (~11원/글)  ★ 기본"),
+            ("gemini-2.5-flash",       "Gemini 2.5 Flash  (무료 티어 가능)  ★ 기본"),
+            ("gemini-3.5-flash",       "Gemini 3.5 Flash  (고품질/유료)"),
             ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (~44원/글, 유료/고급)"),
             ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
             ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),
@@ -4365,14 +4424,15 @@ class NaverBlogApp:
 
         cost_text = (
             "[ 글 생성 — 텍스트, 모델별 실측 ]\n"
-            "  • Gemini 2.5 Flash          ~11원/글  ★ 기본\n"
+            "  • Gemini 3.5 Flash          무료 티어 0원(한도 내)  ★ 기본\n"
+            "  • Gemini 2.5 Flash          ~11원/글  (레거시/저비용)\n"
             "  • Gemini 3.1 Pro Preview    ~44원/글  (유료/고급)\n"
             "  • GPT-5.4 mini              ~21원/글\n"
             "  • GPT-5 mini                ~9원/글\n"
             "  • Claude Sonnet             ~70원/글\n"
             "\n"
             "[ 이미지 생성 — 선택 모델 기준, 1024px 정사각형 ]\n"
-            "  • Gemini 이미지 1장        약 58원\n"
+            "  • Gemini 이미지 1장        약 99원 (유료 키 필요)\n"
             "  • OpenAI 이미지 1장        약 62원 (medium 기준)\n"
             "\n"
             "환율 1,476원/$ 기준 · 완료 후 실제 토큰 사용량으로 원화 비용을 다시 계산합니다"
@@ -5588,6 +5648,25 @@ class NaverBlogApp:
             image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "failures": []}
             post_results = []
             failed_posts = []
+            force_save_due_to_image_skip = False
+            if image_count > 0 and not (_is_real_secret(image_api_key) or _is_real_secret(fallback_image_api_key)):
+                self._log(
+                    "[이미지] 이미지 생성을 위한 로컬 Gemini/OpenAI 키가 없어 이미지 없이 본문만 진행합니다. "
+                    "이미지는 AI/API 연결에서 유료 이미지 사용 가능 키를 등록하거나 이미지 수 0장으로 다시 실행해주세요."
+                )
+                image_totals["failures"].append({
+                    "stage": "image_generation",
+                    "error": "api_key_missing",
+                    "message": "이미지 생성용 API 키가 없어 이미지 없이 본문을 보존했습니다.",
+                    "user_actionable": True,
+                    "admin_action_required": False,
+                })
+                image_totals["image_skipped_no_key"] = True
+                if mode in {"publish", "schedule"}:
+                    force_save_due_to_image_skip = True
+                    image_totals["mode_overridden_to_save"] = True
+                    self._log("[보호] 이미지 키가 없어 공개 발행/예약 대신 임시저장으로 전환합니다.")
+                image_count = 0
 
             def _record_failed(post, post_stage, error, title="", char_count=0, images=None, draft_save_confirmed=None, recovery_path=None):
                 failed = {
@@ -5683,6 +5762,8 @@ class NaverBlogApp:
                 image_failures = []
                 draft_save_confirmed = None
                 saved_md_path = None
+                image_soft_failed = False
+                effective_mode = "save" if force_save_due_to_image_skip and mode in {"publish", "schedule"} else mode
 
                 try:
                     post_stage = "content_generation"
@@ -5802,10 +5883,19 @@ class NaverBlogApp:
                             if image_count > 0 and image_inserted < image_block_count:
                                 post_stage = _image_failure_stage(image_failures)
                                 stage = post_stage
-                                raise RuntimeError(_image_failure_message(image_count, image_inserted, image_failures))
+                                image_soft_failed = True
+                                image_totals["soft_failure_accepted"] = True
+                                self._log(
+                                    f"[주의] 이미지 {image_count}장 중 {image_inserted}장만 첨부되었습니다. "
+                                    "글 원고를 버리지 않고 본문 입력을 계속 진행합니다."
+                                )
+                                if mode in {"publish", "schedule"}:
+                                    effective_mode = "save"
+                                    image_totals["mode_overridden_to_save"] = True
+                                    self._log("[보호] 이미지 실패가 있어 공개 발행/예약 대신 임시저장으로 전환합니다.")
 
                             # 발행
-                            if mode == "save":
+                            if effective_mode == "save":
                                 post_stage = "smart_editor_save"
                                 stage = post_stage
                                 self._log("임시 저장 중...")
@@ -5817,7 +5907,7 @@ class NaverBlogApp:
                                     post_stage = "smart_editor_save_confirmation"
                                     stage = post_stage
                                     raise RuntimeError("임시 저장 완료 메시지를 확인하지 못했습니다. 버튼 클릭은 수행했지만 완료 상태를 검증하지 못했습니다.")
-                            elif mode == "schedule":
+                            elif effective_mode == "schedule":
                                 post_stage = "smart_editor_schedule"
                                 stage = post_stage
                                 target_date = base_date
@@ -5856,13 +5946,16 @@ class NaverBlogApp:
                         "title": title,
                         "status": "done",
                         "stage": "completed",
+                        "requested_mode": mode,
+                        "mode": effective_mode,
                         "usage": post_usage or {},
                         "images": {
                             "attempted": image_attempted,
                             "generated": image_generated,
                             "inserted": image_inserted,
-                            "failure_count": 0,
-                            "failures": [],
+                            "failure_count": len(image_failures),
+                            "failures": image_failures,
+                            "soft_failure_accepted": bool(image_soft_failed),
                         },
                         "draft_save_confirmed": draft_save_confirmed,
                         "char_count": visible_char_count,
@@ -5903,21 +5996,23 @@ class NaverBlogApp:
 
             # 3. 완료
             self.queue.put(("progress", 100))
-            action_label = {"save": "임시저장", "schedule": "예약 발행", "publish": "발행"}.get(mode, "발행")
+            result_mode = "save" if image_totals.get("mode_overridden_to_save") else mode
+            action_label = {"save": "임시저장", "schedule": "예약 발행", "publish": "발행"}.get(result_mode, "발행")
             if success != total:
                 error_msg = last_error or f"글쓰기 성공 건수가 부족합니다: {success}/{total}"
                 self._log(f"[오류] 글쓰기 작업 실패: {success}/{total} 글 성공")
+                diag_title, diag_body = _diagnose_local_failure(stage, error_msg)
                 body = (
-                    f"총 {success}/{total}개 글만 {action_label}됐어요.\n"
-                    f"앱 로그를 확인해주세요.\n\n"
+                    f"{diag_body}\n\n"
+                    f"총 {success}/{total}개 글만 {action_label}됐습니다.\n"
                     f"마지막 오류: {error_msg}"
                 )
                 self.queue.put((
                     "popup",
-                    ("write", "고객 설득하기 실패", body, None),
+                    ("error", diag_title, body, None),
                 ))
                 return _build_write_result(
-                    False, success, total, mode, ai_model, usage_totals, image_totals,
+                    False, success, total, result_mode, ai_model, usage_totals, image_totals,
                     post_results, failed_posts, error=error_msg, stage=stage,
                     failed_keyword=failed_keyword,
                 )
@@ -5940,7 +6035,7 @@ class NaverBlogApp:
                 "popup",
                 ("write", "고객 설득하기 완료", body, None),
             ))
-            return _build_write_result(True, success, total, mode, ai_model, usage_totals, image_totals, post_results, failed_posts)
+            return _build_write_result(True, success, total, result_mode, ai_model, usage_totals, image_totals, post_results, failed_posts)
 
         except Exception as e:
             self._log(f"[오류] {e}")
