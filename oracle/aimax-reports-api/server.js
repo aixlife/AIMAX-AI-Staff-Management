@@ -179,6 +179,7 @@ const USER_SECRET_PROVIDERS = {
   youtube: { provider: "youtube", secretName: "YOUTUBE_API_KEY", label: "YouTube Data API Key" },
 };
 const YUNMI_AI_MODEL_PRICES = {
+  "gemini-3.5-flash": { provider: "gemini", inputUsdPer1m: 1.50, outputUsdPer1m: 9.00, label: "Gemini 3.5 Flash" },
   "gemini-3.1-pro-preview": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
   "gemini-2.5-pro": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
   "gemini-2.5-flash": { provider: "gemini", inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
@@ -188,12 +189,12 @@ const YUNMI_AI_MODEL_PRICES = {
 };
 const IMPORTABLE_USER_SECRET_PROVIDERS = ["gemini", "apify", "openai", "claude"];
 const AGENT_COMMAND_TYPES = new Set(["open_settings", "import_local_provider_secrets", "songi_youtube_discovery"]);
-const LATEST_AGENT_VERSION = String(process.env.AIMAX_LATEST_AGENT_VERSION || "v1.0.2").trim();
-const MIN_AGENT_VERSION = String(process.env.AIMAX_MIN_AGENT_VERSION || "v1.0.2").trim();
+const LATEST_AGENT_VERSION = String(process.env.AIMAX_LATEST_AGENT_VERSION || "v1.0.50").trim();
+const MIN_AGENT_VERSION = String(process.env.AIMAX_MIN_AGENT_VERSION || "v1.0.50").trim();
 const PLATFORM_AGENT_VERSIONS = {
   windows: {
-    latest: String(process.env.AIMAX_WINDOWS_LATEST_AGENT_VERSION || "v1.0.2").trim(),
-    min: String(process.env.AIMAX_WINDOWS_MIN_AGENT_VERSION || "v1.0.2").trim(),
+    latest: String(process.env.AIMAX_WINDOWS_LATEST_AGENT_VERSION || LATEST_AGENT_VERSION).trim(),
+    min: String(process.env.AIMAX_WINDOWS_MIN_AGENT_VERSION || MIN_AGENT_VERSION).trim(),
   },
   macos: {
     latest: String(process.env.AIMAX_MACOS_LATEST_AGENT_VERSION || LATEST_AGENT_VERSION).trim(),
@@ -324,7 +325,7 @@ const WORKERS = {
     profileImage: "/assets/avatar_yunmi.jpg",
     avatarImage: "/assets/avatar_yunmi.jpg",
     repoUrl: "https://github.com/makefamily/script-writer",
-    shortDescription: "원본 자료와 목표를 받아 숏폼 스크립트 1안/2안, 촬영 가이드, CTA 후보를 만들어주는 스크립트작가 직원입니다.",
+    shortDescription: "주제와 목적을 받아 A/B/C 타깃별 숏폼 스크립트 1안/2안/3안을 만들어주는 스크립트작가 직원입니다.",
     capabilities: ["숏폼 후킹 설계", "시간대별 대본", "촬영 가이드", "CTA 후보"],
   },
   songi_data_research: {
@@ -365,13 +366,13 @@ const WORKERS = {
     avatarImage: "/assets/avatar_jieun.jpg",
     repoUrl: "https://github.com/aixlife/aimax-viseo",
     releaseUrl: "",
-    setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-Setup-0.1.5.exe`,
+    setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe`,
     portableDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-portable.exe`,
     downloadLabel: "Setup exe 다운로드",
     supportedPlatforms: ["windows"],
-    version: "0.1.5",
-    shortDescription: "화면 캡처, 캡처 이미지 모자이크, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
-    capabilities: ["화면 캡처", "캡처 이미지 모자이크", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+    version: "0.1.6",
+    shortDescription: "화면 캡처, 캡처 이미지 모자이크, Windows 종료, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
+    capabilities: ["화면 캡처", "캡처 이미지 모자이크", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
   },
 };
 const JOB_KINDS = {
@@ -421,6 +422,7 @@ const DOWNLOAD_CATALOG = {
 const PUBLIC_DOWNLOAD_FILES = new Set([
   "AIMAX-Office-Manager-Setup-0.1.4.exe",
   "AIMAX-Office-Manager-Setup-0.1.5.exe",
+  "AIMAX-Office-Manager-Setup-0.1.6.exe",
   "AIMAX-Office-Manager-portable.exe",
   "Pencil-Setup-1.0.0.exe",
   "Pencil-portable.exe",
@@ -1432,14 +1434,15 @@ function yeriSelectedModel(payload = {}) {
 
 function normalizeYeriGeminiModel(model) {
   const value = String(model || "").trim();
-  // 기본/제네릭/접미사 없는 레거시값(2.5 Pro, 3.1 Pro)은 무료 등급에서 동작하는 2.5 Flash 로 통일.
+  // 기본/제네릭/접미사 없는 레거시값(2.5 Pro, 3.1 Pro)은 검증된 무료 등급 2.5 Flash 로 통일.
   // UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)라, 접미사 없는 "gemini-3.1-pro"는
   // 명시 선택이 아니라 자동/레거시값 → flash 안전 (runner app.py/_LEGACY_AI_MODEL_MAP 과 일치).
   const aliases = {
     gemini: YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
     "gemini-pro": "gemini-3.1-pro-preview",
-    "gemini-2.5-pro": "gemini-2.5-flash",
-    "gemini-3.1-pro": "gemini-2.5-flash",
+    "gemini-flash": YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
+    "gemini-2.5-pro": YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
+    "gemini-3.1-pro": YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
   };
   return aliases[value] || (value.startsWith("gemini-") ? value : (YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash"));
 }
@@ -1470,6 +1473,12 @@ function canUseYeriServerGeneration(user) {
   ))) return true;
   // 목표: "웹에 저장한 키로 모두가 사용". 허용목록 외에도, 본인 웹 AI 키를 저장한 사용자는
   // 서버생성 허용(그 웹키로 생성). 키 없는 사용자는 false → 러너 로컬생성으로 폴백(안 깨짐).
+  const userId = user && user.id;
+  if (!userId) return false;
+  return hasUserSecret(userId, "gemini") || hasUserSecret(userId, "openai") || hasUserSecret(userId, "claude");
+}
+
+function hasYeriServerGenerationSecret(user) {
   const userId = user && user.id;
   if (!userId) return false;
   return hasUserSecret(userId, "gemini") || hasUserSecret(userId, "openai") || hasUserSecret(userId, "claude");
@@ -1750,6 +1759,14 @@ function classifyYeriProviderError(provider, error) {
   const detail = redactText(raw).slice(0, 500);
   const low = detail.toLowerCase();
 
+  if (status === 404 || /(model.*not found|not found.*model|model_not_found|not supported|unsupported model|permission.*model|모델.*없|모델.*사용할 수 없)/i.test(detail)) {
+    return yeriProviderError(provider, "server_generation_model_not_found", `${label} 모델을 찾을 수 없거나 이 계정에서 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.`, {
+      status,
+      detail,
+      transient: false,
+    });
+  }
+
   if (status === 401 || status === 403 || /(authentication|unauthorized|invalid x-api-key|api[_ -]?key|permission)/i.test(detail)) {
     return yeriProviderError(provider, "server_generation_auth_failed", `${label} API 키 인증 실패 - 키를 확인/갱신해주세요.`, {
       status,
@@ -1938,6 +1955,7 @@ function yeriGenerationFailureCode(error) {
   if (code.includes("server_generation_auth_failed")) return "server_generation_auth_failed";
   if (code.includes("server_generation_quota_exceeded")) return "server_generation_quota_exceeded";
   if (code.includes("server_generation_rate_limited")) return "server_generation_rate_limited";
+  if (code.includes("server_generation_model_not_found")) return "server_generation_model_not_found";
   if (code.includes("server_generation_provider_transient")) return "server_generation_provider_transient";
   if (code.includes("server_generation_provider_error")) return "server_generation_provider_error";
   if (code.includes("timeout")) return "server_generation_timeout";
@@ -1956,10 +1974,164 @@ function yeriGenerationFailureMessage(error) {
   if (code === "server_generation_auth_failed") return "API 키 인증 실패입니다. 웹 설정의 AI/API 연결에서 키를 확인하거나 갱신해주세요.";
   if (code === "server_generation_quota_exceeded") return "결제/요금제 한도 초과입니다. 결제/크레딧 상태를 확인해주세요.";
   if (code === "server_generation_rate_limited") return "AI 무료 사용량 한도에 도달했습니다. 분당 한도면 잠시 후, 일일 한도면 내일 다시 시도하거나 본인 유료 API 키를 등록해주세요. 여러 글을 한 번에 몰아 보내면 한도에 빨리 도달합니다.";
+  if (code === "server_generation_model_not_found") return "선택한 AI 모델을 찾을 수 없거나 이 계정에서 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.";
   if (code === "server_generation_provider_transient") return "AI 제공자 일시적 오류입니다. 잠시 뒤 다시 시도해주세요.";
   if (code === "server_generation_timeout") return "AI 글 생성 시간이 초과되었습니다. 글 분량을 줄이거나 잠시 뒤 다시 시도해주세요.";
   if (code === "server_generation_invalid_response") return "AI 응답을 글 형식으로 해석하지 못했습니다. 모델을 바꾸거나 다시 시도해주세요.";
   return "AI 글 생성 오류가 발생했습니다. 모델, API 키, 사용량 한도를 확인해주세요.";
+}
+
+function buildFailureDiagnostic(input = {}) {
+  if (input && typeof input === "object" && input.code && input.title && input.message) {
+    return {
+      code: sanitizeFailedStage(input.code) || "admin_action_required",
+      title: redactText(String(input.title)).slice(0, 120),
+      message: redactText(String(input.message)).slice(0, 300),
+      user_actionable: Boolean(input.user_actionable),
+      admin_action_required: Boolean(input.admin_action_required),
+      action_label: redactText(String(input.action_label || (Array.isArray(input.actions) ? input.actions[0] : "") || "오류 보고 보내기")).slice(0, 80),
+      actions: Array.isArray(input.actions) ? input.actions.slice(0, 4).map((item) => redactText(String(item)).slice(0, 80)) : ["오류 보고 보내기"],
+      stage: sanitizeFailedStage(input.stage || ""),
+      reason: sanitizeFailedStage(input.reason || ""),
+    };
+  }
+  const stage = sanitizeFailedStage(input.stage || input.failed_stage || "");
+  const reason = sanitizeFailedStage(input.reason || input.failed_reason || input.error || "");
+  const rawText = [
+    stage,
+    reason,
+    input.error,
+    input.visible_error,
+    input.message,
+    input.context,
+  ].filter(Boolean).join(" ");
+  const text = rawText.toLowerCase();
+
+  const diagnostic = {
+    code: "admin_action_required",
+    title: "AIMAX 관리자 조치 필요",
+    message: "사용자 설정으로 해결하기 어려운 내부 처리 오류입니다.",
+    user_actionable: false,
+    admin_action_required: true,
+    action_label: "오류 보고 보내기",
+    actions: ["오류 보고 보내기"],
+    stage,
+    reason,
+  };
+
+  const user = (code, title, message, actions = []) => ({
+    code,
+    title,
+    message,
+    user_actionable: true,
+    admin_action_required: false,
+    action_label: actions[0] || "설정 열기",
+    actions: actions.length ? actions : ["AI/API 연결 열기"],
+    stage,
+    reason,
+  });
+  const admin = (code, title, message, actions = []) => ({
+    code,
+    title,
+    message,
+    user_actionable: false,
+    admin_action_required: true,
+    action_label: actions[0] || "오류 보고 보내기",
+    actions: actions.length ? actions : ["오류 보고 보내기"],
+    stage,
+    reason,
+  });
+
+  if (/yeri_(gemini|openai|claude)_key_missing|key_missing|api_key_missing|no api key|api key.*missing|키가.*없|키.*저장/.test(text)) {
+    return user(
+      "api_key_missing",
+      "AI/API 키 등록 필요",
+      "작업에 필요한 AI API 키가 저장되어 있지 않습니다.",
+      ["AI/API 연결 열기", "오류 보고 보내기"],
+    );
+  }
+  if (/server_generation_auth_failed|api_key_invalid|invalid.*api.*key|unauthorized|permission denied|authentication|키 인증 실패|인증 실패/.test(text)) {
+    return user(
+      "api_key_invalid",
+      "API 키 인증 실패",
+      "저장된 API 키가 유효하지 않거나 해당 제공자에서 거절되었습니다.",
+      ["AI/API 연결 열기", "오류 보고 보내기"],
+    );
+  }
+  if (/server_generation_rate_limited|rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일/.test(text)) {
+    return user(
+      "rate_limited",
+      "무료 사용량 한도 도달",
+      "무료 티어의 분당 또는 일일 요청 한도에 도달했습니다.",
+      ["잠시 후 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"],
+    );
+  }
+  if (/server_generation_quota_exceeded|quota_exceeded|billing|payment|credit|balance|결제|크레딧|잔액/.test(text)) {
+    return user(
+      "quota_exceeded",
+      "결제/크레딧 확인 필요",
+      "유료 API의 결제 계정, 크레딧, 쿼터 상태 때문에 요청이 막혔습니다.",
+      ["결제 상태 확인", "AI/API 연결 열기", "오류 보고 보내기"],
+    );
+  }
+  if (/server_generation_model_not_found|model_not_found|model.*not found|not found.*model|unsupported model|모델.*없|모델.*사용할 수 없/.test(text)) {
+    return user(
+      "model_not_found",
+      "AI 모델 사용 불가",
+      "모델명이 잘못되었거나 이 계정에서 선택한 모델을 사용할 수 없습니다.",
+      ["AIMAX 기본 모델로 전환", "AI/API 연결 열기", "오류 보고 보내기"],
+    );
+  }
+  if (/image_paid_required|gemini.*image|이미지.*무료|이미지.*유료|nano banana|flash-image/.test(text)) {
+    return user(
+      "image_paid_required",
+      "이미지 생성은 유료 키 필요",
+      "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 생성이 건너뛰어졌습니다.",
+      ["이미지 없이 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"],
+    );
+  }
+  if (/update_required|runner_start_timeout|runner_stopped|old.*runner|version|업데이트|구버전/.test(text)) {
+    return user(
+      "runner_update_required",
+      "실행기 업데이트 필요",
+      "현재 실행기 버전이 웹 작업을 안정적으로 받을 수 없는 상태입니다.",
+      ["실행기 업데이트", "오류 보고 보내기"],
+    );
+  }
+  if (/naver_login|네이버 로그인|login|captcha|인증 화면|로그인/.test(text)) {
+    return user(
+      "naver_login_required",
+      "네이버 로그인 필요",
+      "네이버 로그인 또는 추가 인증 화면에서 자동 진행이 막혔습니다.",
+      ["네이버 재로그인", "오류 보고 보내기"],
+    );
+  }
+  if (/smart_editor|selector|셀렉터|image_upload_failed|image_insert_exception|no such window|chromedriver|chrome not reachable|browser_start/.test(text)) {
+    return admin(
+      "admin_action_required",
+      "AIMAX 관리자 조치 필요",
+      "네이버 에디터 구조, 실행기 연결, 저장/업로드 로직 중 코드 수정이 필요한 오류입니다.",
+      ["오류 보고 보내기"],
+    );
+  }
+  return diagnostic;
+}
+
+function jobFailureDiagnostic(job) {
+  if (!job || typeof job !== "object") return null;
+  if (job.diagnostic && typeof job.diagnostic === "object" && !Array.isArray(job.diagnostic)) {
+    return buildFailureDiagnostic(job.diagnostic);
+  }
+  const result = job.result && typeof job.result === "object" ? job.result : {};
+  const imageFailure = Array.isArray(result.images?.failures) ? result.images.failures.find(Boolean) : null;
+  if (!job.failed_stage && !job.failed_reason && !result.error && !imageFailure) return null;
+  return buildFailureDiagnostic({
+    stage: job.failed_stage || result.stage || imageFailure?.stage || "",
+    reason: job.failed_reason || result.error || imageFailure?.error_code || imageFailure?.error || "",
+    error: result.error || imageFailure?.error_code || imageFailure?.error || "",
+    visible_error: result.visible_error || imageFailure?.message || "",
+    message: result.user_message || result.message || "",
+  });
 }
 
 async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenerationMode()) {
@@ -1995,6 +2167,12 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
     target.status = "failed";
     target.failed_stage = YERI_CONTENT_GENERATION_STAGE;
     target.failed_reason = failureCode;
+    target.diagnostic = buildFailureDiagnostic({
+      stage: YERI_CONTENT_GENERATION_STAGE,
+      reason: failureCode,
+      error: failureCode,
+      visible_error: failureMessage,
+    });
     target.result = {
       ok: false,
       stage: YERI_CONTENT_GENERATION_STAGE,
@@ -2005,6 +2183,7 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
       provider_status: Number(error?.status || 0),
       transient: Boolean(error?.transient),
       detail_code: String(error?.code || "").slice(0, 120),
+      diagnostic: target.diagnostic,
     };
     target.finished_at = nowIso();
     target.updated_at = target.finished_at;
@@ -6044,6 +6223,7 @@ function publicJob(job) {
     target_device_label: job.target_device_label || "",
     failed_stage: job.failed_stage || "",
     failed_reason: job.failed_reason || "",
+    diagnostic: jobFailureDiagnostic(job),
     retry_count: safeInt(job.retry_count, 0, 100),
     artifact: publicYeriArtifactMeta(job),
     logs: (job.logs || []).slice(-20),
@@ -6090,10 +6270,12 @@ function sanitizeImages(raw) {
     return {
       index: safeInt(failure.index, 0, 100),
       stage: String(failure.stage || "").slice(0, 80),
-      error_code: String(failure.error_code || "").slice(0, 80),
+      error_code: String(failure.error_code || failure.error || "").slice(0, 80),
       provider: String(failure.provider || "").slice(0, 40),
       method: String(failure.method || "").slice(0, 40),
       message: redactText(String(failure.message || "")).slice(0, 180),
+      user_actionable: Boolean(failure.user_actionable),
+      admin_action_required: Boolean(failure.admin_action_required),
     };
   }) : [];
   return {
@@ -6102,6 +6284,10 @@ function sanitizeImages(raw) {
     inserted: safeInt(images.inserted, 0, 100),
     failure_count: safeInt(images.failure_count || failures.length, 0, 100),
     failures,
+    shortfall_accepted: Boolean(images.shortfall_accepted),
+    soft_failure_accepted: Boolean(images.soft_failure_accepted),
+    image_skipped_no_key: Boolean(images.image_skipped_no_key),
+    mode_overridden_to_save: Boolean(images.mode_overridden_to_save),
     provider_counts: {
       gemini: safeInt(providers.gemini, 0, 100),
       openai: safeInt(providers.openai, 0, 100),
@@ -6144,6 +6330,8 @@ function sanitizePostResult(raw) {
     title: redactText(String(post.title || "")).slice(0, 180),
     status: String(post.status || "").slice(0, 40),
     stage: String(post.stage || post.step || "").slice(0, 80),
+    mode: String(post.mode || "").slice(0, 40),
+    requested_mode: String(post.requested_mode || "").slice(0, 40),
     error: redactText(String(post.error || post.message || "")).slice(0, 500),
     usage: sanitizeUsage(post.usage),
     images: sanitizeImages(post.images),
@@ -6171,6 +6359,9 @@ function sanitizeJobResult(raw) {
     cost: sanitizeCost(raw.cost),
     posts: Array.isArray(raw.posts) ? raw.posts.slice(-20).map(sanitizePostResult) : [],
   };
+  if (raw.diagnostic && typeof raw.diagnostic === "object" && !Array.isArray(raw.diagnostic)) {
+    result.diagnostic = buildFailureDiagnostic(raw.diagnostic);
+  }
   if (failedPosts.length) result.failed_posts = failedPosts.slice(-20).map(sanitizePostResult);
   if (raw.error) result.error = redactText(String(raw.error)).slice(0, 500);
   return result;
@@ -6344,13 +6535,44 @@ function yunmiSubject(input, keywords) {
   return yunmiPlain(input.topic || keywords[0] || "이 주제", "이 주제");
 }
 
-function yunmiAudience(input) {
+function yunmiTargetOptions(input, keywords) {
+  const topic = yunmiSubject(input, keywords);
+  return [
+    {
+      code: "A",
+      label: "A 타깃",
+      name: "이미 관심 있는 사람",
+      audience: `${topic}에 이미 관심 있고 바로 써먹을 기준을 찾는 사람`,
+      strategy: "문제 공감보다 체크포인트와 실행 기준을 먼저 보여줘 저장 욕구를 만듭니다.",
+      reason: "이미 관심이 있는 시청자는 긴 설득보다 바로 적용할 기준에 반응합니다.",
+    },
+    {
+      code: "B",
+      label: "B 타깃",
+      name: "아직 관심 없지만 불편을 겪는 사람",
+      audience: `${topic}을 아직 우선순위로 두지 않았지만 같은 불편을 겪는 사람`,
+      strategy: "일상적인 불편과 손해를 먼저 보여줘 내 문제라고 느끼게 만듭니다.",
+      reason: "관심이 낮은 시청자는 정보보다 자기 상황을 찌르는 장면에서 멈춥니다.",
+    },
+    {
+      code: "C",
+      label: "C 타깃",
+      name: "구매/상담 직전 사람",
+      audience: `${topic} 관련 선택을 앞두고 마지막 기준을 확인하려는 사람`,
+      strategy: "비교 기준과 결정 포인트를 짧게 제시해 상담, 저장, 댓글 행동으로 연결합니다.",
+      reason: "결정 직전 시청자는 확신을 주는 기준과 다음 행동이 있을 때 움직입니다.",
+    },
+  ];
+}
+
+function yunmiAudience(input, targetOption = null) {
+  if (targetOption?.audience) return yunmiPlain(targetOption.audience, "");
   return yunmiPlain(input.target_audience || "이걸 고민하는 분들", "이걸 고민하는 분들");
 }
 
-function yunmiHookSample(code, input, keywords) {
+function yunmiHookSample(code, input, keywords, audienceOverride = "") {
   const topic = yunmiSubject(input, keywords);
-  const audience = yunmiAudience(input);
+  const audience = audienceOverride || yunmiAudience(input);
   const samples = {
     A: `${audience}, 혹시 ${topic} 설명부터 시작하고 계세요?`,
     B: `${topic}, 대부분 첫 3초에서 놓칩니다.`,
@@ -6402,9 +6624,9 @@ function yunmiCtaText(input) {
   return input.cta || "자료가 필요하면 댓글에 '자료'라고 남겨주세요.";
 }
 
-function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
+function yunmiTimeRows(input, hookOption, optionNumber, keywords, targetOption = null) {
   const topic = yunmiSubject(input, keywords);
-  const audience = yunmiAudience(input);
+  const audience = yunmiAudience(input, targetOption);
   const core = yunmiCoreMessage(input, keywords);
   const evidence = yunmiEvidenceLine(input);
   const cta = yunmiCtaText(input);
@@ -6414,20 +6636,34 @@ function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
   const secondContext = sourceLines[1] || core;
   const tension = optionNumber === 1
     ? "그런데 여기서 대부분 놓칩니다."
-    : "문제는 이 다음입니다.";
+    : optionNumber === 2
+      ? "문제는 이 다음입니다."
+      : "여기서 방향을 조금만 바꾸면 달라집니다.";
   const solutionA = optionNumber === 1
     ? "먼저 문제를 한 문장으로 좁히세요."
-    : "처음부터 설명하지 말고 장면을 먼저 보여주세요.";
+    : optionNumber === 2
+      ? "처음부터 설명하지 말고 장면을 먼저 보여주세요."
+      : "핵심 장면을 먼저 보여주고, 이유는 나중에 붙이세요.";
   const solutionB = optionNumber === 1
     ? "그다음 기준은 세 개 이하로 줄이세요."
-    : "그리고 바로 따라 할 기준을 하나만 주세요.";
+    : optionNumber === 2
+      ? "그리고 바로 따라 할 기준을 하나만 주세요."
+      : "마지막에는 시청자가 바로 할 행동 하나만 남기세요.";
   return [
     {
       time: "0~3초",
-      screen: optionNumber === 1 ? "정면 클로즈업, 첫 문장 자막 크게" : "문제 상황을 보여주는 화면이나 빈 결과 화면",
+      screen: optionNumber === 1
+        ? "정면 클로즈업, 첫 문장 자막 크게"
+        : optionNumber === 2
+          ? "문제 상황을 보여주는 화면이나 빈 결과 화면"
+          : "실제 장면이나 캡처를 먼저 보여주는 빠른 컷",
       dialogue: hook,
       subtitles: hook,
-      anchor: optionNumber === 1 ? "얼굴 클로즈업 + 굵은 한 줄 자막" : "문제 장면 또는 결과가 없는 화면",
+      anchor: optionNumber === 1
+        ? "얼굴 클로즈업 + 굵은 한 줄 자막"
+        : optionNumber === 2
+          ? "문제 장면 또는 결과가 없는 화면"
+          : "실제 장면 선공개",
       bridge: hook,
     },
     {
@@ -6441,10 +6677,10 @@ function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
     {
       time: "10~25초",
       screen: "손가락으로 1개 포인트를 짚거나 화면에 키워드 1개만 표시",
-      dialogue: `${audience}에게 필요한 건 많은 설명이 아닙니다. ${core}. 이 메시지 하나만 남기면 됩니다.`,
+      dialogue: `${audience}에게 필요한 건 많은 설명이 아닙니다. ${targetOption?.strategy || core} 이 메시지 하나만 남기면 됩니다.`,
       subtitles: "핵심 메시지는 하나만",
       anchor: "핵심 키워드 1개",
-      bridge: `${core}.`,
+      bridge: targetOption?.strategy || `${core}.`,
     },
     {
       time: "25~40초",
@@ -6473,11 +6709,11 @@ function yunmiTimeRows(input, hookOption, optionNumber, keywords) {
   ];
 }
 
-function yunmiTitleCandidates(input, hookOption, keywords) {
+function yunmiTitleCandidates(input, hookOption, keywords, targetOption = null) {
   const topic = input.topic || keywords[0] || "숏폼";
-  const audience = input.target_audience || "처음 시작하는 사람";
+  const audience = targetOption?.name || input.target_audience || "처음 시작하는 사람";
   return [
-    `${topic}, 이렇게 시작하지 마세요`,
+    `${audience}이 멈추는 ${topic}`,
     `${topic} 전에 꼭 봐야 할 기준`,
     `${hookOption.label.replace("형", "")}으로 여는 ${topic}`,
   ].map((title) => compactText(title, 36));
@@ -6488,7 +6724,9 @@ function yunmiShootingGuide(input, optionNumber) {
   return {
     visual: optionNumber === 1
       ? "정면 클로즈업과 자료 캡처를 번갈아 쓰고, 핵심 키워드는 한 번에 하나만 띄웁니다."
-      : "문제 장면을 먼저 보여준 뒤 체크포인트 자막을 빠르게 전환합니다.",
+      : optionNumber === 2
+        ? "문제 장면을 먼저 보여준 뒤 체크포인트 자막을 빠르게 전환합니다."
+        : "실제 장면이나 결과 화면을 먼저 보여주고, 뒤에서 이유와 기준을 짧게 붙입니다.",
     audio_tone: energetic ? "속도감 있는 구어체, 문장 끝을 짧게 끊기" : "친근하지만 단정한 전문가 톤",
     energy: "평소보다 20~30% 높은 에너지로 첫 문장과 반전 문장을 강하게 말합니다.",
     expression_gesture: "첫 훅은 눈을 크게 뜨고, 체크포인트에서는 손가락으로 1, 2를 짚습니다.",
@@ -6505,25 +6743,41 @@ function yunmiCtaCandidates(input) {
   };
 }
 
-function yunmiScriptOption(input, hookOption, optionNumber, keywords) {
-  const rows = yunmiTimeRows(input, hookOption, optionNumber, keywords);
+function yunmiScriptOption(input, hookOption, optionNumber, keywords, targetOption = null) {
+  const target = targetOption || yunmiTargetOptions(input, keywords)[optionNumber - 1] || {};
+  const sourceHook = hookOption || yunmiHookOptions(input, keywords)[0] || {
+    code: "A",
+    label: YUNMI_HOOK_METHODS.A.label,
+    reason: YUNMI_HOOK_METHODS.A.reason,
+  };
+  const targetedHook = {
+    ...sourceHook,
+    sample: yunmiHookSample(sourceHook.code, input, keywords, target.audience),
+  };
+  const rows = yunmiTimeRows(input, targetedHook, optionNumber, keywords, target);
   const title = `숏폼 스크립트 ${optionNumber}안`;
-  const angle = optionNumber === 1
+  const angle = target.strategy || (optionNumber === 1
     ? "타깃 공감과 손실 회피를 먼저 잡는 안정형 구성입니다."
-    : "장면과 반전으로 초반 정지력을 높이는 변주형 구성입니다.";
+    : optionNumber === 2
+      ? "장면과 반전으로 초반 정지력을 높이는 변주형 구성입니다."
+      : "실제 장면 선공개와 행동 유도로 저장/댓글 전환을 노리는 실행형 구성입니다.");
   const script = rows.map((row) => `[${row.time}] ${row.dialogue}`).join("\n");
   return {
     code: String(optionNumber),
     title,
-    title_candidates: yunmiTitleCandidates(input, hookOption, keywords),
+    target_label: target.label || `${optionNumber}번 타깃`,
+    target_audience: target.audience || yunmiAudience(input),
+    target_strategy: target.strategy || "",
+    target_reason: target.reason || "",
+    title_candidates: yunmiTitleCandidates(input, targetedHook, keywords, target),
     hook_method: {
-      code: hookOption.code,
-      label: hookOption.label,
-      sample: hookOption.sample,
-      reason: hookOption.reason,
+      code: targetedHook.code,
+      label: targetedHook.label,
+      sample: targetedHook.sample,
+      reason: targetedHook.reason,
     },
     angle,
-    hook: hookOption.sample,
+    hook: targetedHook.sample,
     tone: yunmiToneLabel(input.tone),
     duration: input.duration || "60초",
     platform: input.platform,
@@ -6554,6 +6808,12 @@ function yunmiCopyText(input, result) {
   for (const option of result.script_options || result.variants || []) {
     lines.push(`## 숏폼 스크립트 ${option.code}안`);
     lines.push("");
+    if (option.target_label || option.target_audience || option.target_strategy) {
+      lines.push("### 타깃");
+      lines.push(`- ${option.target_label || `${option.code}안`}: ${option.target_audience || "-"}`);
+      if (option.target_strategy) lines.push(`- 전략: ${option.target_strategy}`);
+      lines.push("");
+    }
     lines.push("### 제목");
     for (const title of option.title_candidates || []) lines.push(`- ${title}`);
     lines.push("");
@@ -6607,7 +6867,8 @@ function buildYunmiScriptResult(payload) {
   const input = normalizeYunmiScriptPayload(payload);
   const keywords = yunmiWords([input.topic, input.objective, input.target_audience, input.reference_text, input.notes].join(" "));
   const hookOptions = yunmiHookOptions(input, keywords);
-  const variants = hookOptions.slice(0, 2).map((hook, index) => yunmiScriptOption(input, hook, index + 1, keywords));
+  const targetOptions = yunmiTargetOptions(input, keywords);
+  const variants = targetOptions.map((target, index) => yunmiScriptOption(input, hookOptions[index] || hookOptions[0], index + 1, keywords, target));
   const patterns = hookOptions.map((item) => ({
     label: item.label,
     insight: item.reason,
@@ -6615,18 +6876,16 @@ function buildYunmiScriptResult(payload) {
   }));
   const finalRecommendation = {
     recommended_code: "1",
-    text: "1안을 우선 추천합니다. 첫 3초에서 타깃의 불편함을 바로 건드리고, CTA까지 흐름이 가장 자연스럽습니다.",
+    text: "1안을 우선 추천합니다. 이미 관심 있는 사람에게 바로 적용 기준을 보여줘 저장과 재시청으로 이어지기 가장 쉽습니다.",
     criteria: [
-      "첫 3초 정지력: 훅 문장이 자막으로 바로 보입니다.",
-      "타겟 공감도: 문제 상황을 먼저 보여줘 자기 이야기처럼 느끼기 쉽습니다.",
-      "CTA 전환 가능성: 공감 문장 뒤에 행동 하나만 남깁니다.",
+      "A 타깃: 관심이 있는 사람에게 기준을 바로 제시해 저장 욕구를 만듭니다.",
+      "B 타깃: 관심이 낮은 사람에게는 불편과 손해 장면을 먼저 보여줍니다.",
+      "C 타깃: 결정 직전 사람에게는 비교 기준과 다음 행동을 짧게 남깁니다.",
       "촬영 난이도: 정면 촬영과 자료 캡처만으로 만들 수 있습니다.",
     ],
   };
   const summary = [
-    `${yunmiFormatLabel(input.format)} ${input.duration || "60초"}용 초안입니다.`,
-    input.target_audience ? `타깃은 ${input.target_audience}로 잡았습니다.` : "",
-    input.platform ? `플랫폼은 ${input.platform} 기준입니다.` : "",
+    `A/B/C 타깃별 ${yunmiFormatLabel(input.format)} ${input.duration || "60초"} 초안입니다.`,
     input.objective || input.content_purpose ? `목표는 ${input.objective || input.content_purpose}입니다.` : "",
     "이번 알파는 유료 AI 호출 없이 숏폼 메타프롬프트 기준의 구조형 초안을 생성합니다.",
   ].filter(Boolean).join(" ");
@@ -6648,6 +6907,7 @@ function buildYunmiScriptResult(payload) {
     },
     summary,
     keywords,
+    target_options: targetOptions,
     hook_options: hookOptions,
     patterns,
     script_options: variants,
@@ -6705,8 +6965,7 @@ function buildYunmiAiBetaMockResult(payload, options = {}) {
     angle: `${variant.angle} 레퍼런스 해석과 전환 목표를 더 선명하게 다듬는 AI 생성용 구조입니다.`,
   }));
   const summary = [
-    `${yunmiFormatLabel(input.format)} ${input.duration || "60초"}용 AI mock 초안입니다.`,
-    input.target_audience ? `타깃은 ${input.target_audience}로 잡았습니다.` : "",
+    `A/B/C 타깃별 ${yunmiFormatLabel(input.format)} ${input.duration || "60초"}용 AI mock 초안입니다.`,
     input.objective ? `목표는 ${input.objective}입니다.` : "",
     "현재 검증 모드에서는 유료 AI 호출을 실행하지 않고, 확인/비용/idempotency 흐름만 안전하게 점검합니다.",
   ].filter(Boolean).join(" ");
@@ -6812,11 +7071,18 @@ function buildYunmiGenerationPrompt(input, model) {
     reference_url: input.reference_url,
     reference_text: input.reference_text,
     notes: input.notes,
+    target_profiles: yunmiTargetOptions(input, yunmiWords([input.topic, input.objective, input.reference_text, input.notes].join(" "))).map((item) => ({
+      code: item.code,
+      label: item.label,
+      name: item.name,
+      audience: item.audience,
+      strategy: item.strategy,
+    })),
   });
   return [
     "너는 AIMAX의 숏폼/영상 스크립트 직원 윤미다. 사용자가 준 지침과 레퍼런스 메모를 바탕으로 한국어 대본을 만든다.",
     "반드시 JSON 객체 하나만 출력한다. 마크다운 코드블록, 설명 문장, 주석을 출력하지 않는다.",
-    "목표는 단순 요약이 아니라, 시청자가 첫 3초 안에 멈추고 끝까지 보게 만드는 바로 촬영 가능한 30~60초 숏폼 스크립트 2안을 만드는 것이다.",
+    "목표는 단순 요약이 아니라, 시청자가 첫 3초 안에 멈추고 끝까지 보게 만드는 바로 촬영 가능한 30~60초 숏폼 스크립트 3안을 만드는 것이다.",
     "",
     "반드시 따를 숏폼 스토리텔링 원칙:",
     "- 첫 2~3초 안에 시청자가 멈출 만한 훅을 먼저 제시한다.",
@@ -6831,7 +7097,12 @@ function buildYunmiGenerationPrompt(input, model) {
     "- 각 구간의 대사는 앞 구간의 감정과 논리를 받아 자연스럽게 이어져야 한다. 구간마다 새로 시작하는 보고서 문장처럼 쓰지 않는다.",
     "- 브릿지는 대사를 그대로 반복하지 말고 다음 장면으로 넘어가는 연결 문장으로 쓴다.",
     "",
-    "후킹 방식은 아래 중 원본 자료에 맞는 것을 2개 이상 제안하고, 각 스크립트에 서로 다른 1개를 적용한다:",
+    "3개 스크립트는 반드시 아래 타깃 관점으로 나눈다:",
+    "- 1안/A 타깃: 이미 관심 있고 바로 적용할 기준을 찾는 사람",
+    "- 2안/B 타깃: 아직 관심은 낮지만 같은 불편을 겪는 사람",
+    "- 3안/C 타깃: 구매/상담/신청 직전 마지막 기준을 확인하려는 사람",
+    "",
+    "후킹 방식은 아래 중 원본 자료와 각 타깃에 맞는 것을 3개 이상 제안하고, 각 스크립트에 서로 다른 1개를 적용한다:",
     "- A. 불편한 질문형: 아직도 이렇게 하고 계세요?",
     "- B. 숫자 충격형: 10명 중 8명이 여기서 막힙니다.",
     "- C. 반전형: 잘 팔리는 사람들은 더 많이 올리지 않습니다.",
@@ -6849,6 +7120,7 @@ function buildYunmiGenerationPrompt(input, model) {
     "",
     "출력 품질 기준:",
     "- 제목 후보는 짧고 강하게 3개를 쓴다.",
+    "- script_options는 반드시 1안, 2안, 3안 총 3개를 만들고, 각 안에는 target_label, target_audience, target_strategy를 채운다.",
     "- 전체 대본의 각 row에는 시간, 화면/행동, 대사, 자막, 앵커, 브릿지가 모두 있어야 한다.",
     "- 촬영 가이드는 비주얼, 오디오/톤, 에너지, 표정/제스처, 컷 전환 포인트를 모두 채운다.",
     "- CTA 후보는 댓글 유도형, 팔로우 유도형, 저장 유도형을 각각 1개씩 제안한다.",
@@ -6873,6 +7145,10 @@ function buildYunmiGenerationPrompt(input, model) {
         {
           code: "1",
           title: "숏폼 스크립트 1안",
+          target_label: "A 타깃",
+          target_audience: "이 안이 겨냥하는 사람",
+          target_strategy: "이 타깃에게 먹히는 전략",
+          target_reason: "이 타깃으로 나눈 이유",
           title_candidates: ["제목 후보 1", "제목 후보 2", "제목 후보 3"],
           hook_method: { code: "A", label: "후킹 방식", sample: "첫 문장", reason: "선택 이유" },
           angle: "이 안의 전략",
@@ -6991,6 +7267,10 @@ function yunmiNormalizeVariant(raw, fallback, input, index) {
   return {
     code: compactText(item.code || base.code || String(index + 1), 12),
     title: compactText(item.title || base.title || `숏폼 스크립트 ${index + 1}안`, 80),
+    target_label: compactText(item.target_label || base.target_label || "", 40),
+    target_audience: compactText(item.target_audience || base.target_audience || "", 180),
+    target_strategy: compactText(item.target_strategy || base.target_strategy || "", 260),
+    target_reason: compactText(item.target_reason || base.target_reason || "", 220),
     title_candidates: stringList(item.title_candidates || base.title_candidates, 3, 60),
     hook_method: hook,
     angle: compactText(item.angle || base.angle || "", 300),
@@ -7019,9 +7299,9 @@ function normalizeYunmiGeneratedResult(raw, input, options = {}) {
       ? raw.variants
       : [];
   const variantSource = rawVariants.length
-    ? [rawVariants[0] || base.variants?.[0], rawVariants[1] || base.variants?.[1]].filter(Boolean)
+    ? [rawVariants[0] || base.variants?.[0], rawVariants[1] || base.variants?.[1], rawVariants[2] || base.variants?.[2]].filter(Boolean)
     : base.variants;
-  const variants = variantSource.slice(0, 2)
+  const variants = variantSource.slice(0, 3)
     .map((variant, index) => yunmiNormalizeVariant(variant, base.variants?.[index], input, index));
   const rawPatterns = Array.isArray(raw.patterns) ? raw.patterns : [];
   const patterns = (rawPatterns.length ? rawPatterns : base.patterns).slice(0, 5).map((item, index) => {
@@ -7233,7 +7513,7 @@ async function createYunmiScriptJob(auth, payload, jobs = null) {
   const now = nowIso();
   let status = "done";
   let result = null;
-  let logMessage = "윤미가 유료 AI 호출 없이 숏폼 스크립트 1안/2안을 만들었습니다.";
+  let logMessage = "윤미가 유료 AI 호출 없이 숏폼 스크립트 1안/2안/3안을 만들었습니다.";
   let logLevel = "info";
   if (mode === "ai_beta" && YUNMI_AI_MOCK_ENABLED) {
     result = buildYunmiAiBetaMockResult(input, { model, requestId });
@@ -7293,7 +7573,13 @@ function imageCompletionIssue(job, result) {
   if (!requested || !result || typeof result !== "object") return "";
   // 러너가 이미지 부족을 의도적으로 수용하고 발행/저장을 완료한 경우(신규 러너의 부분 이미지 진행)
   // done 을 failed 로 뒤집지 않는다. 기존 러너는 이 플래그를 보내지 않으므로 동작 변화 없음.
-  if (result.image_shortfall_accepted === true || result.images?.shortfall_accepted === true) return "";
+  if (
+    result.image_shortfall_accepted === true ||
+    result.images?.shortfall_accepted === true ||
+    result.images?.soft_failure_accepted === true ||
+    result.images?.image_skipped_no_key === true ||
+    result.images?.mode_overridden_to_save === true
+  ) return "";
   const images = result.images && typeof result.images === "object" ? result.images : {};
   const attempted = safeInt(images.attempted, 0, 100);
   const inserted = safeInt(images.inserted, 0, 100);
@@ -7769,6 +8055,7 @@ function reportStatusMeta(value) {
 
 function reportActionChecklist(row) {
   const status = normalizeReportStatus(row?.status || "new");
+  if (isFeedbackReport(row)) return [];
   if (status !== "waiting_user") return [];
   const text = [
     row?.product,
@@ -7827,6 +8114,63 @@ function reportActionChecklist(row) {
 function cleanSupportMessage(value, fallback) {
   const text = String(value || "").trim().slice(0, 500);
   return text || fallback;
+}
+
+function reportKind(report) {
+  const kind = String(report?.report_kind || report?.kind || "").trim().toLowerCase();
+  const source = String(report?.source || "").trim().toLowerCase();
+  return kind === "feedback" || source === "staff_feedback" ? "feedback" : "error";
+}
+
+function isFeedbackReport(report) {
+  return reportKind(report) === "feedback";
+}
+
+function feedbackStatusMeta(value) {
+  const status = normalizeReportStatus(value);
+  const meta = reportStatusMeta(status);
+  const overrides = {
+    new: {
+      publicMessage: "직원 피드백이 접수되었습니다. 운영팀 알림이 전달되었습니다.",
+      nextUpdateMessage: "운영팀이 확인한 뒤 필요한 개선사항에 반영합니다.",
+    },
+    reviewing: {
+      publicMessage: "운영자가 피드백을 확인 중입니다.",
+      nextUpdateMessage: "반영이 필요한 내용은 개선 목록으로 옮겨 검토합니다.",
+    },
+    working: {
+      publicMessage: "피드백을 바탕으로 개선 작업을 검토하거나 진행 중입니다.",
+      nextUpdateMessage: "반영이 끝나면 이 화면의 상태가 완료로 바뀝니다.",
+    },
+    waiting_user: {
+      publicMessage: "피드백 확인을 위해 추가 정보가 필요합니다.",
+      nextUpdateMessage: "운영팀 안내에 따라 필요한 정보를 카카오채널로 알려주세요.",
+    },
+    done: {
+      publicMessage: "피드백 확인이 완료되었습니다.",
+      nextUpdateMessage: "추가 의견이 있으면 직원 피드백으로 다시 남겨주세요.",
+    },
+  }[status] || {};
+  return { ...meta, ...overrides };
+}
+
+function reportSupportMeta(report, status) {
+  return isFeedbackReport(report) ? feedbackStatusMeta(status) : reportStatusMeta(status);
+}
+
+function reportFeedback(report) {
+  const feedback = report?.feedback && typeof report.feedback === "object" && !Array.isArray(report.feedback)
+    ? report.feedback
+    : {};
+  const userInput = report?.user_input || {};
+  return {
+    employee_code: compactText(feedback.employee_code || feedback.employee || "", 80),
+    employee_label: compactText(feedback.employee_label || feedback.employee_name || "", 80),
+    rating: compactText(feedback.rating || feedback.score || "", 20),
+    good: compactText(feedback.good || feedback.positive || "", 700),
+    improve: compactText(feedback.improve || feedback.request || userInput.visible_error || "", 700),
+    contact_needed: Boolean(feedback.contact_needed),
+  };
 }
 
 function reportAppVersion(report) {
@@ -7943,14 +8287,16 @@ function summaryFor(report, storedAt, dateKey) {
   const support = report.support || {};
   const account = report.account || {};
   const status = normalizeReportStatus(support.status || report.status || "new");
-  const meta = reportStatusMeta(status);
+  const meta = reportSupportMeta(report, status);
   const jobSummary = reportJobSummary(report);
   const mediaToolSummary = reportMediaToolSummary(report);
+  const feedback = reportFeedback(report);
   return {
     report_id: report.report_id,
     stored_at: storedAt,
     date: dateKey,
     source: report.source || "",
+    report_kind: reportKind(report),
     account_user_id: account.user_id || "",
     account_email: account.email || "",
     product: account.product || "",
@@ -7958,6 +8304,12 @@ function summaryFor(report, storedAt, dateKey) {
     os: reportOs(report),
     work_context: report.user_input?.work_context || "",
     visible_error: report.user_input?.visible_error || "",
+    feedback_employee_code: feedback.employee_code,
+    feedback_employee_label: feedback.employee_label,
+    feedback_rating: feedback.rating,
+    feedback_good: feedback.good,
+    feedback_improve: feedback.improve,
+    feedback_contact_needed: feedback.contact_needed,
     ...jobSummary,
     ...mediaToolSummary,
     status,
@@ -7982,22 +8334,31 @@ function loadReportIndexRows(limit = 200) {
 
 function publicReportSummary(row) {
   const status = normalizeReportStatus(row.status || "new");
-  const meta = reportStatusMeta(status);
+  const meta = isFeedbackReport(row) ? feedbackStatusMeta(status) : reportStatusMeta(status);
+  const actionChecklist = reportActionChecklist({ ...row, status });
   return {
     report_id: row.report_id || "",
     stored_at: row.stored_at || "",
+    source: row.source || "",
+    report_kind: row.report_kind || reportKind(row),
     status,
     status_updated_at: row.status_updated_at || row.stored_at || "",
     status_label: row.status_label || meta.label,
     public_message: row.public_message || meta.publicMessage,
     next_update_message: row.next_update_message || meta.nextUpdateMessage,
     user_action_title: status === "waiting_user" ? "확인 방법" : "",
-    user_action_checklist: reportActionChecklist({ ...row, status }),
-    user_response_required: status === "waiting_user",
+    user_action_checklist: actionChecklist,
+    user_response_required: status === "waiting_user" && actionChecklist.length > 0,
     user_response: row.user_response || "",
     user_response_updated_at: row.user_response_updated_at || "",
     work_context: row.work_context || "",
     visible_error: row.visible_error || "",
+    feedback_employee_code: row.feedback_employee_code || "",
+    feedback_employee_label: row.feedback_employee_label || "",
+    feedback_rating: row.feedback_rating || "",
+    feedback_good: row.feedback_good || "",
+    feedback_improve: row.feedback_improve || "",
+    feedback_contact_needed: Boolean(row.feedback_contact_needed),
     job_id: row.job_id || "",
     job_kind: row.job_kind || "",
     job_worker: row.job_worker || "",
@@ -8326,6 +8687,22 @@ function compactTelegramLine(value, limit = 700) {
 
 function telegramReportAlertText(report, storedAt) {
   const summary = summaryFor(report, storedAt || nowIso(), String(storedAt || nowIso()).slice(0, 10));
+  if (isFeedbackReport(summary)) {
+    return [
+      "[AIMAX 직원 피드백 접수]",
+      `ID: ${summary.report_id || "-"}`,
+      `구매자: ${summary.account_email || "-"}`,
+      `상품: ${summary.product || "-"}`,
+      `직원: ${summary.feedback_employee_label || summary.feedback_employee_code || "-"}`,
+      `만족도: ${summary.feedback_rating || "-"}`,
+      summary.feedback_good ? `좋았던 점: ${compactTelegramLine(summary.feedback_good, 700)}` : "",
+      `개선 요청: ${compactTelegramLine(summary.feedback_improve || summary.visible_error, 900)}`,
+      summary.feedback_contact_needed ? "확인 요청: 운영팀 답변/확인 필요" : "",
+      `앱/OS: ${summary.app_version || "-"} / ${summary.os || "-"}`,
+      `접수: ${summary.stored_at || "-"}`,
+      `관리: ${PUBLIC_BASE_URL}/admin#reports`,
+    ].filter(Boolean).join("\n");
+  }
   const jobLine = compactJobLine(summary);
   return [
     "[AIMAX 오류 보고 접수]",
@@ -8847,7 +9224,7 @@ async function handleAdminUpdateReportStatus(req, res, reportId) {
       return;
     }
     const updatedAt = nowIso();
-    const meta = reportStatusMeta(status);
+    const meta = reportSupportMeta(loaded.report || loaded.row, status);
     const publicMessage = cleanSupportMessage(body.public_message, meta.publicMessage);
     const nextUpdateMessage = cleanSupportMessage(body.next_update_message, meta.nextUpdateMessage);
     let nextSummary = {
@@ -11209,7 +11586,8 @@ async function handleCreateJob(req, res) {
   // 웹키가 없는 로컬전용 사용자는 canUseYeriServerGeneration=false → 자동 적용 안 됨(무영향).
   const autoYeriServerGeneration = kind === "yeri_write"
     && !explicitYeriServerGeneration
-    && yeriServerGenerationModeForUser(auth.user) === "gemini";
+    && yeriServerGenerationModeForUser(auth.user) === "gemini"
+    && hasYeriServerGenerationSecret(auth.user);
   const requestedYeriServerGeneration = explicitYeriServerGeneration || autoYeriServerGeneration;
   const yeriGenerationMode = requestedYeriServerGeneration ? yeriServerGenerationModeForUser(auth.user) : "";
   if (explicitYeriServerGeneration && !yeriGenerationMode) {
@@ -11407,6 +11785,7 @@ async function handleRetryJob(req, res, jobId) {
   delete job.finished_at;
   delete job.failed_stage;
   delete job.failed_reason;
+  delete job.diagnostic;
   delete job.claim_expires_at;
   job.updated_at = now;
   if (hasReusableArtifact) {
@@ -11513,9 +11892,12 @@ async function handleAgentJobUpdate(req, res) {
   if (nextStatus === "failed") {
     job.failed_stage = failedStageFromJobUpdate(body) || job.failed_stage || "unknown";
     job.failed_reason = failedReasonFromJobUpdate(body);
+    delete job.diagnostic;
+    job.diagnostic = jobFailureDiagnostic(job);
   } else if (nextStatus === "running" || nextStatus === "done" || nextStatus === "queued" || nextStatus === "generating" || nextStatus === "ready_for_publish") {
     delete job.failed_stage;
     delete job.failed_reason;
+    delete job.diagnostic;
   }
   if (job.status === "done") {
     const imageIssue = imageCompletionIssue(job, job.result);
@@ -11528,6 +11910,7 @@ async function handleAgentJobUpdate(req, res) {
         ok: false,
         error: imageIssue,
       };
+      job.diagnostic = jobFailureDiagnostic(job);
       appendJobLog(job, "error", imageIssue, now);
     }
   }
@@ -11558,7 +11941,7 @@ async function handleReport(req, res) {
   const storedAt = nowIso();
   report.server_received_at = storedAt;
   report.server_redacted = true;
-  const supportMeta = reportStatusMeta("new");
+  const supportMeta = reportSupportMeta(report, "new");
   report.support = {
     status: "new",
     status_label: supportMeta.label,
@@ -11649,7 +12032,7 @@ async function handleReportUserResponse(req, res, reportId) {
     const updatedAt = nowIso();
     const note = redactText(compactText(body.note || "", 700));
     const nextStatus = response === "resolved" ? "done" : "reviewing";
-    const meta = reportStatusMeta(nextStatus);
+    const meta = reportSupportMeta(loaded.report || loaded.row, nextStatus);
     const publicMessage = response === "resolved"
       ? "사용자가 안내 확인 후 해결 완료로 표시했습니다."
       : "사용자가 안내대로 확인했지만 문제가 계속된다고 표시했습니다. 운영팀이 다시 확인 중입니다.";
@@ -12304,7 +12687,9 @@ module.exports = {
     attachYeriArtifactToJob,
     buildYeriGenerationPrompt,
     buildYeriMockArtifact,
+    buildFailureDiagnostic,
     generateYeriArtifactForJob,
+    jobFailureDiagnostic,
     loadJobs,
     loadYeriArtifact,
     publicJob,

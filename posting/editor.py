@@ -929,6 +929,7 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
     image_generated = 0
     image_inserted = 0
     image_providers = {"gemini": 0, "openai": 0}
+    image_failures = []
     for i, (content_type, content_data) in enumerate(content_list):
         if content_type == 'text':
             _input_text_block(driver, content_data)
@@ -950,6 +951,8 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
                     image_providers[provider] += 1
             if image_result.get("inserted"):
                 image_inserted += 1
+            if image_result.get("failure"):
+                image_failures.append(image_result.get("failure"))
 
         # 블록 사이에 2줄 줄바꿈 (마지막 블록 제외)
         if i < len(content_list) - 1:
@@ -964,6 +967,7 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
         "image_generated": image_generated,
         "image_inserted": image_inserted,
         "image_providers": image_providers,
+        "image_failures": image_failures,
     }
 
 
@@ -1105,40 +1109,158 @@ def _generate_image_with_provider(prompt, api_key, image_provider):
     return generate_gemini_image(prompt, api_key), "gemini"
 
 
+def _image_failure(stage, error, message, provider=""):
+    user_actionable = error in {"api_key_missing", "image_paid_required", "quota_exceeded", "rate_limited"}
+    return {
+        "stage": stage,
+        "error": error,
+        "error_code": error,
+        "message": message,
+        "provider": provider,
+        "user_actionable": user_actionable,
+        "admin_action_required": not user_actionable,
+    }
+
+
 def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_key=""):
     """이미지 생성 후 에디터에 삽입"""
+    prompt = str(prompt or "").strip()
     logger.info(f"이미지 삽입 중: {prompt[:50]}...")
 
-    image_path, used_provider = _generate_image_with_provider(prompt, api_key, image_provider)
+    if not prompt:
+        failure = _image_failure(
+            "image_prompt_empty",
+            "empty_image_prompt",
+            "이미지 프롬프트가 비어 있어 이미지를 건너뜁니다.",
+            image_provider,
+        )
+        return {
+            "stage": failure["stage"],
+            "error_code": failure["error_code"],
+            "message": failure["message"],
+            "generated": False,
+            "inserted": False,
+            "provider": image_provider,
+            "failure": failure,
+        }
+
+    if not (api_key or "").strip() and not (fallback_api_key or "").strip():
+        logger.warning("이미지 생성용 API 키가 없어 이미지 삽입을 건너뜀")
+        failure = _image_failure(
+            "image_generation",
+            "api_key_missing",
+            "이미지 생성용 API 키가 없어 이미지 없이 본문을 입력했습니다.",
+            image_provider,
+        )
+        return {
+            "stage": failure["stage"],
+            "error_code": failure["error_code"],
+            "message": failure["message"],
+            "generated": False,
+            "inserted": False,
+            "provider": image_provider,
+            "failure": failure,
+        }
+
+    try:
+        image_path, used_provider = _generate_image_with_provider(prompt, api_key, image_provider)
+    except Exception as e:
+        logger.warning(f"{image_provider} 이미지 생성 예외 - 건너뜀: {e}")
+        failure = _image_failure(
+            "image_generation",
+            "image_generation_exception",
+            f"이미지 생성 중 오류가 발생해 이미지 없이 본문을 입력했습니다: {e}",
+            image_provider,
+        )
+        return {
+            "stage": failure["stage"],
+            "error_code": failure["error_code"],
+            "message": failure["message"],
+            "generated": False,
+            "inserted": False,
+            "provider": image_provider,
+            "failure": failure,
+        }
     if not image_path and fallback_api_key:
         fallback_provider = "openai" if image_provider != "openai" else "gemini"
         logger.warning(f"{image_provider} 이미지 생성 실패 - {fallback_provider} fallback 시도")
-        image_path, used_provider = _generate_image_with_provider(prompt, fallback_api_key, fallback_provider)
+        try:
+            image_path, used_provider = _generate_image_with_provider(prompt, fallback_api_key, fallback_provider)
+        except Exception as e:
+            logger.warning(f"{fallback_provider} 이미지 fallback 예외 - 건너뜀: {e}")
+            image_path = None
+            used_provider = fallback_provider
     if not image_path:
         logger.warning("이미지 생성 실패, 건너뜀")
-        return {"generated": False, "inserted": False}
+        error_code = "image_paid_required" if image_provider == "gemini" else "image_generation_failed"
+        message = (
+            "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 없이 본문을 입력했습니다."
+            if error_code == "image_paid_required"
+            else "이미지 생성에 실패해 이미지 없이 본문을 입력했습니다."
+        )
+        failure = _image_failure("image_generation", error_code, message, used_provider or image_provider)
+        return {
+            "stage": failure["stage"],
+            "error_code": failure["error_code"],
+            "message": failure["message"],
+            "generated": False,
+            "inserted": False,
+            "provider": used_provider or image_provider,
+            "failure": failure,
+        }
 
     abs_path = os.path.abspath(image_path)
 
     try:
         # 방법 1: 이미지 버튼 클릭 → file input 대기 → send_keys
         uploaded = _try_upload_via_image_button(driver, abs_path)
+        upload_method = "image_button" if uploaded else ""
 
         # 방법 2: 클립보드 붙여넣기 (Ctrl+V / Cmd+V)
         if not uploaded:
             logger.info("file input 방식 실패 - 클립보드 방식 시도...")
             uploaded = _try_upload_via_clipboard(driver, abs_path)
+            if uploaded:
+                upload_method = "clipboard"
 
         if not uploaded:
             logger.warning("이미지 업로드 실패 (모든 방법 소진) - 건너뜀")
-            return {"generated": True, "inserted": False, "provider": used_provider}
+            failure = _image_failure(
+                "image_upload",
+                "image_upload_failed",
+                "이미지는 생성됐지만 네이버 에디터 업로드에 실패했습니다.",
+                used_provider,
+            )
+            return {
+                "stage": failure["stage"],
+                "error_code": failure["error_code"],
+                "message": failure["message"],
+                "generated": True,
+                "inserted": False,
+                "provider": used_provider,
+                "failure": failure,
+            }
 
         wait_long()
         logger.info("이미지 삽입 완료")
-        return {"generated": True, "inserted": True, "provider": used_provider}
+        return {"stage": "image_inserted", "method": upload_method, "generated": True, "inserted": True, "provider": used_provider}
     except Exception as e:
         logger.error(f"이미지 삽입 오류: {e}")
-        return {"generated": True, "inserted": False, "provider": used_provider}
+        failure = _image_failure(
+            "image_insert_exception",
+            "image_insert_exception",
+            f"이미지 삽입 중 오류가 발생했습니다: {e}",
+            used_provider,
+        )
+        return {
+            "stage": failure["stage"],
+            "error_code": failure["error_code"],
+            "message": failure["message"],
+            "generated": True,
+            "inserted": False,
+            "provider": used_provider,
+            "failure": failure,
+        }
     finally:
         try:
             os.remove(image_path)

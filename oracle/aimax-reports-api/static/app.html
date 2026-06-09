@@ -50,6 +50,11 @@
       display: grid;
       grid-template-columns: 292px 1fr;
       overflow: hidden;
+      transition: grid-template-columns .18s ease;
+    }
+
+    .shell.side-collapsed {
+      grid-template-columns: 76px 1fr;
     }
 
     .side {
@@ -65,6 +70,7 @@
       flex-direction: column;
       gap: 24px;
       border-right: 1px solid #2b332e;
+      transition: padding .18s ease;
     }
 
     .brand {
@@ -74,7 +80,19 @@
       min-height: 44px;
     }
 
+    .side .brand {
+      justify-content: space-between;
+    }
+
+    .brand-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
     .brand-mark {
+      flex: 0 0 auto;
       width: 42px;
       height: 42px;
       border-radius: 8px;
@@ -98,6 +116,26 @@
       margin-top: 2px;
     }
 
+    .side-toggle {
+      appearance: none;
+      width: 34px;
+      height: 34px;
+      border: 1px solid #344039;
+      border-radius: 8px;
+      background: #202821;
+      color: #dce7df;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .side-toggle:hover {
+      background: #26312a;
+      color: #ffffff;
+    }
+
     .nav {
       display: grid;
       gap: 8px;
@@ -113,6 +151,8 @@
       text-align: left;
       padding: 10px 12px;
       cursor: pointer;
+      overflow: hidden;
+      white-space: nowrap;
     }
 
     .nav button:hover {
@@ -126,6 +166,47 @@
       background: #243128;
       border-color: #3e4b42;
       box-shadow: inset 3px 0 0 var(--brand);
+    }
+
+    .shell.side-collapsed .side {
+      padding: 24px 10px;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .shell.side-collapsed .brand {
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+    }
+
+    .shell.side-collapsed .brand-main {
+      justify-content: center;
+    }
+
+    .shell.side-collapsed .brand-text,
+    .shell.side-collapsed .nav-label,
+    .shell.side-collapsed .side-footer span {
+      display: none;
+    }
+
+    .shell.side-collapsed .nav {
+      width: 100%;
+    }
+
+    .shell.side-collapsed .nav button {
+      min-height: 44px;
+      text-align: center;
+      padding: 9px 6px;
+    }
+
+    .shell.side-collapsed .nav button::before {
+      content: attr(data-short);
+      font-weight: 800;
+    }
+
+    .shell.side-collapsed .nav button.active {
+      box-shadow: inset 0 -3px 0 var(--brand);
     }
 
     .side-footer {
@@ -1049,6 +1130,93 @@
       grid-column: 1 / -1;
     }
 
+    .job-workspace {
+      display: grid;
+      grid-template-columns: minmax(300px, 430px) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+      min-width: 0;
+    }
+
+    .job-workspace > * {
+      min-width: 0;
+    }
+
+    .job-input-panel,
+    .job-output-panel {
+      min-width: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .job-output-panel {
+      position: sticky;
+      top: 96px;
+      align-self: start;
+    }
+
+    .job-panel-label {
+      margin-bottom: -4px;
+    }
+
+    .job-live-panel,
+    .job-output-placeholder {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .job-output-placeholder {
+      color: var(--muted);
+      line-height: 1.55;
+      box-shadow: none;
+    }
+
+    .job-summary-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .job-summary-list li {
+      display: grid;
+      grid-template-columns: minmax(84px, 120px) minmax(0, 1fr);
+      gap: 10px;
+      color: #3d4842;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .job-summary-list strong {
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .job-live-panel h4,
+    .job-output-placeholder h4 {
+      margin: 0;
+      color: var(--brand-dark);
+      font-size: 16px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .job-live-panel p,
+    .job-output-placeholder p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+
     .sangsu-layout {
       display: grid;
       grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
@@ -1784,7 +1952,7 @@
     }
 
     .yunmi-script-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
       align-items: start;
     }
 
@@ -1886,12 +2054,18 @@
       border-radius: 8px;
       padding: 10px;
       background: #fbfdfc;
+      display: grid;
+      gap: 10px;
     }
 
     .yunmi-details summary {
       cursor: pointer;
       color: var(--brand-dark);
       font-weight: 800;
+    }
+
+    .yunmi-details > *:not(summary) {
+      margin-top: 0;
     }
 
     .songi-brief-meta {
@@ -2676,34 +2850,60 @@
       margin: 0;
     }
 
-    @media (max-width: 1540px) {
+    @media (max-width: 1100px) {
+      .job-workspace,
       .sangsu-layout {
         grid-template-columns: minmax(0, 1fr);
+      }
+
+      .job-output-panel {
+        position: static;
       }
     }
 
     @media (max-width: 900px) {
-      .shell {
+      .shell,
+      .shell.side-collapsed {
         grid-template-columns: 1fr;
         height: auto;
         min-height: 100vh;
         overflow: visible;
       }
 
-      .side {
+      .side,
+      .shell.side-collapsed .side {
         position: static;
         height: auto;
         overflow: visible;
         padding: 18px;
+        align-items: stretch;
+      }
+
+      .shell.side-collapsed .brand {
+        display: flex;
+        justify-items: stretch;
+      }
+
+      .shell.side-collapsed .brand-text,
+      .shell.side-collapsed .nav-label,
+      .shell.side-collapsed .side-footer span {
+        display: block;
       }
 
       .nav {
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
-      .nav button {
+      .nav button,
+      .shell.side-collapsed .nav button {
         text-align: center;
+        padding: 10px 8px;
         overflow-wrap: anywhere;
+        white-space: normal;
+      }
+
+      .shell.side-collapsed .nav button::before {
+        content: "";
       }
 
       .side-footer {
@@ -2751,6 +2951,7 @@
       .staff-layout,
       .staff-grid,
       .research-layout,
+      .job-workspace,
       .sangsu-layout,
       .research-detail-grid,
       .songi-workflow-head,
@@ -2775,6 +2976,10 @@
 
       .sangsu-item-row {
         grid-template-columns: 1fr;
+      }
+
+      .job-summary-list li {
+        grid-template-columns: minmax(0, 1fr);
       }
 
       .yunmi-time-row {
@@ -2904,18 +3109,22 @@
   <main id="appView" class="shell hidden">
     <aside class="side">
       <div class="brand">
-        <div class="brand-mark">AI</div>
-        <div class="brand-text">
-          <strong>AIMAX</strong>
-          <span>Web Console</span>
+        <div class="brand-main">
+          <div class="brand-mark">AI</div>
+          <div class="brand-text">
+            <strong>AIMAX</strong>
+            <span>Web Console</span>
+          </div>
         </div>
+        <button id="sideToggleBtn" class="side-toggle" type="button" aria-label="사이드바 접기" title="사이드바 접기">‹</button>
       </div>
       <nav class="nav" aria-label="AIMAX navigation">
-        <button class="active" type="button" data-tab="overview">대시보드</button>
-        <button type="button" data-tab="staff">직원 채용</button>
-        <button type="button" data-tab="jobs">직원 업무지시</button>
-        <button type="button" data-tab="settings">설정</button>
-        <button type="button" data-tab="updates">업데이트 및 오류보고</button>
+        <button class="active" type="button" data-tab="overview" data-title="대시보드" data-short="홈"><span class="nav-label">대시보드</span></button>
+        <button type="button" data-tab="staff" data-title="직원 채용" data-short="채용"><span class="nav-label">직원 채용</span></button>
+        <button type="button" data-tab="jobs" data-title="직원 업무지시" data-short="업무"><span class="nav-label">직원 업무지시</span></button>
+        <button type="button" data-tab="feedback" data-title="직원 피드백" data-short="피드"><span class="nav-label">직원 피드백</span></button>
+        <button type="button" data-tab="settings" data-title="설정" data-short="설정"><span class="nav-label">설정</span></button>
+        <button type="button" data-tab="updates" data-title="업데이트 및 오류보고" data-short="오류"><span class="nav-label">업데이트 및 오류보고</span></button>
       </nav>
       <div class="side-footer">
         <span id="userEmail"></span>
@@ -3238,67 +3447,75 @@
                   <div id="yeriJobHint" class="small muted" style="margin-top:4px;">키워드로 네이버 블로그 글을 작성합니다.</div>
                 </div>
                 <div id="yeriJobBlocker" class="notice warn job-blocker hidden"></div>
-                <div class="form-grid">
-                  <div class="field wide">
-                    <label for="yeriKeywords">키워드</label>
-                    <input id="yeriKeywords" placeholder="예: 강남 피부관리, 리프팅 후기" required>
-                  </div>
-                  <div class="field">
-                    <label for="yeriMode">발행 방식</label>
-                    <select id="yeriMode">
-                      <option value="publish">즉시 발행</option>
-                      <option value="save">임시 저장</option>
-                      <option value="schedule">예약 발행</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="yeriAiModel">AI 모델</label>
-                    <select id="yeriAiModel"></select>
-                  </div>
-                  <div class="field">
-                    <label for="yeriWordCount">분량</label>
-                    <select id="yeriWordCount">
-                      <option value="300">300자</option>
-                      <option value="800">800자</option>
-                      <option value="1500" selected>1500자</option>
-                      <option value="2500">2500자</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="yeriImageCount">이미지</label>
-                    <select id="yeriImageCount">
-                      <option value="0">0장</option>
-                      <option value="1">1장</option>
-                      <option value="2">2장</option>
-                      <option value="3" selected>3장</option>
-                      <option value="4">4장</option>
-                      <option value="5">5장</option>
-                      <option value="6">6장</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="yeriCategory">카테고리</label>
-                    <input id="yeriCategory" placeholder="선택">
-                  </div>
-                  <div class="field">
-                    <label for="yeriScheduleDate">예약 날짜</label>
-                    <input id="yeriScheduleDate" type="date">
-                  </div>
-                  <div class="field">
-                    <label for="yeriScheduleHour">예약 시간</label>
-                    <input id="yeriScheduleHour" type="number" min="0" max="23" placeholder="0-23">
-                  </div>
-                  <div class="field">
-                    <label for="yeriCtaLink">CTA 링크</label>
-                    <input id="yeriCtaLink" placeholder="선택">
-                  </div>
-                  <div class="field">
-                    <label for="yeriCtaText">CTA 문구</label>
-                    <input id="yeriCtaText" placeholder="선택">
-                  </div>
+                <div class="job-workspace">
+                  <section class="job-input-panel">
+                    <div class="form-grid">
+                      <div class="field wide">
+                        <label for="yeriKeywords">키워드</label>
+                        <input id="yeriKeywords" placeholder="예: 강남 피부관리, 리프팅 후기" required>
+                      </div>
+                      <div class="field">
+                        <label for="yeriMode">발행 방식</label>
+                        <select id="yeriMode">
+                          <option value="publish">즉시 발행</option>
+                          <option value="save">임시 저장</option>
+                          <option value="schedule">예약 발행</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="yeriAiModel">AI 모델</label>
+                        <select id="yeriAiModel"></select>
+                      </div>
+                      <div class="field">
+                        <label for="yeriWordCount">분량</label>
+                        <select id="yeriWordCount">
+                          <option value="300">300자</option>
+                          <option value="800">800자</option>
+                          <option value="1500" selected>1500자</option>
+                          <option value="2500">2500자</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="yeriImageCount">이미지</label>
+                        <select id="yeriImageCount">
+                          <option value="0">0장</option>
+                          <option value="1">1장</option>
+                          <option value="2">2장</option>
+                          <option value="3" selected>3장</option>
+                          <option value="4">4장</option>
+                          <option value="5">5장</option>
+                          <option value="6">6장</option>
+                        </select>
+                      </div>
+                      <div class="field">
+                        <label for="yeriCategory">카테고리</label>
+                        <input id="yeriCategory" placeholder="선택">
+                      </div>
+                      <div class="field">
+                        <label for="yeriScheduleDate">예약 날짜</label>
+                        <input id="yeriScheduleDate" type="date">
+                      </div>
+                      <div class="field">
+                        <label for="yeriScheduleHour">예약 시간</label>
+                        <input id="yeriScheduleHour" type="number" min="0" max="23" placeholder="0-23">
+                      </div>
+                      <div class="field">
+                        <label for="yeriCtaLink">CTA 링크</label>
+                        <input id="yeriCtaLink" placeholder="선택">
+                      </div>
+                      <div class="field">
+                        <label for="yeriCtaText">CTA 문구</label>
+                        <input id="yeriCtaText" placeholder="선택">
+                      </div>
+                    </div>
+                    <div id="yeriCostEstimate" class="notice ok small"></div>
+                    <button id="yeriSubmitBtn" class="btn primary" type="submit">예리에게 업무지시</button>
+                  </section>
+                  <section class="job-output-panel">
+                    <div class="small muted job-panel-label">작업 미리보기</div>
+                    <div id="yeriJobPreview" class="job-live-panel"></div>
+                  </section>
                 </div>
-                <div id="yeriCostEstimate" class="notice ok small"></div>
-                <button id="yeriSubmitBtn" class="btn primary" type="submit">예리에게 업무지시</button>
               </form>
 
               <form id="hyunjuJobForm" class="job-form" data-job-kind="hyunju_find">
@@ -3307,129 +3524,85 @@
                   <div id="hyunjuJobHint" class="small muted" style="margin-top:4px;">검색 키워드로 잠재 고객을 찾아 서로이웃을 신청합니다.</div>
                 </div>
                 <div id="hyunjuJobBlocker" class="notice warn job-blocker hidden"></div>
-                <div class="form-grid">
-                  <div class="field wide">
-                    <label for="hyunjuKeywords">검색 키워드</label>
-                    <input id="hyunjuKeywords" placeholder="예: 강남 피부관리, 웨딩 준비" required>
-                  </div>
-                  <div class="field">
-                    <label for="hyunjuCount">키워드당 신청 수</label>
-                    <input id="hyunjuCount" type="number" min="1" max="50" value="10" required>
-                  </div>
-                  <div class="field">
-                    <label for="hyunjuSpeed">속도</label>
-                    <select id="hyunjuSpeed">
-                      <option value="safe">안전</option>
-                      <option value="normal" selected>보통</option>
-                      <option value="fast">빠름</option>
-                    </select>
-                  </div>
-                  <div class="field wide">
-                    <label for="hyunjuMessages">서로이웃 신청 멘트</label>
-                    <textarea id="hyunjuMessages" placeholder="한 줄에 하나씩 입력합니다. 비워두면 로컬 앱에 저장된 멘트를 사용합니다."></textarea>
-                  </div>
+                <div class="job-workspace">
+                  <section class="job-input-panel">
+                    <div class="form-grid">
+                      <div class="field wide">
+                        <label for="hyunjuKeywords">검색 키워드</label>
+                        <input id="hyunjuKeywords" placeholder="예: 강남 피부관리, 웨딩 준비" required>
+                      </div>
+                      <div class="field">
+                        <label for="hyunjuCount">키워드당 신청 수</label>
+                        <input id="hyunjuCount" type="number" min="1" max="50" value="10" required>
+                      </div>
+                      <div class="field">
+                        <label for="hyunjuSpeed">속도</label>
+                        <select id="hyunjuSpeed">
+                          <option value="safe">안전</option>
+                          <option value="normal" selected>보통</option>
+                          <option value="fast">빠름</option>
+                        </select>
+                      </div>
+                      <div class="field wide">
+                        <label for="hyunjuMessages">서로이웃 신청 멘트</label>
+                        <textarea id="hyunjuMessages" placeholder="한 줄에 하나씩 입력합니다. 비워두면 로컬 앱에 저장된 멘트를 사용합니다."></textarea>
+                      </div>
+                    </div>
+                    <button id="hyunjuSubmitBtn" class="btn primary" type="submit">현주에게 업무지시</button>
+                  </section>
+                  <section class="job-output-panel">
+                    <div class="small muted job-panel-label">작업 미리보기</div>
+                    <div id="hyunjuJobPreview" class="job-live-panel"></div>
+                  </section>
                 </div>
-                <button id="hyunjuSubmitBtn" class="btn primary" type="submit">현주에게 업무지시</button>
               </form>
 
               <form id="yunmiJobForm" class="job-form hidden" data-job-kind="yunmi_script">
                 <div>
                   <h3>윤미 스크립트작가</h3>
-                  <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">원본 자료와 목표를 바탕으로 숏폼 스크립트 1안/2안, 촬영 가이드, CTA 후보를 만듭니다.</div>
+                  <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">주제와 목적을 바탕으로 A/B/C 타깃별 숏폼 스크립트 1안/2안/3안을 만듭니다.</div>
                 </div>
                 <div id="yunmiJobBlocker" class="notice warn job-blocker hidden"></div>
-                <div class="notice ok small">기본은 유료 AI 호출 없이 입력값 기반 초안을 만듭니다. AI 생성 모드는 예상 비용과 요청 ID를 확인한 뒤 저장된 Gemini 키로 실제 초안을 만듭니다.</div>
-                <div class="form-grid">
-                  <div class="field wide">
-                    <label for="yunmiTopic">주제</label>
-                    <input id="yunmiTopic" placeholder="예: 30대 피부관리 루틴, 학부모 설명회 오프닝">
-                  </div>
-                  <div class="field">
-                    <label for="yunmiGenerationMode">생성 모드</label>
-                    <select id="yunmiGenerationMode">
-                      <option value="no_paid_alpha" selected>규칙형 알파</option>
-                      <option value="ai_beta">AI 생성</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="yunmiPlatform">플랫폼</label>
-                    <select id="yunmiPlatform">
-                      <option value="인스타 릴스">인스타 릴스</option>
-                      <option value="유튜브 쇼츠">유튜브 쇼츠</option>
-                      <option value="틱톡">틱톡</option>
-                      <option value="릴스/쇼츠/틱톡 공통" selected>공통</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="yunmiPurpose">목적</label>
-                    <select id="yunmiPurpose">
-                      <option value="">직접 입력 기준</option>
-                      <option value="정보 전달">정보 전달</option>
-                      <option value="판매">판매</option>
-                      <option value="상담 유도">상담 유도</option>
-                      <option value="댓글 유도">댓글 유도</option>
-                      <option value="팔로우 유도">팔로우 유도</option>
-                      <option value="강의 신청">강의 신청</option>
-                      <option value="브랜드 인지도">브랜드 인지도</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="yunmiAiModel">AI 모델</label>
-                    <select id="yunmiAiModel"></select>
-                  </div>
-                  <div class="field">
-                    <label for="yunmiFormat">형식</label>
-                    <select id="yunmiFormat">
-                      <option value="shortform">숏폼</option>
-                      <option value="reels">릴스/쇼츠</option>
-                      <option value="presentation">발표</option>
-                      <option value="event">행사</option>
-                      <option value="sales">세일즈</option>
-                      <option value="blog_video">블로그/영상</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="yunmiDuration">분량</label>
-                    <input id="yunmiDuration" placeholder="예: 30초, 60초, 3분" value="60초">
-                  </div>
-                  <div class="field">
-                    <label for="yunmiAudience">타깃</label>
-                    <input id="yunmiAudience" placeholder="예: 첫 구매를 고민하는 고객">
-                  </div>
-                  <div class="field">
-                    <label for="yunmiTone">톤</label>
-                    <select id="yunmiTone">
-                      <option value="friendly_expert">친절한 전문가</option>
-                      <option value="persuasive">설득형</option>
-                      <option value="warm">따뜻한 공감형</option>
-                      <option value="witty">위트 있는 진행형</option>
-                      <option value="premium">프리미엄 상담형</option>
-                      <option value="energetic">빠른 텐션</option>
-                    </select>
-                  </div>
-                  <div class="field wide">
-                    <label for="yunmiObjective">목표</label>
-                    <textarea id="yunmiObjective" placeholder="이 스크립트로 전달하고 싶은 핵심 메시지나 전환 목표"></textarea>
-                  </div>
-                  <div class="field wide">
-                    <label for="yunmiReferenceUrl">레퍼런스 URL</label>
-                    <input id="yunmiReferenceUrl" placeholder="선택: 참고 링크">
-                  </div>
-                  <div class="field wide">
-                    <label for="yunmiReferenceText">레퍼런스/메모</label>
-                    <textarea id="yunmiReferenceText" placeholder="참고한 영상 흐름, 문장, 고객 반응, 꼭 살릴 표현"></textarea>
-                  </div>
-                  <div class="field wide">
-                    <label for="yunmiCta">마무리 CTA</label>
-                    <input id="yunmiCta" placeholder="예: 저장하고 상담 전 체크리스트로 써보세요.">
-                  </div>
+                <div class="job-workspace">
+                  <section class="job-input-panel">
+                    <div class="notice ok small">기본 초안은 외부 AI/API 비용 0원으로 만듭니다. 주제와 목적만 정확히 넣으면 윤미가 A/B/C 타깃별 스크립트를 추천합니다.</div>
+                    <div class="form-grid">
+                      <div class="field wide">
+                        <label for="yunmiTopic">주제</label>
+                        <input id="yunmiTopic" placeholder="예: 30대 피부관리 루틴, 학부모 설명회 오프닝">
+                      </div>
+                      <div class="field wide">
+                        <label for="yunmiObjective">목적</label>
+                        <textarea id="yunmiObjective" placeholder="예: 저장을 유도하기, 상담 전환 만들기, 설명회 기대감 높이기"></textarea>
+                      </div>
+                      <div class="field">
+                        <label for="yunmiAiModel">AI 모델</label>
+                        <select id="yunmiAiModel"></select>
+                      </div>
+                      <div class="field">
+                        <label for="yunmiReferenceUrl">레퍼런스 URL</label>
+                        <input id="yunmiReferenceUrl" placeholder="선택: 참고 링크">
+                      </div>
+                      <div class="field wide">
+                        <label for="yunmiReferenceText">레퍼런스에서 좋았던 점</label>
+                        <textarea id="yunmiReferenceText" placeholder="참고한 영상 흐름, 첫 문장, 고객 반응, 꼭 살릴 표현"></textarea>
+                      </div>
+                    </div>
+                    <div id="yunmiCostEstimate" class="notice ok small"></div>
+                    <div class="actions">
+                      <button id="yunmiSubmitBtn" class="btn primary" type="submit">윤미에게 업무지시</button>
+                      <button id="yunmiCopyResultBtn" class="btn" type="button">결과 복사</button>
+                    </div>
+                  </section>
+                  <section class="job-output-panel">
+                    <div class="small muted job-panel-label">결과 미리보기</div>
+                    <div id="yunmiJobResult" class="songi-preview hidden"></div>
+                    <div id="yunmiJobPlaceholder" class="job-output-placeholder">
+                      <h4>윤미 A/B/C 3안이 여기에 표시됩니다</h4>
+                      <p>주제와 목적을 입력한 뒤 업무지시를 누르면 타깃별 1안, 2안, 3안을 바로 비교할 수 있습니다.</p>
+                    </div>
+                  </section>
                 </div>
-                <div id="yunmiCostEstimate" class="notice ok small"></div>
-                <div class="actions">
-                  <button id="yunmiSubmitBtn" class="btn primary" type="submit">윤미에게 업무지시</button>
-                  <button id="yunmiCopyResultBtn" class="btn" type="button">결과 복사</button>
-                </div>
-                <div id="yunmiJobResult" class="songi-preview hidden"></div>
               </form>
 
               <form id="sangsuJobForm" class="job-form hidden" data-job-kind="sangsu_quote">
@@ -3439,8 +3612,8 @@
                 </div>
                 <div id="sangsuJobBlocker" class="notice warn job-blocker hidden"></div>
                 <div class="notice ok small">상수는 브라우저 안에서만 견적서를 생성합니다. 유료 AI/API 호출, 로컬 실행기, 외부 전송 없이 현재 기기에서 PDF 저장 화면을 엽니다.</div>
-                <div class="sangsu-layout">
-                  <section class="stack">
+                <div class="job-workspace sangsu-layout">
+                  <section class="job-input-panel stack">
                     <div class="form-grid">
                       <div class="field">
                         <label for="sangsuLogo">로고</label>
@@ -3507,7 +3680,7 @@
                       <button id="sangsuResetBtn" class="btn" type="button">초기화</button>
                     </div>
                   </section>
-                  <section>
+                  <section class="job-output-panel">
                     <div class="small muted" style="margin-bottom:8px;">미리보기</div>
                     <div class="sangsu-preview-wrap">
                       <div id="sangsuPreview"></div>
@@ -3522,112 +3695,121 @@
                   <div id="songiJobHint" class="small muted" style="margin-top:4px;">벤치마킹 영상을 읽고 콘텐츠 기획 브리프를 만듭니다.</div>
                 </div>
                 <div id="songiJobBlocker" class="notice warn job-blocker hidden"></div>
-                <div id="songiAiModeNotice" class="notice warn small"></div>
-                <div class="form-grid">
-                  <div class="field wide">
+                <div class="job-workspace">
+                  <section class="job-input-panel">
+                    <div id="songiAiModeNotice" class="notice warn small"></div>
                     <div class="segmented songi-task-tabs" role="tablist" aria-label="송이 작업 방식">
                       <button class="active" type="button" data-songi-task-mode="discover">키워드로 찾기</button>
                       <button type="button" data-songi-task-mode="links">링크로 분석</button>
                     </div>
-                  </div>
-                  <div id="songiDiscoveryPanel" class="songi-task-panel wide">
-                    <section class="songi-workflow-page" aria-labelledby="songiDiscoveryTitle">
-                      <div class="songi-workflow-head">
-                        <div>
-                          <h4 id="songiDiscoveryTitle">YouTube 쇼츠 키워드 벤치마킹</h4>
-                          <p>키워드 기반 쇼츠/숏폼 후보를 모아 조회 속도와 참여 반응을 비교합니다.</p>
+                    <div id="songiDiscoveryPanel" class="songi-task-panel">
+                      <section class="songi-workflow-page" aria-labelledby="songiDiscoveryTitle">
+                        <div class="songi-workflow-head">
+                          <div>
+                            <h4 id="songiDiscoveryTitle">YouTube 쇼츠 키워드 벤치마킹</h4>
+                            <p>키워드 기반 쇼츠/숏폼 후보를 모아 조회 속도와 참여 반응을 비교합니다.</p>
+                          </div>
+                          <span id="songiDiscoveryStatus" class="pill">로컬 실행기 확인 중</span>
                         </div>
-                        <span id="songiDiscoveryStatus" class="pill">로컬 실행기 확인 중</span>
-                      </div>
-                      <div class="songi-discovery-grid">
-                        <div class="field wide">
-                          <label for="songiDiscoveryProjectSelect">저장할 프로젝트</label>
-                          <select id="songiDiscoveryProjectSelect"></select>
+                        <div class="songi-discovery-grid">
+                          <div class="field wide">
+                            <label for="songiDiscoveryProjectSelect">저장할 프로젝트</label>
+                            <select id="songiDiscoveryProjectSelect"></select>
+                          </div>
+                          <div id="songiDiscoveryProjectNameField" class="field wide hidden">
+                            <label for="songiDiscoveryProjectName">새 프로젝트명</label>
+                            <input id="songiDiscoveryProjectName" placeholder="예: AI 직원 벤치마킹">
+                          </div>
+                          <div class="field wide">
+                            <label for="songiDiscoveryKeyword">찾고 싶은 키워드</label>
+                            <input id="songiDiscoveryKeyword" placeholder="예: 30대 피부관리 쇼츠, 부동산 숏폼, AI 직원">
+                          </div>
+                          <div class="field">
+                            <label for="songiDiscoveryDays">최근성 기준</label>
+                            <select id="songiDiscoveryDays">
+                              <option value="7">최근 7일</option>
+                              <option value="30" selected>최근 30일</option>
+                              <option value="90">최근 90일</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label for="songiDiscoveryMaxResults">후보 수</label>
+                            <select id="songiDiscoveryMaxResults">
+                              <option value="8">8개</option>
+                              <option value="12" selected>12개</option>
+                              <option value="20">20개</option>
+                            </select>
+                          </div>
+                          <button id="songiDiscoveryBtn" class="btn primary" type="button">후보 찾기</button>
                         </div>
-                        <div id="songiDiscoveryProjectNameField" class="field wide hidden">
-                          <label for="songiDiscoveryProjectName">새 프로젝트명</label>
-                          <input id="songiDiscoveryProjectName" placeholder="예: AI 직원 벤치마킹">
+                        <div id="songiDiscoveryNotice" class="notice small"></div>
+                      </section>
+                    </div>
+                    <div id="songiLinkPanel" class="songi-task-panel hidden">
+                      <section class="songi-workflow-page" aria-labelledby="songiLinkTitle">
+                        <div class="songi-workflow-head">
+                          <div>
+                            <h4 id="songiLinkTitle">링크 분석 워크플로우</h4>
+                            <p>기존처럼 특정 영상이나 웹 링크를 직접 넣어 송이가 브리프를 만듭니다.</p>
+                          </div>
                         </div>
-                        <div class="field wide">
-                          <label for="songiDiscoveryKeyword">찾고 싶은 키워드</label>
-                          <input id="songiDiscoveryKeyword" placeholder="예: 30대 피부관리 쇼츠, 부동산 숏폼, AI 직원">
+                        <div class="form-grid">
+                          <div class="field wide">
+                            <label for="songiProjectSelect">프로젝트</label>
+                            <select id="songiProjectSelect"></select>
+                            <div class="actions" style="margin-top:8px;">
+                              <button id="songiDeleteProjectBtn" class="btn" type="button">프로젝트 삭제</button>
+                            </div>
+                          </div>
+                          <div id="songiProjectNameField" class="field wide hidden">
+                            <label for="songiProjectName">새 프로젝트명</label>
+                            <input id="songiProjectName" placeholder="예: 뷰티 릴스 후킹 연구">
+                          </div>
+                          <div class="field wide">
+                            <label for="songiInstagramProfile">내 인스타그램 프로필 링크</label>
+                            <input id="songiInstagramProfile" placeholder="https://www.instagram.com/your_account">
+                            <div class="actions" style="margin-top:8px;">
+                              <button id="songiAnalyzeProfileBtn" class="btn" type="button">프로필 분석</button>
+                              <span id="songiProfileStatus" class="pill">프로필 없음</span>
+                            </div>
+                          </div>
+                          <div class="field">
+                            <label for="songiContentCategory">영상 카테고리</label>
+                            <input id="songiContentCategory" placeholder="예: 뷰티, 교육, 부동산">
+                          </div>
+                          <div class="field">
+                            <label for="songiContentTopic">만들고 싶은 주제</label>
+                            <input id="songiContentTopic" placeholder="예: 30대 피부관리 루틴">
+                          </div>
+                          <div id="songiPersonalizationHint" class="notice small wide"></div>
+                          <div class="field wide">
+                            <label for="songiUrl">벤치마킹하고 싶은 링크</label>
+                            <textarea id="songiUrl" placeholder="YouTube, Instagram Reels, TikTok 링크를 붙여넣기&#10;여러 개는 줄바꿈으로 입력"></textarea>
+                          </div>
                         </div>
-                        <div class="field">
-                          <label for="songiDiscoveryDays">최근성 기준</label>
-                          <select id="songiDiscoveryDays">
-                            <option value="7">최근 7일</option>
-                            <option value="30" selected>최근 30일</option>
-                            <option value="90">최근 90일</option>
-                          </select>
+                        <div id="songiCostEstimate" class="notice ok small"></div>
+                        <div class="actions">
+                          <button id="songiSubmitBtn" class="btn primary" type="submit">송이에게 업무지시</button>
+                          <button id="songiCopyBriefBtn" class="btn" type="button">브리프 복사</button>
                         </div>
-                        <div class="field">
-                          <label for="songiDiscoveryMaxResults">후보 수</label>
-                          <select id="songiDiscoveryMaxResults">
-                            <option value="8">8개</option>
-                            <option value="12" selected>12개</option>
-                            <option value="20">20개</option>
-                          </select>
-                        </div>
-                        <button id="songiDiscoveryBtn" class="btn primary" type="button">후보 찾기</button>
-                      </div>
-                      <div id="songiDiscoveryNotice" class="notice small"></div>
+                      </section>
+                    </div>
+                  </section>
+                  <section class="job-output-panel">
+                    <div class="small muted job-panel-label">결과 미리보기</div>
+                    <div id="songiDiscoveryOutput" class="job-live-panel">
                       <div class="songi-discovery-toolbar">
                         <div id="songiDiscoverySummary" class="songi-discovery-summary"></div>
                         <span class="pill">점수순</span>
                       </div>
                       <div id="songiDiscoveryResults" class="songi-discovery-results"></div>
-                    </section>
-                  </div>
-                  <div id="songiLinkPanel" class="songi-task-panel wide hidden">
-                    <section class="songi-workflow-page" aria-labelledby="songiLinkTitle">
-                      <div class="songi-workflow-head">
-                        <div>
-                          <h4 id="songiLinkTitle">링크 분석 워크플로우</h4>
-                          <p>기존처럼 특정 영상이나 웹 링크를 직접 넣어 송이가 브리프를 만듭니다.</p>
-                        </div>
-                      </div>
-                      <div class="form-grid">
-                        <div class="field wide">
-                          <label for="songiProjectSelect">프로젝트</label>
-                          <select id="songiProjectSelect"></select>
-                          <div class="actions" style="margin-top:8px;">
-                            <button id="songiDeleteProjectBtn" class="btn" type="button">프로젝트 삭제</button>
-                          </div>
-                        </div>
-                        <div id="songiProjectNameField" class="field wide hidden">
-                          <label for="songiProjectName">새 프로젝트명</label>
-                          <input id="songiProjectName" placeholder="예: 뷰티 릴스 후킹 연구">
-                        </div>
-                        <div class="field wide">
-                          <label for="songiInstagramProfile">내 인스타그램 프로필 링크</label>
-                          <input id="songiInstagramProfile" placeholder="https://www.instagram.com/your_account">
-                          <div class="actions" style="margin-top:8px;">
-                            <button id="songiAnalyzeProfileBtn" class="btn" type="button">프로필 분석</button>
-                            <span id="songiProfileStatus" class="pill">프로필 없음</span>
-                          </div>
-                        </div>
-                        <div class="field">
-                          <label for="songiContentCategory">영상 카테고리</label>
-                          <input id="songiContentCategory" placeholder="예: 뷰티, 교육, 부동산">
-                        </div>
-                        <div class="field">
-                          <label for="songiContentTopic">만들고 싶은 주제</label>
-                          <input id="songiContentTopic" placeholder="예: 30대 피부관리 루틴">
-                        </div>
-                        <div id="songiPersonalizationHint" class="notice small wide"></div>
-                        <div class="field wide">
-                          <label for="songiUrl">벤치마킹하고 싶은 링크</label>
-                          <textarea id="songiUrl" placeholder="YouTube, Instagram Reels, TikTok 링크를 붙여넣기&#10;여러 개는 줄바꿈으로 입력"></textarea>
-                        </div>
-                      </div>
-                      <div id="songiCostEstimate" class="notice ok small"></div>
-                      <div class="actions">
-                        <button id="songiSubmitBtn" class="btn primary" type="submit">송이에게 업무지시</button>
-                        <button id="songiCopyBriefBtn" class="btn" type="button">브리프 복사</button>
-                      </div>
-                      <div id="songiJobResult" class="songi-preview hidden"></div>
-                    </section>
-                  </div>
+                    </div>
+                    <div id="songiJobResult" class="songi-preview hidden"></div>
+                    <div id="songiJobPlaceholder" class="job-output-placeholder hidden">
+                      <h4>송이 브리프가 여기에 표시됩니다</h4>
+                            <p>링크 분석을 실행하면 성과 해석과 적용 포인트를 먼저 보여줍니다.</p>
+                    </div>
+                  </section>
                 </div>
               </form>
             </div>
@@ -3926,10 +4108,83 @@
 
         <section class="panel span-12">
           <div class="panel-title">
-            <h2>내 오류 보고</h2>
+            <h2>내 문의/피드백</h2>
             <button id="reportRefreshBtn" class="btn" type="button">목록 갱신</button>
           </div>
           <div id="myReportsTable" class="table-wrap"></div>
+        </section>
+      </div>
+
+      <div id="feedbackTab" class="grid tab-panel hidden">
+        <section class="panel span-8">
+          <div class="panel-title">
+            <div>
+              <h2>직원 피드백</h2>
+              <p class="small muted">직원을 써본 뒤 좋았던 점과 개선 요청을 남기면 운영팀이 확인합니다.</p>
+            </div>
+          </div>
+          <form id="feedbackForm" class="stack">
+            <div class="form-grid">
+              <div class="field">
+                <label for="feedbackEmployee">직원</label>
+                <select id="feedbackEmployee" required>
+                  <option value="">직원을 선택해주세요</option>
+                  <option value="yeri">예리</option>
+                  <option value="hyunju">현주</option>
+                  <option value="songi">송이</option>
+                  <option value="yunmi">윤미</option>
+                  <option value="sangsu">상수</option>
+                  <option value="jieun">지은</option>
+                  <option value="nakyung">나경</option>
+                  <option value="hyojin">효진</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="feedbackRating">만족도</label>
+                <select id="feedbackRating" required>
+                  <option value="">선택해주세요</option>
+                  <option value="5">5점 · 매우 만족</option>
+                  <option value="4">4점 · 만족</option>
+                  <option value="3">3점 · 보통</option>
+                  <option value="2">2점 · 아쉬움</option>
+                  <option value="1">1점 · 사용이 어려움</option>
+                </select>
+              </div>
+              <div class="field wide">
+                <label for="feedbackGood">좋았던 점</label>
+                <textarea id="feedbackGood" placeholder="예: 송이가 브리프를 바로 복사할 수 있게 정리해줘서 좋았습니다."></textarea>
+              </div>
+              <div class="field wide">
+                <label for="feedbackImprove">불편한 점 / 개선 요청</label>
+                <textarea id="feedbackImprove" required placeholder="예: 결과 화면에서 바로 다음 직원에게 넘기는 버튼이 더 눈에 띄면 좋겠습니다."></textarea>
+              </div>
+            </div>
+            <label class="row" style="justify-content:flex-start;">
+              <input id="feedbackContactNeeded" type="checkbox" style="width:auto;">
+              <span>운영팀 확인이나 답변이 필요합니다</span>
+            </label>
+            <button class="btn primary" type="submit">피드백 보내기</button>
+            <div id="feedbackResult" class="report-receipt hidden" role="status"></div>
+          </form>
+        </section>
+        <section class="panel span-4">
+          <div class="panel-title">
+            <h2>전달 기준</h2>
+          </div>
+          <div class="report-checklist small">
+            <div class="report-checkitem">
+              <span class="step-index ok">1</span>
+              <span><strong>직원별 개선</strong><br><span class="muted">어떤 직원의 어떤 화면/결과가 불편했는지 함께 저장합니다.</span></span>
+            </div>
+            <div class="report-checkitem">
+              <span class="step-index ok">2</span>
+              <span><strong>운영팀 확인</strong><br><span class="muted">admin 피드백 필터와 텔레그램 알림으로 바로 전달됩니다.</span></span>
+            </div>
+            <div class="report-checkitem">
+              <span class="step-index warn">3</span>
+              <span><strong>민감정보 보호</strong><br><span class="muted">비밀번호, API Key, 토큰 원문은 쓰지 말아주세요.</span></span>
+            </div>
+          </div>
         </section>
       </div>
     </section>
@@ -4096,12 +4351,13 @@
     const SERVICE_NOTICE_KEY = "aimax_service_notice_20260530_yeri_hyunju_june1";
     const WEB_SECRET_NOTICE_KEY = "aimax_web_secret_notice_20260522";
     const SANGSU_STORAGE_KEY = "aimax_sangsu_quote_generator_state_v1";
+    const SIDEBAR_COLLAPSED_KEY = "aimax_sidebar_collapsed";
     const NEW_SONGI_PROJECT_VALUE = "__new_project__";
     const DEFAULT_AI_MODEL = "gemini-2.5-flash";
     const SONGI_DEFAULT_AI_MODEL = "gemini-2.5-flash";
     const USD_KRW_RATE = 1476;
     const USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot";
-    const GEMINI_IMAGE_PRICE_USD = 0.039;
+    const GEMINI_IMAGE_PRICE_USD = 0.067;
     const OPENAI_IMAGE_PRICE_USD = 0.042;
     const SONGI_APIFY_PRICES_USD = {
       Instagram: 0.0026,
@@ -4109,18 +4365,21 @@
       TikTok: 0.01,
     };
     const AI_MODEL_OPTIONS = [
-      ["gemini-2.5-flash", "Gemini 2.5 Flash (기본)"],
+      ["gemini-2.5-flash", "Gemini 2.5 Flash (기본/무료 티어 가능)"],
+      ["gemini-3.5-flash", "Gemini 3.5 Flash (고품질/유료)"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (유료/고급)"],
       ["gpt-5.4-mini", "GPT-5.4 mini"],
       ["gpt-5-mini", "GPT-5 mini"],
       ["claude", "Claude"],
     ];
     const YUNMI_AI_MODEL_OPTIONS = [
+      ["gemini-3.5-flash", "Gemini 3.5 Flash"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
       ["gemini-2.5-pro", "Gemini 2.5 Pro"],
       ["gemini-2.5-flash", "Gemini 2.5 Flash"],
     ];
     const AI_MODEL_PRICES = {
+      "gemini-3.5-flash": { inputUsdPer1m: 1.50, outputUsdPer1m: 9.00, label: "Gemini 3.5 Flash" },
       "gemini-3.1-pro-preview": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
       "gemini-2.5-pro": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
       "gemini-2.5-flash": { inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
@@ -4225,6 +4484,8 @@
       songiTaskMode: "discover",
       songiDiscoveryBusy: false,
       lastReport: null,
+      lastFeedback: null,
+      sidebarCollapsed: storageGet("localStorage", SIDEBAR_COLLAPSED_KEY) === "1",
       refreshInFlight: null,
       agentLaunchBusyUntil: 0,
       agentLaunchReleaseTimer: null,
@@ -4398,13 +4659,13 @@
         moduleKey: "office_support",
         repoUrl: "https://github.com/aixlife/aimax-viseo",
         releaseUrl: "",
-        setupDownloadUrl: "/downloads/AIMAX-Office-Manager-Setup-0.1.5.exe",
+        setupDownloadUrl: "/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe",
         portableDownloadUrl: "/downloads/AIMAX-Office-Manager-portable.exe",
         downloadLabel: "Setup exe 다운로드",
         supportedPlatforms: ["windows"],
-        version: "0.1.5",
-        description: "화면 캡처, 캡처 이미지 모자이크, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
-        meta: ["화면 캡처", "캡처 이미지 모자이크", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+        version: "0.1.6",
+        description: "화면 캡처, 캡처 이미지 모자이크, Windows 종료, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
+        meta: ["화면 캡처", "캡처 이미지 모자이크", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
       },
     };
 
@@ -4434,7 +4695,7 @@
         formId: "yunmiJobForm",
         hintId: "yunmiJobHint",
         blockerId: "yunmiJobBlocker",
-        defaultHint: "원본 자료와 목표를 바탕으로 숏폼 스크립트 1안/2안을 만듭니다.",
+        defaultHint: "주제와 목적을 바탕으로 A/B/C 타깃별 숏폼 스크립트 1안/2안/3안을 만듭니다.",
       },
       songi_research: {
         formId: "songiJobForm",
@@ -4814,16 +5075,16 @@
     function yunmiFormPayload() {
       return {
         topic: nonEmpty($("#yunmiTopic")?.value),
-        platform: nonEmpty($("#yunmiPlatform")?.value),
-        content_purpose: nonEmpty($("#yunmiPurpose")?.value),
-        format: $("#yunmiFormat")?.value || "shortform",
-        duration: nonEmpty($("#yunmiDuration")?.value),
-        target_audience: nonEmpty($("#yunmiAudience")?.value),
-        tone: $("#yunmiTone")?.value || "friendly_expert",
+        platform: "릴스/쇼츠/틱톡 공통",
+        content_purpose: "",
+        format: "shortform",
+        duration: "60초",
+        target_audience: "",
+        tone: "friendly_expert",
         objective: nonEmpty($("#yunmiObjective")?.value),
         reference_url: nonEmpty($("#yunmiReferenceUrl")?.value),
         reference_text: nonEmpty($("#yunmiReferenceText")?.value),
-        cta: nonEmpty($("#yunmiCta")?.value),
+        cta: "",
       };
     }
 
@@ -4834,13 +5095,9 @@
     function estimateYunmiCost(payload = yunmiFormPayload(), model = selectedYunmiModel()) {
       const text = [
         payload.topic,
-        payload.platform,
-        payload.content_purpose,
         payload.objective,
-        payload.target_audience,
         payload.reference_url,
         payload.reference_text,
-        payload.cta,
       ].filter(Boolean).join("\n");
       const charCount = Math.max(2200, Math.min(7000, text.length + 2600));
       const estimate = estimateTextCostWon(model, charCount, AI_MODEL_PRICES);
@@ -4857,7 +5114,7 @@
       const mode = $("#yunmiGenerationMode")?.value || "no_paid_alpha";
       if (mode !== "ai_beta") {
         target.className = "notice ok small";
-        target.innerHTML = "규칙형 알파: 외부 AI/API 비용 0원";
+        target.innerHTML = "기본 초안: 외부 AI/API 비용 0원";
         return;
       }
       const estimate = estimateYunmiCost();
@@ -4967,13 +5224,27 @@
         ...failedPosts,
         ...posts.filter((post) => post?.error || ["failed", "error"].includes(String(post?.status || "").toLowerCase())),
       ];
-      if (!failures.length && (result.error || result.failed_keyword || (isFailedJob && result.stage))) {
+      const imageFailures = Array.isArray(result.images?.failures) ? result.images.failures : [];
+      if (imageFailures.length && (result.images?.soft_failure_accepted || result.images?.image_skipped_no_key || result.images?.mode_overridden_to_save)) {
+        for (const failure of imageFailures.slice(0, 3)) {
+          failures.push({
+            keyword: result.failed_keyword || "",
+            stage: failure.stage || "image_generation",
+            error: failure.error_code || failure.error || "",
+            visible_error: failure.message || "",
+            reason: failure.error_code || failure.error || "",
+            status: job?.status || "done",
+          });
+        }
+      }
+      if (!failures.length && (result.error || job?.failed_reason || job?.diagnostic || result.failed_keyword || (isFailedJob && (result.stage || job?.failed_stage)))) {
         failures.push({
           keyword: result.failed_keyword || "",
-          stage: result.stage || "",
-          error: result.error || "",
+          stage: result.stage || job?.failed_stage || "",
+          error: result.error || job?.failed_reason || job?.diagnostic?.code || "",
           visible_error: result.visible_error || result.user_message || "",
           reason: job?.failed_reason || "",
+          diagnostic: job?.diagnostic || result.diagnostic || null,
           status: job?.status || "failed",
         });
       }
@@ -5035,6 +5306,9 @@
         failure?.visible_error,
         failure?.reason,
         failure?.context,
+        failure?.diagnostic?.code,
+        failure?.diagnostic?.title,
+        failure?.diagnostic?.message,
       ].filter(Boolean).join(" ");
     }
 
@@ -5075,6 +5349,58 @@
       ].includes(stage);
     }
 
+    function localFailureDiagnostic(failure, stage, text) {
+      const existing = failure?.diagnostic;
+      if (existing?.code && existing?.title && existing?.message) {
+        return {
+          code: String(existing.code),
+          title: String(existing.title),
+          message: String(existing.message),
+          user_actionable: Boolean(existing.user_actionable),
+          admin_action_required: Boolean(existing.admin_action_required),
+          action_label: String(existing.action_label || (existing.actions || [])[0] || "오류 보고 보내기"),
+          actions: Array.isArray(existing.actions) ? existing.actions.slice(0, 4) : ["오류 보고 보내기"],
+        };
+      }
+      const make = (code, title, message, userActionable, actions) => ({
+        code,
+        title,
+        message,
+        user_actionable: Boolean(userActionable),
+        admin_action_required: !userActionable,
+        action_label: actions[0] || "오류 보고 보내기",
+        actions,
+      });
+      if (/yeri_(gemini|openai|claude)_key_missing|api_key_missing|no api key|api key.*missing|키가.*없|키.*저장/.test(text)) {
+        return make("api_key_missing", "AI/API 키 등록 필요", "작업에 필요한 AI API 키가 저장되어 있지 않습니다.", true, ["AI/API 연결 열기", "오류 보고 보내기"]);
+      }
+      if (/server_generation_auth_failed|api_key_invalid|invalid.*api.*key|unauthorized|permission denied|authentication|키 인증 실패|인증 실패/.test(text)) {
+        return make("api_key_invalid", "API 키 인증 실패", "저장된 API 키가 유효하지 않거나 제공자에서 거절되었습니다.", true, ["AI/API 연결 열기", "오류 보고 보내기"]);
+      }
+      if (/server_generation_rate_limited|rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일/.test(text)) {
+        return make("rate_limited", "무료 사용량 한도 도달", "무료 티어의 분당 또는 일일 요청 한도에 도달했습니다.", true, ["잠시 후 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"]);
+      }
+      if (/server_generation_quota_exceeded|quota_exceeded|billing|payment|credit|balance|결제|크레딧|잔액/.test(text)) {
+        return make("quota_exceeded", "결제/크레딧 확인 필요", "유료 API의 결제 계정, 크레딧, 쿼터 상태 때문에 요청이 막혔습니다.", true, ["결제 상태 확인", "AI/API 연결 열기", "오류 보고 보내기"]);
+      }
+      if (/server_generation_model_not_found|model_not_found|model.*not found|not found.*model|unsupported model|모델.*없|모델.*사용할 수 없/.test(text)) {
+        return make("model_not_found", "AI 모델 사용 불가", "모델명이 잘못되었거나 이 계정에서 선택한 모델을 사용할 수 없습니다.", true, ["AIMAX 기본 모델로 전환", "AI/API 연결 열기", "오류 보고 보내기"]);
+      }
+      if (/image_paid_required|gemini.*image|이미지.*무료|이미지.*유료|nano banana|flash-image/.test(text)) {
+        return make("image_paid_required", "이미지 생성은 유료 키 필요", "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 생성이 건너뛰어졌습니다.", true, ["이미지 없이 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"]);
+      }
+      if (/update_required|runner_start_timeout|runner_stopped|old.*runner|version|업데이트|구버전/.test(text)) {
+        return make("runner_update_required", "실행기 업데이트 필요", "현재 실행기 버전이 웹 작업을 안정적으로 받을 수 없는 상태입니다.", true, ["실행기 업데이트", "오류 보고 보내기"]);
+      }
+      if (stage === "naver_login" || /naver_login|네이버 로그인|captcha|인증 화면|로그인/.test(text)) {
+        return make("naver_login_required", "네이버 로그인 필요", "네이버 로그인 또는 추가 인증 화면에서 자동 진행이 막혔습니다.", true, ["네이버 재로그인", "오류 보고 보내기"]);
+      }
+      if (/smart_editor|selector|셀렉터|image_upload_failed|image_insert_exception|no such window|chromedriver|chrome not reachable|browser_start/.test(text)) {
+        return make("admin_action_required", "AIMAX 관리자 조치 필요", "네이버 에디터 구조, 실행기 연결, 저장/업로드 로직 중 코드 수정이 필요한 오류입니다.", false, ["오류 보고 보내기"]);
+      }
+      return null;
+    }
+
     function explainFailure(failure) {
       const stage = detectFailureStage(failure);
       const stageLabel = failureStageLabel(stage);
@@ -5092,6 +5418,27 @@
         stage,
         stageLabel,
       };
+
+      const diagnostic = localFailureDiagnostic(failure, stage, text);
+      if (diagnostic) {
+        return {
+          ...base,
+          title: diagnostic.title,
+          body: diagnostic.message,
+          action: diagnostic.admin_action_required
+            ? "사용자가 설정으로 해결할 수 없는 문제입니다. 오류 보고를 보내주세요."
+            : "사용자가 직접 조치할 수 있는 문제입니다.",
+          next: diagnostic.admin_action_required
+            ? "오류 보고가 접수되면 AIMAX 관리자가 코드/배포/실행기 상태를 확인합니다."
+            : "아래 조치 버튼을 누른 뒤 같은 작업을 다시 시도할 수 있습니다.",
+          retry: diagnostic.code === "image_paid_required"
+            ? "이미지 0장으로 바꾸면 글쓰기 본문은 계속 진행할 수 있습니다."
+            : base.retry,
+          costNote: diagnostic.code === "image_paid_required" ? "" : baseCostNote,
+          tone: diagnostic.admin_action_required ? "bad" : "warn",
+          diagnostic,
+        };
+      }
 
       if ((text.includes("unexpected keyword argument") && text.includes("image_provider")) || (text.includes("input_content") && text.includes("image_provider"))) {
         return {
@@ -5228,6 +5575,30 @@
       ].filter(Boolean).join("\n");
     }
 
+    function failureActionValue(label) {
+      const text = String(label || "");
+      if (text.includes("AI/API") || text.includes("결제") || text.includes("기본 모델")) return "settings-tab";
+      if (text.includes("업데이트")) return "download";
+      if (text.includes("이미지 없이")) return "yeri-image-zero";
+      if (text.includes("네이버")) return "settings";
+      if (text.includes("오류 보고")) return "reports-tab";
+      return "";
+    }
+
+    function failureActionButtonsHtml(explanation, compact) {
+      if (compact) return "";
+      const actions = Array.isArray(explanation?.diagnostic?.actions) ? explanation.diagnostic.actions : [];
+      if (!actions.length) return "";
+      return `
+        <span class="actions failure-actions">
+          ${actions.map((label) => {
+            const action = failureActionValue(label);
+            return `<button class="btn small" type="button" data-failure-action="${escapeHtml(action)}">${escapeHtml(label)}</button>`;
+          }).join("")}
+        </span>
+      `;
+    }
+
     function failureExplanationHtml(failure, options = {}) {
       const explanation = explainFailure(failure);
       const keyword = failureKeyword(failure);
@@ -5239,6 +5610,7 @@
       const compactClass = options.compact ? " compact" : "";
       const costNote = explanation.costNote ? `<span class="failure-explain-next">${escapeHtml(explanation.costNote)}</span>` : "";
       const retryLine = options.compact ? "" : `<span>${escapeHtml(explanation.retry)}</span>`;
+      const actionButtons = failureActionButtonsHtml(explanation, Boolean(options.compact));
       const technical = detail
         ? `<details class="failure-technical"><summary>기술 정보 보기</summary><code>${escapeHtml(detail)}</code></details>`
         : "";
@@ -5251,12 +5623,14 @@
           ${retryLine}
           ${costNote}
           <span class="failure-explain-next">${escapeHtml(explanation.next)}</span>
+          ${actionButtons}
           ${technical}
         </span>
       `;
     }
 
     function reportFailureExplanationHtml(report, options = {}) {
+      if (isFeedbackReport(report)) return "";
       const visibleError = report?.visible_error || report?.error || "";
       if (!visibleError) return "";
       return failureExplanationHtml({
@@ -5660,9 +6034,16 @@
         yeri_claude_key_missing: "Claude API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.",
         yeri_openai_key_missing: "OpenAI API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.",
         yeri_gemini_key_missing: "Gemini API 키가 아직 웹 AI/API 연결에 저장되어 있지 않습니다.",
+        api_key_missing: "AI/API 키가 등록되어 있지 않습니다. 설정 탭의 AI/API 연결에서 저장해주세요.",
+        api_key_invalid: "API 키 인증 실패입니다. 새 키를 발급받아 교체해주세요.",
+        rate_limited: "무료 사용량 한도에 도달했습니다. 잠시 기다리거나 유료 키를 등록해주세요.",
+        quota_exceeded: "결제/크레딧 문제로 요청이 막혔습니다. 결제 계정과 잔액을 확인해주세요.",
+        model_not_found: "선택한 AI 모델을 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.",
+        image_paid_required: "Gemini 이미지 생성은 유료 키가 필요합니다. 이미지 0장으로 다시 시도할 수 있습니다.",
         server_generation_auth_failed: "API 키 인증 실패입니다. 웹 설정의 AI/API 연결에서 키를 확인하거나 갱신해주세요.",
         server_generation_quota_exceeded: "사용량/요금제 한도 초과입니다. 결제/쿼터 상태를 확인해주세요.",
         server_generation_rate_limited: "AI 제공자 요청 제한이 걸렸습니다. 잠시 뒤 다시 시도해주세요.",
+        server_generation_model_not_found: "선택한 AI 모델을 찾을 수 없거나 이 계정에서 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.",
         server_generation_provider_transient: "AI 제공자 일시적 오류입니다. 잠시 뒤 다시 시도해주세요.",
         server_generation_provider_error: "AI 제공자 글 생성 오류입니다. 모델/API 설정을 확인해주세요.",
         server_generation_timeout: "AI 글 생성 시간이 초과되었습니다. 글 분량을 줄이거나 잠시 뒤 다시 시도해주세요.",
@@ -6619,11 +7000,37 @@
       return `<span class="pill ${item.className}">${escapeHtml(item.label)}</span>`;
     }
 
+    function reportKind(report) {
+      const kind = String(report?.report_kind || report?.kind || "").toLowerCase();
+      const source = String(report?.source || "").toLowerCase();
+      return kind === "feedback" || source === "staff_feedback" ? "feedback" : "error";
+    }
+
+    function isFeedbackReport(report) {
+      return reportKind(report) === "feedback";
+    }
+
+    function reportKindLabel(report) {
+      return isFeedbackReport(report) ? "직원 피드백" : "오류 보고";
+    }
+
+    function feedbackRatingLabel(value) {
+      const rating = String(value || "");
+      return {
+        "5": "5점 · 매우 만족",
+        "4": "4점 · 만족",
+        "3": "3점 · 보통",
+        "2": "2점 · 아쉬움",
+        "1": "1점 · 사용이 어려움",
+      }[rating] || rating || "-";
+    }
+
     function reportNextMessage(report) {
       return report?.next_update_message || reportStatusInfo(report?.status).next || "상태가 바뀌면 이 화면에서 확인할 수 있습니다.";
     }
 
     function reportPublicMessage(report) {
+      if (isFeedbackReport(report)) return report?.public_message || "직원 피드백이 접수되었습니다. 운영팀이 확인하겠습니다.";
       return report?.public_message || "오류 보고가 접수되었습니다. 같은 오류를 다시 보내지 않아도 됩니다.";
     }
 
@@ -7505,6 +7912,95 @@
         : `<div class="empty">현재 환경에서 받을 수 있는 설치 파일이 없습니다.</div>`;
     }
 
+    function latestJobForKind(kind) {
+      return (state.jobs || []).find((job) => job.kind === kind) || null;
+    }
+
+    function jobSummaryRowsHtml(rows) {
+      return `<ul class="job-summary-list">${rows.map(([label, value]) => `
+        <li><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value || "-")}</span></li>
+      `).join("")}</ul>`;
+    }
+
+    function recentJobSummary(kind) {
+      const job = latestJobForKind(kind);
+      if (!job) return "최근 작업 없음";
+      const label = jobKinds[kind]?.label || kind;
+      return `${label} · ${job.status || "-"} · ${formatTime(job.updated_at || job.created_at)}`;
+    }
+
+    function yeriModeLabel(value) {
+      const labels = {
+        publish: "즉시 발행",
+        save: "임시 저장",
+        schedule: "예약 발행",
+      };
+      return labels[value] || value || "즉시 발행";
+    }
+
+    function hyunjuSpeedLabel(value) {
+      const labels = {
+        safe: "안전",
+        normal: "보통",
+        fast: "빠름",
+      };
+      return labels[value] || value || "보통";
+    }
+
+    function renderYeriJobPreview() {
+      const target = $("#yeriJobPreview");
+      if (!target) return;
+      const keywords = splitKeywords($("#yeriKeywords")?.value || "");
+      const mode = $("#yeriMode")?.value || "publish";
+      const model = normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel());
+      const wordCount = $("#yeriWordCount")?.value || "1500";
+      const imageCount = normalizeImageCount($("#yeriImageCount")?.value || 3);
+      const schedule = mode === "schedule"
+        ? [$("#yeriScheduleDate")?.value, $("#yeriScheduleHour")?.value ? `${$("#yeriScheduleHour").value}시` : ""].filter(Boolean).join(" ")
+        : "예약 없음";
+      const cta = [$("#yeriCtaText")?.value, $("#yeriCtaLink")?.value].filter(Boolean).join(" · ") || "선택 안 함";
+      const aiState = aiKeyOperationalState(model);
+      target.innerHTML = `
+        <h4>예리 작업 요약</h4>
+        ${jobSummaryRowsHtml([
+          ["키워드", keywords.length ? keywords.join(", ") : "입력 대기"],
+          ["발행 방식", yeriModeLabel(mode)],
+          ["모델/분량", `${aiModelLabel(model)} · ${Number(wordCount || 0).toLocaleString("ko-KR")}자`],
+          ["이미지", `${imageCount}장`],
+          ["예약", schedule],
+          ["CTA", cta],
+          ["AI 연결", aiState.detail || aiState.status || "확인 중"],
+          ["최근 작업", recentJobSummary("yeri_write")],
+        ])}
+      `;
+    }
+
+    function renderHyunjuJobPreview() {
+      const target = $("#hyunjuJobPreview");
+      if (!target) return;
+      const keywords = splitKeywords($("#hyunjuKeywords")?.value || "");
+      const count = Number($("#hyunjuCount")?.value || 10);
+      const speed = $("#hyunjuSpeed")?.value || "normal";
+      const messages = sanitizeMessageList($("#hyunjuMessages")?.value || webNeighborMessages());
+      const status = employeeStatusInfo("hyunju");
+      target.innerHTML = `
+        <h4>현주 작업 요약</h4>
+        ${jobSummaryRowsHtml([
+          ["검색 키워드", keywords.length ? keywords.join(", ") : "입력 대기"],
+          ["신청 수", `키워드당 ${Math.max(1, count).toLocaleString("ko-KR")}명`],
+          ["속도", hyunjuSpeedLabel(speed)],
+          ["멘트", messages.length ? `${messages.length}개 준비됨` : "기본 멘트 사용"],
+          ["실행 상태", status.reason || status.label || "확인 중"],
+          ["최근 작업", recentJobSummary("hyunju_find")],
+        ])}
+      `;
+    }
+
+    function renderJobPreviews() {
+      renderYeriJobPreview();
+      renderHyunjuJobPreview();
+    }
+
     function renderQuickActions() {
       ensureSelectedJobKind();
       renderJobEmployeeSwitch();
@@ -7514,6 +8010,7 @@
         if (form) form.classList.toggle("hidden", kind !== state.selectedJobKind);
         setJobFormEnabled(config, canUseJob(kind));
       }
+      renderJobPreviews();
       renderSongiJobForm();
       renderYunmiJobForm();
       const key = employeeKeyForJobKind(state.selectedJobKind);
@@ -7558,9 +8055,12 @@
       const deleteButton = $("#songiDeleteProjectBtn");
       if (deleteButton) deleteButton.disabled = shouldCreateProject || !selectedProjectId;
       const item = state.researchItems.find((entry) => entry.id === state.lastSongiItemId) || null;
+      const mode = state.songiTaskMode || "discover";
+      const showItem = Boolean(item && mode === "links");
       $("#songiCopyBriefBtn").disabled = !state.selectedResearchProjectId || !selectedResearchItems().length;
-      $("#songiJobResult").classList.toggle("hidden", !item);
-      $("#songiJobResult").innerHTML = item ? songiPreviewHtml(item) : "";
+      $("#songiJobResult").classList.toggle("hidden", !showItem);
+      $("#songiJobResult").innerHTML = showItem ? songiPreviewHtml(item) : "";
+      $("#songiJobPlaceholder")?.classList.toggle("hidden", mode !== "links" || showItem);
       updateSongiPersonalizationState();
       renderSongiProfileControl();
       renderSongiTaskMode();
@@ -7655,17 +8155,22 @@
             <p>${escapeHtml(variant.angle || "")}</p>
           </div>
           <div class="research-meta">
-            <span class="pill ok">${escapeHtml(hook.label || "후킹")}</span>
+            <span class="pill ok">${escapeHtml(variant.target_label || `${variant.code || ""}안`)}</span>
             <span class="pill">${escapeHtml(variant.duration || "60초")}</span>
-            <span class="pill">${escapeHtml(variant.tone || "톤")}</span>
           </div>
+          ${variant.target_audience ? yunmiTextBlock("타깃", variant.target_audience) : ""}
+          ${variant.target_strategy ? yunmiTextBlock("전략", variant.target_strategy) : ""}
           ${yunmiTitleListHtml(variant.title_candidates)}
-          ${yunmiTextBlock("선택 이유", hook.reason)}
           ${yunmiTextBlock("훅", variant.hook || hook.sample)}
           ${yunmiTimeRowsHtml(variant.rows)}
           <details class="yunmi-details">
-            <summary>앵커 / 촬영 가이드 / CTA</summary>
+            <summary>근거 / 촬영 가이드 / CTA</summary>
             <div style="display:grid;gap:12px;margin-top:10px;">
+              <div>
+                <h6 class="yunmi-section-title">선택 이유</h6>
+                ${variant.target_reason ? yunmiTextBlock(variant.target_label || "타깃 기준", variant.target_reason) : ""}
+                ${yunmiTextBlock(hook.label || "후킹", hook.reason)}
+              </div>
               <div>
                 <h6 class="yunmi-section-title">앵커 & 브릿지</h6>
                 ${yunmiAnchorBridgeHtml(variant.anchor_bridges)}
@@ -7701,7 +8206,7 @@
           : result.mode || "윤미";
       return `
         <div class="yunmi-result">
-          <h4>윤미 초안 결과</h4>
+          <h4>윤미 A/B/C 타깃별 초안</h4>
           <p>${escapeHtml(result.summary || result.error || "초안이 생성되었습니다.")}</p>
           <div class="research-meta">
             <span class="pill ${isFailed ? "bad" : "ok"}">${escapeHtml(modeLabel)}</span>
@@ -7714,23 +8219,31 @@
           </div>
           ${isFailed ? `<div class="actions" style="margin-top:10px;"><button class="btn" type="button" data-yunmi-report-error="${escapeHtml(job?.id || "")}">오류 보고 보내기</button></div>` : ""}
         </div>
-        ${yunmiHookOptionsHtml(result.hook_options)}
-        ${patterns.length ? `
+        ${result.final_recommendation ? `
           <section class="songi-output-panel wide">
-            <h5>관찰 패턴</h5>
-            <ul>${patterns.map((item) => `<li><strong>${escapeHtml(item.label || "")}</strong><br>${escapeHtml(item.insight || "")}</li>`).join("")}</ul>
+            <h5>최종 추천</h5>
+            <p>${escapeHtml(result.final_recommendation.text || "")}</p>
           </section>
         ` : ""}
         <div class="yunmi-script-grid">
           ${variants.map(yunmiVariantHtml).join("")}
         </div>
-        ${result.final_recommendation ? `
-          <section class="songi-output-panel wide">
-            <h5>최종 추천</h5>
-            <p>${escapeHtml(result.final_recommendation.text || "")}</p>
-            ${Array.isArray(result.final_recommendation.criteria) ? `<ul>${result.final_recommendation.criteria.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : ""}
-          </section>
-        ` : ""}
+        <details class="yunmi-details">
+          <summary>근거 보기</summary>
+          ${yunmiHookOptionsHtml(result.hook_options)}
+          ${patterns.length ? `
+            <section class="songi-output-panel wide">
+              <h5>관찰 패턴</h5>
+              <ul>${patterns.map((item) => `<li><strong>${escapeHtml(item.label || "")}</strong><br>${escapeHtml(item.insight || "")}</li>`).join("")}</ul>
+            </section>
+          ` : ""}
+          ${result.final_recommendation && Array.isArray(result.final_recommendation.criteria) ? `
+            <section class="songi-output-panel wide">
+              <h5>추천 기준</h5>
+              <ul>${result.final_recommendation.criteria.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </section>
+          ` : ""}
+        </details>
       `;
     }
 
@@ -7740,6 +8253,7 @@
       const job = latestYunmiJob();
       target.classList.toggle("hidden", !job);
       target.innerHTML = job ? yunmiJobResultHtml(job) : "";
+      $("#yunmiJobPlaceholder")?.classList.toggle("hidden", Boolean(job));
       const copyButton = $("#yunmiCopyResultBtn");
       if (copyButton) copyButton.disabled = !job;
     }
@@ -7995,6 +8509,8 @@
       });
       $("#songiDiscoveryPanel")?.classList.toggle("hidden", mode !== "discover");
       $("#songiLinkPanel")?.classList.toggle("hidden", mode !== "links");
+      $("#songiDiscoveryOutput")?.classList.toggle("hidden", mode !== "discover");
+      $("#songiJobPlaceholder")?.classList.toggle("hidden", mode !== "links" || !$("#songiJobResult")?.classList.contains("hidden"));
       const submitButton = $("#songiSubmitBtn");
       if (submitButton) {
         submitButton.classList.toggle("hidden", mode !== "links");
@@ -8581,6 +9097,42 @@
       `;
     }
 
+    function songiInsightText(value) {
+      if (!value) return "";
+      if (typeof value === "string") return value;
+      if (typeof value === "object") {
+        return [
+          value.timestamp,
+          value.title,
+          value.description || value.text || value.insight || value.point || value.reason || value.copy,
+        ].filter(Boolean).join(value.timestamp ? " · " : " ");
+      }
+      return String(value);
+    }
+
+    function firstSongiInsight(values) {
+      if (Array.isArray(values)) {
+        return values.map(songiInsightText).find(Boolean) || "";
+      }
+      return songiInsightText(values);
+    }
+
+    function songiCompactPerformanceHtml(item, hooks, flow) {
+      const rows = [
+        ["성과 해석", item.performance_note || firstSongiInsight(item.performance_reasons) || item.summary || "성과 해석이 생성되면 여기에 표시됩니다."],
+        ["핵심 소구", firstSongiInsight(hooks) || item.summary || "핵심 소구점이 생성되면 여기에 표시됩니다."],
+        ["후킹/카피", [item.hook_note, item.copy_note || firstSongiInsight(item.copywriting_points)].filter(Boolean).join("\n") || "후킹과 카피 포인트가 생성되면 여기에 표시됩니다."],
+        ["구성/흐름", item.structure_note || firstSongiInsight(flow) || "영상 흐름 분석이 생성되면 여기에 표시됩니다."],
+        ["시각 포인트", firstSongiInsight(item.visual_cues) || firstSongiInsight(item.frame_captures) || "영상 화면 분석이 생성되면 여기에 표시됩니다."],
+      ];
+      return `
+        <section class="songi-output-panel wide">
+          <h5>성과 해석</h5>
+          <ul>${rows.map(([label, text]) => `<li><strong>${escapeHtml(label)}</strong><br>${songiTextHtml(text)}</li>`).join("")}</ul>
+        </section>
+      `;
+    }
+
     function songiPreviewHtml(item) {
       const status = researchLinkStatusLabel(item);
       const analysisStatus = songiAnalysisStatusLabel(item);
@@ -8589,6 +9141,11 @@
       const error = songiItemErrorInfo(item);
       const tags = Array.isArray(item.tags) ? item.tags : [];
       const sourcePreview = cleanPreviewText(item.source_text || item.memo || "", 1200);
+      const hooks = Array.isArray(item.hooks) && item.hooks.length ? item.hooks : [item.hook_note].filter(Boolean);
+      const flow = Array.isArray(item.flow) && item.flow.length
+        ? item.flow
+        : item.structure_note ? [{ timestamp: "추천 구조", description: item.structure_note }] : [];
+      const brief = item.script_brief || item.personalized_plan || "";
       return `
         <div class="row">
           <div>
@@ -8606,20 +9163,31 @@
         </div>
         ${error ? `<div class="notice bad small"><strong>${escapeHtml(error.scope)} 실패</strong><br>${escapeHtml(error.message)}</div>` : ""}
         <p class="songi-summary">${songiTextHtml(item.summary || "송이가 읽은 내용을 정리하는 중입니다.")}</p>
-        <div class="research-meta">
-          ${tags.length ? tags.slice(0, 10).map((tag) => `<span class="pill">${escapeHtml(tag)}</span>`).join("") : `<span class="pill">태그 없음</span>`}
+        <div class="songi-output-grid">
+          ${songiCompactPerformanceHtml(item, hooks, flow)}
         </div>
-        <div class="research-detail-grid">
-          ${songiNoteBoxHtml("hook_note", item.hook_note)}
-          ${songiNoteBoxHtml("copy_note", item.copy_note)}
-          ${songiNoteBoxHtml("structure_note", item.structure_note)}
-          ${songiNoteBoxHtml("performance_note", item.performance_note)}
-        </div>
-        ${songiInsightPanelsHtml(item)}
-        ${songiFrameCapturesHtml(item)}
-        ${songiPlanningCardsHtml(item)}
-        ${songiSourcePreviewHtml(sourcePreview)}
         ${songiResultActionsHtml(item)}
+        <details class="yunmi-details">
+          <summary>근거 보기</summary>
+          ${brief ? `
+            <section class="songi-output-panel wide">
+              <h5>윤미 전달 브리프</h5>
+              ${songiScriptBriefHtml(parseSongiJsonText(brief) || brief)}
+            </section>
+          ` : ""}
+          <div class="research-meta">
+            ${tags.length ? tags.slice(0, 10).map((tag) => `<span class="pill">${escapeHtml(tag)}</span>`).join("") : `<span class="pill">태그 없음</span>`}
+          </div>
+          <div class="research-detail-grid">
+            ${songiNoteBoxHtml("hook_note", item.hook_note)}
+            ${songiNoteBoxHtml("copy_note", item.copy_note)}
+            ${songiNoteBoxHtml("structure_note", item.structure_note)}
+            ${songiNoteBoxHtml("performance_note", item.performance_note)}
+          </div>
+          ${songiInsightPanelsHtml(item)}
+          ${songiFrameCapturesHtml(item)}
+          ${songiSourcePreviewHtml(sourcePreview)}
+        </details>
       `;
     }
 
@@ -8883,6 +9451,30 @@
       });
     }
 
+    function renderFeedbackEmployeeOptions() {
+      const select = $("#feedbackEmployee");
+      if (!select) return;
+      const current = select.value || state.selectedEmployee || "";
+      const rows = Object.values(employees)
+        .filter((employee) => employee?.code && employee?.name)
+        .map((employee) => ({ code: employee.code, name: employee.name }));
+      select.innerHTML = `<option value="">직원을 선택해주세요</option>${rows.map((employee) => `
+        <option value="${escapeHtml(employee.code)}">${escapeHtml(employee.name)}</option>
+      `).join("")}`;
+      if (rows.some((employee) => employee.code === current)) {
+        select.value = current;
+      }
+    }
+
+    function syncFeedbackEmployeeDefault(force = false) {
+      const select = $("#feedbackEmployee");
+      if (!select) return;
+      if (!force && select.value) return;
+      if (state.selectedEmployee && employees[state.selectedEmployee]) {
+        select.value = state.selectedEmployee;
+      }
+    }
+
     function renderReportResult() {
       const target = $("#reportResult");
       if (!state.lastReport) {
@@ -8920,6 +9512,42 @@
       `;
     }
 
+    function renderFeedbackResult() {
+      const target = $("#feedbackResult");
+      if (!target) return;
+      if (!state.lastFeedback) {
+        target.classList.add("hidden");
+        target.textContent = "";
+        return;
+      }
+      target.classList.remove("hidden");
+      const report = state.lastFeedback;
+      target.innerHTML = `
+        <div>
+          <h3>피드백이 접수되었습니다</h3>
+          <p>운영팀 알림이 전달되었습니다. 직원 개선에 반영하겠습니다.</p>
+        </div>
+        <div class="report-meta-grid">
+          <div class="report-meta-item">
+            <span>접수 ID</span>
+            <strong class="report-id-text">${escapeHtml(report.report_id)}</strong>
+          </div>
+          <div class="report-meta-item">
+            <span>직원</span>
+            <strong>${escapeHtml(report.feedback_employee_label || "-")}</strong>
+          </div>
+          <div class="report-meta-item">
+            <span>만족도</span>
+            <strong>${escapeHtml(feedbackRatingLabel(report.feedback_rating))}</strong>
+          </div>
+          <div class="report-meta-item">
+            <span>상태</span>
+            <strong>${reportStatusPill(report.status)}</strong>
+          </div>
+        </div>
+      `;
+    }
+
     function renderReportsList() {
       $("#myReportsTable").innerHTML = state.reports.length
         ? `<div class="report-list">
@@ -8934,27 +9562,33 @@
                 </div>
                 <div class="report-meta-grid">
                   <div class="report-meta-item">
-                    <span>작업 상황</span>
-                    <strong>${escapeHtml(report.work_context || "-")}</strong>
+                    <span>구분</span>
+                    <strong>${escapeHtml(reportKindLabel(report))}</strong>
                   </div>
                   <div class="report-meta-item">
-                    <span>운영팀 안내</span>
-                    <strong>${escapeHtml(reportPublicMessage(report))}</strong>
+                    <span>${isFeedbackReport(report) ? "직원" : "작업 상황"}</span>
+                    <strong>${escapeHtml(isFeedbackReport(report) ? (report.feedback_employee_label || report.work_context || "-") : (report.work_context || "-"))}</strong>
+                  </div>
+                  <div class="report-meta-item">
+                    <span>${isFeedbackReport(report) ? "만족도" : "운영팀 안내"}</span>
+                    <strong>${escapeHtml(isFeedbackReport(report) ? feedbackRatingLabel(report.feedback_rating) : reportPublicMessage(report))}</strong>
+                  </div>
+                  <div class="report-meta-item report-meta-item-wide">
+                    <span>${isFeedbackReport(report) ? "피드백 요약" : "오류 설명"}</span>
+                    ${isFeedbackReport(report)
+                      ? `<strong>${escapeHtml(report.feedback_improve || report.feedback_good || report.visible_error || "-")}</strong>`
+                      : (reportFailureExplanationHtml(report) || `<strong>-</strong>`)}
                   </div>
                   <div class="report-meta-item">
                     <span>다음 안내 기준</span>
                     <strong>${escapeHtml(reportNextMessage(report))}</strong>
-                  </div>
-                  <div class="report-meta-item report-meta-item-wide">
-                    <span>오류 설명</span>
-                    ${reportFailureExplanationHtml(report) || `<strong>-</strong>`}
                   </div>
                 </div>
                 ${reportActionHtml(report)}
               </article>
             `).join("")}
           </div>`
-        : `<div class="empty">아직 보낸 오류 보고가 없습니다.</div>`;
+        : `<div class="empty">아직 보낸 오류 보고나 피드백이 없습니다.</div>`;
     }
 
     function renderAll() {
@@ -8971,7 +9605,9 @@
       renderJobs();
       renderUpdates();
       renderEnvironmentUpdateNotice();
+      renderFeedbackEmployeeOptions();
       renderReportResult();
+      renderFeedbackResult();
       renderReportsList();
       renderReportAttentionPrompt();
       renderServiceNoticePrompt();
@@ -9585,6 +10221,58 @@
       return result;
     }
 
+    async function submitStaffFeedbackReport({ employeeCode, rating, good, improve, contactNeeded }) {
+      const environment = reportEnvironmentPayload();
+      const employee = employees[employeeCode] || {};
+      const employeeLabel = employee.name || productLabels[employeeCode] || employeeCode || "직원";
+      const feedbackSummary = String(improve || good || "직원 피드백").trim();
+      const feedback = {
+        employee_code: employeeCode,
+        employee_label: employeeLabel,
+        rating: String(rating || ""),
+        good: String(good || "").trim(),
+        improve: String(improve || "").trim(),
+        contact_needed: Boolean(contactNeeded),
+        selected_employee: state.selectedEmployee || "",
+        selected_job_kind: state.selectedJobKind || "",
+      };
+      const result = await api("/api/reports", {
+        method: "POST",
+        body: JSON.stringify({
+          source: "staff_feedback",
+          report_kind: "feedback",
+          feedback,
+          user_input: {
+            work_context: `${employeeLabel} 직원 피드백`,
+            visible_error: feedbackSummary,
+            user_note: [
+              feedback.good ? `좋았던 점: ${feedback.good}` : "",
+              feedback.improve ? `개선 요청: ${feedback.improve}` : "",
+              feedback.contact_needed ? "운영팀 확인/답변 필요" : "",
+            ].filter(Boolean).join("\n"),
+          },
+          ...environment,
+        }),
+      });
+      state.lastFeedback = {
+        report_id: result.report_id,
+        status: result.status || "new",
+        status_label: result.status_label || "",
+        public_message: result.public_message || "",
+        next_update_message: result.next_update_message || "",
+        status_updated_at: result.status_updated_at || result.stored_at || "",
+        report_kind: "feedback",
+        feedback_employee_label: employeeLabel,
+        feedback_rating: rating,
+        feedback_good: feedback.good,
+        feedback_improve: feedback.improve,
+      };
+      await refreshReports();
+      renderFeedbackResult();
+      renderReportsList();
+      return result;
+    }
+
     async function submitOperationalErrorReportOnce(key, workContext, visibleError, userNote = "") {
       const today = new Date().toISOString().slice(0, 10);
       const storageKey = `aimax_auto_report_${key}_${today}`;
@@ -10053,6 +10741,9 @@
       } else if (action === "updates-tab") {
         const updatesButton = $('[data-tab="updates"]');
         if (updatesButton) updatesButton.click();
+      } else if (action === "feedback-tab") {
+        const feedbackButton = $('[data-tab="feedback"]');
+        if (feedbackButton) feedbackButton.click();
       } else if (action === "reports-tab") {
         const updatesButton = $('[data-tab="updates"]');
         if (updatesButton) updatesButton.click();
@@ -10076,6 +10767,39 @@
       } else if (action === "password") {
         $("#passwordPanel").scrollIntoView({ behavior: "smooth", block: "start" });
       }
+    }
+
+    function runFailureAction(action) {
+      if (!action) return;
+      if (action === "yeri-image-zero") {
+        const field = $("#yeriImageCount");
+        if (field) {
+          field.value = "0";
+          renderYeriCostEstimate();
+          renderYeriJobPreview();
+        }
+        const jobsButton = $('[data-tab="jobs"]');
+        if (jobsButton) jobsButton.click();
+        showToast("예리 이미지 수를 0장으로 바꿨습니다. 같은 글을 이미지 없이 다시 맡겨주세요.");
+        return;
+      }
+      runUiAction(action);
+    }
+
+    function applySidebarCollapsed() {
+      const shell = $("#appView");
+      const button = $("#sideToggleBtn");
+      if (!shell || !button) return;
+      shell.classList.toggle("side-collapsed", state.sidebarCollapsed);
+      button.textContent = state.sidebarCollapsed ? "›" : "‹";
+      button.setAttribute("aria-label", state.sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기");
+      button.setAttribute("title", state.sidebarCollapsed ? "사이드바 펼치기" : "사이드바 접기");
+    }
+
+    function setSidebarCollapsed(collapsed) {
+      state.sidebarCollapsed = Boolean(collapsed);
+      storageSet("localStorage", SIDEBAR_COLLAPSED_KEY, state.sidebarCollapsed ? "1" : "0");
+      applySidebarCollapsed();
     }
 
     function localAgentJobTarget(kind) {
@@ -11038,6 +11762,28 @@
       }
     });
 
+    $("#feedbackForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      try {
+        const result = await submitStaffFeedbackReport({
+          employeeCode: $("#feedbackEmployee").value,
+          rating: $("#feedbackRating").value,
+          good: $("#feedbackGood").value,
+          improve: $("#feedbackImprove").value,
+          contactNeeded: $("#feedbackContactNeeded").checked,
+        });
+        $("#feedbackForm").reset();
+        syncFeedbackEmployeeDefault(true);
+        showToast(`피드백이 전송되었습니다. ${result.report_id}`);
+      } catch (_error) {
+        showToast("피드백 전송에 실패했습니다.");
+      }
+    });
+
+    $("#sideToggleBtn").addEventListener("click", () => {
+      setSidebarCollapsed(!state.sidebarCollapsed);
+    });
+
     $("#logoutBtn").addEventListener("click", async () => {
       try {
         await api("/api/auth/logout", { method: "POST", body: "{}" });
@@ -11057,8 +11803,14 @@
     $("#jobRefreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("일 맡긴 기록을 갱신했습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
     $("#reportRefreshBtn").addEventListener("click", () => refreshReports().then(() => {
       renderReportsList();
-      showToast("오류 보고 목록을 갱신했습니다.");
+      showToast("문의/피드백 목록을 갱신했습니다.");
     }).catch(() => showToast("갱신에 실패했습니다.")));
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-failure-action]");
+      if (!button) return;
+      event.preventDefault();
+      runFailureAction(button.dataset.failureAction || "");
+    });
     $("#myReportsTable").addEventListener("click", async (event) => {
       const button = event.target.closest("[data-report-response]");
       if (!button) return;
@@ -11139,13 +11891,26 @@
     });
     ["#yeriWordCount", "#yeriImageCount"].forEach((selector) => {
       const field = $(selector);
-      if (field) field.addEventListener("change", renderYeriCostEstimate);
+      if (field) field.addEventListener("change", () => {
+        renderYeriCostEstimate();
+        renderYeriJobPreview();
+      });
     });
-    ["#yunmiGenerationMode", "#yunmiPlatform", "#yunmiPurpose", "#yunmiAiModel", "#yunmiFormat", "#yunmiDuration", "#yunmiTone"].forEach((selector) => {
+    ["#yeriKeywords", "#yeriMode", "#yeriCategory", "#yeriScheduleDate", "#yeriScheduleHour", "#yeriCtaLink", "#yeriCtaText"].forEach((selector) => {
+      const field = $(selector);
+      if (field) field.addEventListener("input", renderYeriJobPreview);
+      if (field) field.addEventListener("change", renderYeriJobPreview);
+    });
+    ["#hyunjuKeywords", "#hyunjuCount", "#hyunjuSpeed", "#hyunjuMessages"].forEach((selector) => {
+      const field = $(selector);
+      if (field) field.addEventListener("input", renderHyunjuJobPreview);
+      if (field) field.addEventListener("change", renderHyunjuJobPreview);
+    });
+    ["#yunmiAiModel"].forEach((selector) => {
       const field = $(selector);
       if (field) field.addEventListener("change", renderYunmiCostEstimate);
     });
-    ["#yunmiTopic", "#yunmiAudience", "#yunmiObjective", "#yunmiReferenceUrl", "#yunmiReferenceText", "#yunmiCta"].forEach((selector) => {
+    ["#yunmiTopic", "#yunmiObjective", "#yunmiReferenceUrl", "#yunmiReferenceText"].forEach((selector) => {
       const field = $(selector);
       if (field) field.addEventListener("input", renderYunmiCostEstimate);
     });
@@ -11378,7 +12143,8 @@
         $$(".nav button").forEach((item) => item.classList.toggle("active", item === button));
         $$(".tab-panel").forEach((panel) => panel.classList.add("hidden"));
         $(`#${button.dataset.tab}Tab`).classList.remove("hidden");
-        $("#pageTitle").textContent = button.textContent;
+        if (button.dataset.tab === "feedback") syncFeedbackEmployeeDefault(true);
+        $("#pageTitle").textContent = button.dataset.title || button.textContent;
         $("#pageSubtitle").textContent = button.dataset.tab === "overview"
           ? "AIMAX의 회사 뇌와 AI 직원들이 어떻게 연결되는지 보여줍니다."
           : button.dataset.tab === "staff"
@@ -11387,14 +12153,17 @@
             ? "송이가 URL과 메모를 리서치 브리프로 정리합니다."
           : button.dataset.tab === "jobs"
             ? "채용한 AI 직원에게 업무를 지시하고 진행 상태를 확인합니다."
+          : button.dataset.tab === "feedback"
+            ? "직원 사용 경험과 개선 요청을 운영팀에 전달합니다."
             : button.dataset.tab === "settings"
               ? "로컬 실행기에 저장된 필수 설정 상태를 확인합니다."
             : button.dataset.tab === "updates"
-              ? "업데이트, 설치 파일, 오류 보고와 처리 상태를 확인합니다."
+              ? "업데이트, 설치 파일, 오류 보고, 피드백 처리 상태를 확인합니다."
               : "오류 상황을 한 곳으로 모읍니다.";
       });
     });
 
+    applySidebarCollapsed();
     syncInstallGuideLinks();
     boot();
   </script>

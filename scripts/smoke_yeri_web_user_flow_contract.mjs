@@ -19,7 +19,7 @@ assert(
 );
 
 assert(
-  /word_count:\s*Number\(\$\(("#yeriWordCount"|'#yeriWordCount')\)\.value\s*\|\|\s*1500\)/.test(html),
+  /word_count:\s*Number\(\$\(("#yeriWordCount"|'#yeriWordCount')\)\??\.value\s*\|\|\s*1500\)/.test(html),
   "yeri_submit_must_use_visible_word_count_select",
 );
 

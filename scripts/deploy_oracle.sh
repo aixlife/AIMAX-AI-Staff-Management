@@ -173,7 +173,7 @@ if [[ "$MODE" == "windows-bundle" || "$MODE" == "bundle-installers" || "$MODE" =
 fi
 
 if [[ "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
-  add_file "$ROOT_DIR/dist/upload_installers/AIMAX-Office-Manager-Setup-0.1.5.exe" "$REMOTE_DOWNLOAD_DIR/AIMAX-Office-Manager-Setup-0.1.5.exe" "Jieun Office setup"
+  add_file "$ROOT_DIR/dist/upload_installers/AIMAX-Office-Manager-Setup-0.1.6.exe" "$REMOTE_DOWNLOAD_DIR/AIMAX-Office-Manager-Setup-0.1.6.exe" "Jieun Office setup"
   add_file "$ROOT_DIR/dist/upload_installers/AIMAX-Office-Manager-portable.exe" "$REMOTE_DOWNLOAD_DIR/AIMAX-Office-Manager-portable.exe" "Jieun Office portable"
   add_file "$ROOT_DIR/dist/upload_installers/Pencil-Setup-1.0.0.exe" "$REMOTE_DOWNLOAD_DIR/Pencil-Setup-1.0.0.exe" "Nakyung Pencil setup"
   add_file "$ROOT_DIR/dist/upload_installers/Pencil-portable.exe" "$REMOTE_DOWNLOAD_DIR/Pencil-portable.exe" "Nakyung Pencil portable"

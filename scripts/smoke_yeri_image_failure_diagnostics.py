@@ -48,7 +48,7 @@ def main() -> None:
         editor._generate_image_with_provider = lambda *_args, **_kwargs: (None, "gemini")
         generated_fail = editor._input_image(None, "valid prompt", "fake-key", image_provider="gemini")
         _assert(generated_fail["stage"] == "image_generation", "generation failure stage missing")
-        _assert(generated_fail["error_code"] == "image_generation_failed", "generation failure code missing")
+        _assert(generated_fail["error_code"] == "image_paid_required", "paid image failure code missing")
         _assert(not generated_fail["generated"], "generation failure marked generated")
 
         editor._generate_image_with_provider = lambda *_args, **_kwargs: (_temp_image_path(), "openai")
