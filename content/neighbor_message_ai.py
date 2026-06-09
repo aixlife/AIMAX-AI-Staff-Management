@@ -44,15 +44,17 @@ def generate_neighbor_messages(
     model: str = "gemini-2.5-flash",
     count: int = 10,
     claude_key: Optional[str] = None,
+    openai_key: Optional[str] = None,
 ) -> list[str]:
     """블로거 프로필을 바탕으로 서로이웃 멘트 N개 생성.
 
     Args:
         profile_text: 운영자 블로그 소개 (사용자가 설정 탭에 작성)
         api_key: Gemini API 키 (model이 gemini 계열일 때)
-        model: "claude" | "gemini-2.5-flash" | "gemini-2.5-pro" | "gemini-3.1-pro-preview"
+        model: "claude" | "gpt-*" | "gemini-2.5-flash" | "gemini-2.5-pro" | "gemini-3.1-pro-preview"
         count: 생성할 멘트 개수 (기본 10)
         claude_key: Claude API 키 (model이 "claude"일 때 필요)
+        openai_key: OpenAI API 키 (model이 "gpt-*"일 때 필요)
 
     Returns:
         멘트 리스트. 실패 시 빈 리스트 반환 — 호출자가 fallback 처리.
@@ -71,6 +73,11 @@ def generate_neighbor_messages(
                 logger.error("Claude 모델 선택했으나 claude_key 없음")
                 return []
             text = _call_claude(prompt, claude_key)
+        elif str(model or "").startswith("gpt-"):
+            if not openai_key:
+                logger.error("OpenAI 모델 선택했으나 openai_key 없음")
+                return []
+            text = _call_openai(prompt, openai_key, str(model).strip())
         else:
             if not api_key:
                 logger.error("Gemini 모델 선택했으나 gemini api_key 없음")
@@ -134,3 +141,44 @@ def _call_gemini(prompt: str, api_key: str, model_id: str) -> Optional[str]:
         contents=prompt,
     )
     return response.text if response else None
+
+
+def _call_openai(prompt: str, api_key: str, model_id: str) -> Optional[str]:
+    import requests
+    response = requests.post(
+        "https://api.openai.com/v1/responses",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model_id,
+            "input": prompt,
+            "max_output_tokens": 2000,
+            "reasoning": {"effort": "minimal"},
+            "store": False,
+        },
+        timeout=120,
+    )
+    if response.status_code >= 400:
+        logger.error(f"OpenAI 멘트 생성 실패: {response.status_code} {response.text[:200]}")
+        return None
+    return _extract_openai_text(response.json())
+
+
+def _extract_openai_text(data) -> Optional[str]:
+    """OpenAI Responses API 응답에서 본문 텍스트만 추출 (content/ai_text.py 와 동일 규약)."""
+    if not isinstance(data, dict):
+        return None
+    if data.get("output_text"):
+        return str(data.get("output_text") or "").strip()
+    chunks = []
+    for item in data.get("output") or []:
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content") or []:
+            if not isinstance(content, dict):
+                continue
+            if content.get("type") == "output_text" and content.get("text"):
+                chunks.append(str(content.get("text")))
+    return "\n".join(chunks).strip() or None
