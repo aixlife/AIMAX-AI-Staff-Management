@@ -116,6 +116,31 @@ assert(sangsu?.execution === "web_module", "sangsu_execution_contract_missing");
 assert(sangsu?.product === "sangsu", "sangsu_product_contract_missing");
 assert(sangsu?.profile_image === "/assets/avatar_sangsu.jpg", "sangsu_profile_image_missing");
 assert(__catalogTest.productList("bundle").includes("sangsu"), "bundle_should_include_sangsu_product");
+assert(!__catalogTest.productList("bundle").includes("eunseo"), "bundle_should_not_include_member_only_eunseo");
+const eunseo = publicWorkers.find((worker) => worker.staff_code === "eunseo");
+assert(eunseo?.code === "eunseo", "eunseo_worker_code_should_be_eunseo");
+assert(eunseo?.name === "은서", "eunseo_worker_name_missing");
+assert(eunseo?.role === "녹화 프롬프터", "eunseo_worker_role_missing");
+assert(eunseo?.execution === "external_tool", "eunseo_execution_contract_missing");
+assert(eunseo?.type === "multi_channel", "eunseo_type_contract_missing");
+assert(eunseo?.access_policy === "makefamily_member", "eunseo_member_only_access_missing");
+assert(Array.isArray(eunseo?.execution_options) && eunseo.execution_options.length === 5, "eunseo_execution_options_missing");
+assert(eunseo.execution_options.some((option) => option.kind === "web_app" && option.primary === true && option.status === "available" && option.url === "/eunseo"), "eunseo_web_primary_option_missing");
+assert(eunseo.status === "available", "eunseo_status_available_missing");
+assert(eunseo.execution_options.some((option) => option.kind === "mac_download" && option.status === "available" && option.url === "/api/downloads/agent?platform=macos&product=eunseo"), "eunseo_mac_download_option_missing");
+assert(productCatalog.some((product) => product.product === "eunseo" && product.member_only === true && product.access_policy === "makefamily_member"), "eunseo_product_catalog_member_only_missing");
+assert(__catalogTest.canAccessEunseo({
+  status: "active",
+  account_segment: "makefamily_member",
+  must_change_password: false,
+  entitlements: { product: "eunseo", products: ["eunseo"], status: "active" },
+}), "makefamily_member_should_access_eunseo");
+assert(!__catalogTest.canAccessEunseo({
+  status: "active",
+  account_segment: "paid_buyer",
+  must_change_password: false,
+  entitlements: { product: "bundle", products: ["bundle"], status: "active" },
+}), "paid_bundle_should_not_access_eunseo");
 assert(__catalogTest.productList("bundle").includes("yunmi"), "bundle_should_include_yunmi_product");
 assert(__catalogTest.productList("bundle").includes("jieun"), "bundle_should_include_jieun_product");
 assert(__catalogTest.productList("blog_team").includes("yeri") && __catalogTest.productList("blog_team").includes("hyunju"), "blog_team_product_list_missing");
@@ -152,12 +177,18 @@ assert(nakyung?.setup_download_url === "https://api.aimax.ai.kr/downloads/Pencil
 assert(nakyung?.profile_image === "/assets/avatar_nakyung.jpg", "nakyung_profile_image_missing");
 
 const appHtml = fs.readFileSync("oracle/aimax-reports-api/static/app.html", "utf8");
+const adminHtml = fs.readFileSync("oracle/aimax-reports-api/static/admin.html", "utf8");
 const appJobKindKeys = extractObjectKeys(appHtml, "jobKinds");
 const serverJobKindKeys = Object.keys(jobKinds);
 assert(appHtml.includes("function staffCatalogEmployees()"), "staff_catalog_employees_helper_missing");
 assert(appHtml.includes("return staffCatalogEmployees().map(({ key, employee }) => [key, employee]).filter"), "staff_filter_should_use_full_catalog");
 assert(appHtml.includes("const entries = staffCatalogEmployees().map(({ key, employee }) => [key, employee]);"), "staff_counts_should_use_full_catalog");
 assert(appHtml.includes("sangsuClientEmail"), "sangsu_client_email_field_missing");
+assert(adminHtml.includes("function workerExecutionOptionsHtml(worker)"), "admin_worker_execution_options_missing");
+assert(adminHtml.includes("다중 실행"), "admin_multi_channel_label_missing");
+assert(adminHtml.includes("실행 옵션"), "admin_execution_options_label_missing");
+assert(adminHtml.includes("grantEunseoMembersBtn"), "admin_eunseo_member_grant_button_missing");
+assert(adminHtml.includes("원회원 전용"), "admin_member_only_label_missing");
 
 for (const kind of appJobKindKeys) {
   assert(serverJobKindKeys.includes(kind), `app_job_kind_not_in_server_catalog:${kind}`);

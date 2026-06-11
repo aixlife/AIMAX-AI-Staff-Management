@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101514">
+  <meta name="description" content="은서 녹화 프롬프터 - 카메라 근처 대본을 보며 촬영하는 웹 프롬프터">
+  <link rel="manifest" href="/eunseo/manifest.webmanifest">
+  <title>은서 녹화 프롬프터</title>
+  <style>
+    :root {
+      --ink: #f5f7f4;
+      --muted: #b5c0ba;
+      --panel: rgba(14, 19, 17, .72);
+      --panel-strong: rgba(9, 13, 12, .88);
+      --line: rgba(255, 255, 255, .15);
+      --brand: #18a38f;
+      --brand-dark: #0f6d61;
+      --amber: #f1b347;
+      --danger: #ff7a66;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background: #101514;
+      color: var(--ink);
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    button,
+    textarea,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .08);
+      color: var(--ink);
+      min-height: 40px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    button:hover {
+      border-color: rgba(255, 255, 255, .28);
+      background: rgba(255, 255, 255, .13);
+    }
+
+    button.primary {
+      border-color: rgba(24, 163, 143, .88);
+      background: var(--brand);
+      color: #07110f;
+      box-shadow: 0 10px 26px rgba(24, 163, 143, .24);
+    }
+
+    button.primary:hover {
+      background: #21b9a5;
+    }
+
+    button.danger {
+      border-color: rgba(255, 122, 102, .4);
+      color: #ffd5ce;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--brand);
+    }
+
+    .app {
+      position: relative;
+      width: 100vw;
+      height: 100dvh;
+      min-height: 540px;
+      overflow: hidden;
+      background:
+        linear-gradient(180deg, rgba(5, 7, 6, .58), rgba(5, 7, 6, .08) 32%, rgba(5, 7, 6, .6)),
+        #101514;
+    }
+
+    .camera {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #111816;
+      transform: scaleX(var(--mirror, 1));
+    }
+
+    .camera-placeholder {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+      color: #dce7df;
+      background:
+        linear-gradient(135deg, rgba(24, 163, 143, .22), rgba(241, 179, 71, .12)),
+        #111816;
+    }
+
+    .camera-placeholder strong {
+      display: block;
+      font-size: clamp(28px, 7vw, 72px);
+      line-height: 1.05;
+    }
+
+    .camera-placeholder span {
+      display: block;
+      margin-top: 12px;
+      color: #b5c0ba;
+      line-height: 1.55;
+    }
+
+    .topbar,
+    .controlbar {
+      position: absolute;
+      left: max(12px, env(safe-area-inset-left));
+      right: max(12px, env(safe-area-inset-right));
+      z-index: 8;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+    }
+
+    .topbar {
+      top: max(10px, env(safe-area-inset-top));
+      justify-content: space-between;
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(7, 10, 9, .64);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+    }
+
+    .brand img {
+      width: 34px;
+      height: 34px;
+      border-radius: 4px;
+      object-fit: cover;
+      background: #ffffff;
+    }
+
+    .brand strong,
+    .brand span {
+      display: block;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .brand strong {
+      font-size: 15px;
+    }
+
+    .brand span {
+      margin-top: 1px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .prompter-frame {
+      position: absolute;
+      z-index: 5;
+      left: 50%;
+      top: var(--prompter-top, 13%);
+      width: min(920px, calc(100vw - 28px));
+      max-height: min(58dvh, 560px);
+      transform: translateX(-50%);
+      border: 1px solid rgba(255, 255, 255, .2);
+      border-radius: 8px;
+      background: rgba(5, 9, 8, var(--overlay-alpha, .48));
+      backdrop-filter: blur(2px);
+      overflow: hidden;
+      box-shadow: 0 22px 80px rgba(0, 0, 0, .26);
+    }
+
+    .prompter-scroll {
+      height: min(48dvh, 460px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 44px clamp(18px, 5vw, 54px);
+      scroll-behavior: auto;
+      cursor: grab;
+    }
+
+    .prompter-scroll:active {
+      cursor: grabbing;
+    }
+
+    .script-text {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      text-align: center;
+      color: var(--ink);
+      font-size: var(--script-size, 34px);
+      line-height: 1.62;
+      font-weight: 780;
+      letter-spacing: 0;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, .62);
+    }
+
+    .focus-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 2px;
+      pointer-events: none;
+      background: linear-gradient(90deg, transparent, rgba(24, 163, 143, .72), transparent);
+      box-shadow: 0 0 18px rgba(24, 163, 143, .4);
+    }
+
+    .editor {
+      position: absolute;
+      z-index: 10;
+      left: 50%;
+      bottom: calc(max(12px, env(safe-area-inset-bottom)) + 90px);
+      width: min(820px, calc(100vw - 24px));
+      max-height: min(56dvh, 520px);
+      transform: translateX(-50%);
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-strong);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 22px 80px rgba(0, 0, 0, .34);
+    }
+
+    .editor.hidden {
+      display: none;
+    }
+
+    .editor-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .editor-head strong {
+      font-size: 15px;
+    }
+
+    .script-input {
+      width: 100%;
+      height: min(34dvh, 300px);
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .08);
+      color: var(--ink);
+      padding: 12px;
+      line-height: 1.55;
+      outline: none;
+    }
+
+    .script-input:focus {
+      border-color: rgba(24, 163, 143, .85);
+      box-shadow: 0 0 0 3px rgba(24, 163, 143, .18);
+    }
+
+    .controlbar {
+      bottom: max(12px, env(safe-area-inset-bottom));
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+    }
+
+    .control-group {
+      display: grid;
+      grid-template-columns: 68px minmax(84px, 150px);
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .status {
+      position: absolute;
+      z-index: 20;
+      left: 50%;
+      bottom: calc(max(12px, env(safe-area-inset-bottom)) + 76px);
+      transform: translateX(-50%);
+      max-width: calc(100vw - 24px);
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(5, 9, 8, .88);
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.45;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .28);
+    }
+
+    .status.hidden {
+      display: none;
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 720px) {
+      .app {
+        min-height: 100dvh;
+      }
+
+      .topbar {
+        align-items: flex-start;
+      }
+
+      .brand {
+        max-width: calc(100vw - 130px);
+      }
+
+      .top-actions button {
+        min-width: 42px;
+        padding: 8px 10px;
+      }
+
+      .prompter-frame {
+        top: var(--prompter-top, 10%);
+        width: calc(100vw - 16px);
+        max-height: 58dvh;
+      }
+
+      .prompter-scroll {
+        height: 52dvh;
+        padding: 46px 18px;
+      }
+
+      .script-text {
+        font-size: var(--script-size, 30px);
+        line-height: 1.68;
+      }
+
+      .controlbar {
+        justify-content: flex-start;
+        max-height: 36dvh;
+        overflow-y: auto;
+      }
+
+      .controlbar > button {
+        flex: 1 1 calc(33.333% - 8px);
+        min-width: 82px;
+      }
+
+      .control-group {
+        flex: 1 1 100%;
+        grid-template-columns: 58px minmax(0, 1fr);
+      }
+    }
+
+    @media (min-width: 1100px) {
+      .prompter-frame {
+        top: var(--prompter-top, 12%);
+      }
+
+      .controlbar {
+        width: min(980px, calc(100vw - 32px));
+        left: 50%;
+        right: auto;
+        transform: translateX(-50%);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" id="app">
+    <video id="camera" class="camera" playsinline autoplay muted></video>
+    <div id="cameraPlaceholder" class="camera-placeholder">
+      <div>
+        <strong>은서</strong>
+        <span>카메라 권한을 허용하면 촬영 화면 위에서 대본을 읽을 수 있습니다.</span>
+      </div>
+    </div>
+
+    <div class="topbar">
+      <div class="brand">
+        <img src="/assets/avatar_eunseo.jpg" alt="은서 프로필">
+        <span>
+          <strong>은서 프롬프터</strong>
+          <span id="cameraState">카메라 준비 중</span>
+        </span>
+      </div>
+      <div class="top-actions">
+        <button id="switchCameraBtn" type="button" title="카메라 전환">전환</button>
+        <button id="mirrorBtn" type="button" title="좌우 반전">미러</button>
+        <button id="fullscreenBtn" type="button" title="전체화면">전체</button>
+      </div>
+    </div>
+
+    <section class="prompter-frame" aria-label="프롬프터">
+      <div id="prompterScroll" class="prompter-scroll" tabindex="0">
+        <div id="scriptText" class="script-text"></div>
+      </div>
+      <div class="focus-line" aria-hidden="true"></div>
+    </section>
+
+    <section id="editor" class="editor hidden" aria-label="대본 편집">
+      <div class="editor-head">
+        <strong>대본</strong>
+        <span id="scriptCount" class="count">0자</span>
+      </div>
+      <textarea id="scriptInput" class="script-input" placeholder="여기에 대본을 붙여 넣으세요."></textarea>
+      <div class="top-actions">
+        <button id="clearBtn" class="danger" type="button">지우기</button>
+        <button id="closeEditorBtn" class="primary" type="button">적용</button>
+      </div>
+    </section>
+
+    <div id="status" class="status hidden" role="status"></div>
+
+    <nav class="controlbar" aria-label="프롬프터 제어">
+      <button id="playBtn" class="primary" type="button">재생</button>
+      <button id="editBtn" type="button">대본</button>
+      <button id="resetBtn" type="button">처음</button>
+      <button id="upBtn" type="button">위</button>
+      <button id="downBtn" type="button">아래</button>
+      <label class="control-group">
+        <span>속도</span>
+        <input id="speedRange" type="range" min="0" max="120" value="26">
+      </label>
+      <label class="control-group">
+        <span>글자</span>
+        <input id="fontRange" type="range" min="22" max="64" value="34">
+      </label>
+      <label class="control-group">
+        <span>투명</span>
+        <input id="opacityRange" type="range" min="18" max="82" value="48">
+      </label>
+      <label class="control-group">
+        <span>위치</span>
+        <input id="positionRange" type="range" min="6" max="34" value="13">
+      </label>
+    </nav>
+  </main>
+
+  <script>
+    (() => {
+      const storageKey = "aimax_eunseo_web_prompter_v1";
+      const camera = document.querySelector("#camera");
+      const cameraPlaceholder = document.querySelector("#cameraPlaceholder");
+      const cameraState = document.querySelector("#cameraState");
+      const scriptText = document.querySelector("#scriptText");
+      const scriptInput = document.querySelector("#scriptInput");
+      const scriptCount = document.querySelector("#scriptCount");
+      const editor = document.querySelector("#editor");
+      const scrollBox = document.querySelector("#prompterScroll");
+      const status = document.querySelector("#status");
+      const root = document.documentElement;
+      const state = {
+        playing: false,
+        facingMode: "user",
+        stream: null,
+        lastTs: 0,
+        script: "",
+        speed: 26,
+        fontSize: 34,
+        opacity: 48,
+        position: 13,
+        mirrored: true,
+      };
+
+      const sampleScript = [
+        "안녕하세요. 오늘은 은서 프롬프터를 테스트합니다.",
+        "",
+        "카메라 근처에 대본이 천천히 올라오면 시선은 화면 중앙에 두고 자연스럽게 읽으면 됩니다.",
+        "",
+        "속도, 글자 크기, 투명도, 위치는 아래에서 바로 조절할 수 있습니다.",
+      ].join("\n");
+
+      function loadState() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+          Object.assign(state, {
+            script: typeof saved.script === "string" ? saved.script : sampleScript,
+            speed: Number.isFinite(Number(saved.speed)) ? Number(saved.speed) : state.speed,
+            fontSize: Number.isFinite(Number(saved.fontSize)) ? Number(saved.fontSize) : state.fontSize,
+            opacity: Number.isFinite(Number(saved.opacity)) ? Number(saved.opacity) : state.opacity,
+            position: Number.isFinite(Number(saved.position)) ? Number(saved.position) : state.position,
+            mirrored: typeof saved.mirrored === "boolean" ? saved.mirrored : state.mirrored,
+          });
+        } catch (_error) {
+          state.script = sampleScript;
+        }
+      }
+
+      function saveState() {
+        localStorage.setItem(storageKey, JSON.stringify({
+          script: state.script,
+          speed: state.speed,
+          fontSize: state.fontSize,
+          opacity: state.opacity,
+          position: state.position,
+          mirrored: state.mirrored,
+        }));
+      }
+
+      function setStatus(message) {
+        status.textContent = message;
+        status.classList.remove("hidden");
+        window.clearTimeout(setStatus.timer);
+        setStatus.timer = window.setTimeout(() => status.classList.add("hidden"), 2200);
+      }
+
+      function applyState() {
+        scriptText.textContent = state.script || "대본 버튼을 눌러 내용을 붙여 넣으세요.";
+        scriptInput.value = state.script;
+        scriptCount.textContent = `${state.script.length.toLocaleString("ko-KR")}자`;
+        document.querySelector("#speedRange").value = String(state.speed);
+        document.querySelector("#fontRange").value = String(state.fontSize);
+        document.querySelector("#opacityRange").value = String(state.opacity);
+        document.querySelector("#positionRange").value = String(state.position);
+        root.style.setProperty("--script-size", `${state.fontSize}px`);
+        root.style.setProperty("--overlay-alpha", String(state.opacity / 100));
+        root.style.setProperty("--prompter-top", `${state.position}%`);
+        root.style.setProperty("--mirror", state.mirrored ? "-1" : "1");
+        document.querySelector("#playBtn").textContent = state.playing ? "정지" : "재생";
+        document.querySelector("#mirrorBtn").textContent = state.mirrored ? "미러 ON" : "미러 OFF";
+        saveState();
+      }
+
+      async function startCamera() {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          cameraState.textContent = "카메라 미지원";
+          setStatus("이 브라우저에서는 카메라를 열 수 없습니다.");
+          return;
+        }
+        if (state.stream) {
+          state.stream.getTracks().forEach((track) => track.stop());
+          state.stream = null;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: state.facingMode,
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+          state.stream = stream;
+          camera.srcObject = stream;
+          cameraPlaceholder.style.display = "none";
+          cameraState.textContent = state.facingMode === "user" ? "전면 카메라" : "후면 카메라";
+        } catch (error) {
+          cameraState.textContent = "카메라 대기";
+          cameraPlaceholder.style.display = "grid";
+          setStatus(error?.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : "카메라를 열지 못했습니다.");
+        }
+      }
+
+      function step(timestamp) {
+        if (!state.lastTs) state.lastTs = timestamp;
+        const delta = timestamp - state.lastTs;
+        state.lastTs = timestamp;
+        if (state.playing) {
+          scrollBox.scrollTop += (state.speed * delta) / 1000;
+          const atEnd = scrollBox.scrollTop + scrollBox.clientHeight >= scrollBox.scrollHeight - 4;
+          if (atEnd) {
+            state.playing = false;
+            state.lastTs = 0;
+            applyState();
+            setStatus("대본 끝에 도착했습니다.");
+          }
+        }
+        window.requestAnimationFrame(step);
+      }
+
+      function togglePlay() {
+        state.playing = !state.playing;
+        state.lastTs = 0;
+        applyState();
+      }
+
+      function openEditor() {
+        editor.classList.remove("hidden");
+        scriptInput.focus();
+      }
+
+      function closeEditor() {
+        state.script = scriptInput.value.trim() || "";
+        editor.classList.add("hidden");
+        applyState();
+      }
+
+      function manualScroll(amount) {
+        scrollBox.scrollBy({ top: amount, behavior: "smooth" });
+      }
+
+      document.querySelector("#playBtn").addEventListener("click", togglePlay);
+      document.querySelector("#editBtn").addEventListener("click", openEditor);
+      document.querySelector("#closeEditorBtn").addEventListener("click", closeEditor);
+      document.querySelector("#resetBtn").addEventListener("click", () => {
+        state.playing = false;
+        scrollBox.scrollTo({ top: 0, behavior: "smooth" });
+        applyState();
+      });
+      document.querySelector("#upBtn").addEventListener("click", () => manualScroll(-160));
+      document.querySelector("#downBtn").addEventListener("click", () => manualScroll(160));
+      document.querySelector("#clearBtn").addEventListener("click", () => {
+        scriptInput.value = "";
+        state.script = "";
+        applyState();
+      });
+      document.querySelector("#switchCameraBtn").addEventListener("click", () => {
+        state.facingMode = state.facingMode === "user" ? "environment" : "user";
+        state.mirrored = state.facingMode === "user";
+        applyState();
+        startCamera();
+      });
+      document.querySelector("#mirrorBtn").addEventListener("click", () => {
+        state.mirrored = !state.mirrored;
+        applyState();
+      });
+      document.querySelector("#fullscreenBtn").addEventListener("click", async () => {
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen();
+          } else {
+            await document.querySelector("#app").requestFullscreen();
+          }
+        } catch (_error) {
+          setStatus("전체화면 전환을 사용할 수 없습니다.");
+        }
+      });
+      document.querySelector("#speedRange").addEventListener("input", (event) => {
+        state.speed = Number(event.target.value);
+        applyState();
+      });
+      document.querySelector("#fontRange").addEventListener("input", (event) => {
+        state.fontSize = Number(event.target.value);
+        applyState();
+      });
+      document.querySelector("#opacityRange").addEventListener("input", (event) => {
+        state.opacity = Number(event.target.value);
+        applyState();
+      });
+      document.querySelector("#positionRange").addEventListener("input", (event) => {
+        state.position = Number(event.target.value);
+        applyState();
+      });
+      scriptInput.addEventListener("input", () => {
+        scriptCount.textContent = `${scriptInput.value.length.toLocaleString("ko-KR")}자`;
+      });
+      document.addEventListener("keydown", (event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+          event.preventDefault();
+          togglePlay();
+        }
+        if (event.key === "Escape" && !editor.classList.contains("hidden")) closeEditor();
+      });
+
+      loadState();
+      applyState();
+      startCamera();
+      window.requestAnimationFrame(step);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/eunseo/sw.js").catch(() => {});
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -94,6 +94,38 @@ const USD_KRW_RATE_LABEL = String(process.env.AIMAX_USD_KRW_RATE_LABEL || "2026-
 const SONGI_APIFY_INSTAGRAM_ACTOR = String(process.env.AIMAX_SONGI_APIFY_INSTAGRAM_ACTOR || "apify/instagram-reel-scraper").trim();
 const SONGI_APIFY_INSTAGRAM_PROFILE_ACTOR = String(process.env.AIMAX_SONGI_APIFY_INSTAGRAM_PROFILE_ACTOR || "apify/instagram-profile-scraper").trim();
 const SONGI_APIFY_TIKTOK_ACTOR = String(process.env.AIMAX_SONGI_APIFY_TIKTOK_ACTOR || "clockworks/tiktok-video-scraper").trim();
+const SONGI_APIFY_DISCOVERY_ACTORS = {
+  instagram: String(process.env.AIMAX_SONGI_APIFY_DISCOVERY_INSTAGRAM_ACTOR || "apify/instagram-hashtag-scraper").trim(),
+  tiktok: String(process.env.AIMAX_SONGI_APIFY_DISCOVERY_TIKTOK_ACTOR || "clockworks/tiktok-scraper").trim(),
+  threads: String(process.env.AIMAX_SONGI_APIFY_DISCOVERY_THREADS_ACTOR || "automation-lab/threads-scraper").trim(),
+  meta_ads: String(process.env.AIMAX_SONGI_APIFY_DISCOVERY_META_ADS_ACTOR || "curious_coder/facebook-ads-library-scraper").trim(),
+};
+const SONGI_APIFY_DISCOVERY_PRICING_USD = (() => {
+  const defaults = {
+    instagram: { start: 0.005, per_result: 0.0026 },
+    tiktok: { start: 0.012, per_result: 0.0017 },
+    threads: { start: 0.01, per_result: 0.002 },
+    meta_ads: { start: 0.005, per_result: 0.00075 },
+  };
+  const raw = String(process.env.AIMAX_SONGI_APIFY_DISCOVERY_PRICING_USD || "").trim();
+  if (!raw) return defaults;
+  try {
+    const parsed = JSON.parse(raw);
+    for (const key of Object.keys(defaults)) {
+      if (parsed[key] && typeof parsed[key] === "object") {
+        defaults[key] = {
+          start: Number(parsed[key].start ?? defaults[key].start) || 0,
+          per_result: Number(parsed[key].per_result ?? defaults[key].per_result) || 0,
+        };
+      }
+    }
+  } catch (_error) {
+    console.warn("[songi] AIMAX_SONGI_APIFY_DISCOVERY_PRICING_USD JSON 파싱 실패, 기본 단가 사용");
+  }
+  return defaults;
+})();
+const SONGI_APIFY_DISCOVERY_PLATFORMS = new Set(Object.keys(SONGI_APIFY_DISCOVERY_ACTORS));
+const SONGI_META_ADS_MIN_RESULTS = 10;
 const SONGI_YTDLP_FALLBACK = "yt-dlp";
 const SONGI_FFMPEG_FALLBACK = "ffmpeg";
 const SONGI_SERVER_YTDLP_DISCOVERY_ENABLED = String(process.env.AIMAX_SONGI_SERVER_YTDLP_DISCOVERY_ENABLED || "1").trim() !== "0";
@@ -128,8 +160,12 @@ const APP_HTML_PATH = path.join(STATIC_DIR, "app.html");
 const ADMIN_HTML_PATH = path.join(STATIC_DIR, "admin.html");
 const SETUP_HTML_PATH = path.join(STATIC_DIR, "setup.html");
 const ADMIN_COOKIE_NAME = "aimax_admin_session";
-const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
+const EUNSEO_ACCESS_COOKIE_NAME = "aimax_eunseo_access";
+const EUNSEO_ACCESS_TTL_MS = Number(process.env.AIMAX_EUNSEO_ACCESS_TTL_MS || 6 * 60 * 60 * 1000);
+const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "eunseo", "blog_team", "bundle"];
 const PRODUCTS = new Set(PRODUCT_ORDER);
+const MEMBER_ONLY_PRODUCTS = new Set(["eunseo"]);
+const BUNDLE_PRODUCTS = PRODUCT_ORDER.filter((product) => !MEMBER_ONLY_PRODUCTS.has(product));
 const ACCOUNT_SEGMENTS = new Set(["paid_buyer", "makefamily_member", "member_and_buyer", "test", "operator"]);
 const ACCOUNT_SEGMENT_LABELS = {
   paid_buyer: "AIMAX 유료 구매자",
@@ -224,7 +260,7 @@ const WORKERS = {
     requiredSettings: ["naver_account", "ai_key"],
     profileImage: "/assets/avatar_yeri.jpg",
     avatarImage: "/assets/avatar_yeri_circle.png",
-    shortDescription: "키워드와 CTA를 바탕으로 네이버 블로그 글을 작성하고 임시 저장, 즉시 발행, 예약 발행 흐름으로 넘깁니다.",
+    shortDescription: "키워드와 CTA를 받아 검색에 걸리는 블로그 글로 정리하고, 임시 저장·즉시 발행·예약 발행 흐름까지 넘깁니다.",
     capabilities: ["글쓰기", "CTA", "예약 발행"],
   },
   hyunju_sales: {
@@ -241,7 +277,7 @@ const WORKERS = {
     requiredSettings: ["naver_account", "neighbor_messages"],
     profileImage: "/assets/avatar_hyunju.jpg",
     avatarImage: "/assets/avatar_hyunju_circle.png",
-    shortDescription: "검색 키워드로 잠재 고객을 찾고, 설정한 신청 수와 속도에 맞춰 서로이웃 신청 작업을 로컬 실행기로 넘깁니다.",
+    shortDescription: "검색 키워드에서 잠재 고객을 찾고, 설정한 신청 수와 안전 속도에 맞춰 서로이웃 첫인사를 보냅니다.",
     capabilities: ["고객 찾기", "서로이웃", "안전 속도"],
   },
   nakyung_pencil: {
@@ -267,7 +303,7 @@ const WORKERS = {
     downloadLabel: "Setup exe 다운로드",
     supportedPlatforms: ["windows"],
     version: "1.0.0",
-    shortDescription: "화면 위에 자유롭게 판서하고 같은 와이파이에서 실시간으로 공유할 수 있는 Windows 전용 데스크톱 판서 직원입니다.",
+    shortDescription: "강의와 회의 화면 위에 바로 밑줄을 긋고, 같은 와이파이에서 실시간으로 공유하는 Windows 판서 직원입니다.",
     capabilities: ["전체화면 판서", "실시간 공유", "형광펜/도형/텍스트", "스포트라이트"],
   },
   hyunseong_pm: {
@@ -286,7 +322,7 @@ const WORKERS = {
     profileImage: "/assets/avatar_hyunseong.jpg",
     avatarImage: "/assets/avatar_hyunseong.jpg",
     repoUrl: "https://github.com/makefamily/Project-manager",
-    shortDescription: "프로젝트 진행 상황과 할 일을 정리해줄 PM 직원입니다. 기능 연결 전이라 기본 설정이 필요한 상태로 먼저 등록했습니다.",
+    shortDescription: "흩어진 할 일과 진행 상황을 줄 세우는 PM 직원입니다. 정식 배치 전이라 기능 연결을 준비 중입니다.",
     capabilities: ["프로젝트 관리", "일정 정리", "기능 준비 중"],
   },
   sangsu_quote_generator: {
@@ -305,7 +341,7 @@ const WORKERS = {
     moduleKey: "quote_generator",
     profileImage: "/assets/avatar_sangsu.jpg",
     avatarImage: "/assets/avatar_sangsu.jpg",
-    shortDescription: "상호, 작업 항목, 금액, 유의사항을 입력하면 브라우저에서 바로 견적서를 작성하고 PDF 저장용 인쇄 화면으로 넘깁니다.",
+    shortDescription: "상호, 작업 항목, 금액, 유의사항을 보기 좋은 견적서로 정리하고 PDF 저장용 인쇄 화면으로 넘깁니다.",
     capabilities: ["견적서 작성", "로고 업로드", "PDF 저장"],
   },
   yunmi_script_writer: {
@@ -325,7 +361,7 @@ const WORKERS = {
     profileImage: "/assets/avatar_yunmi.jpg",
     avatarImage: "/assets/avatar_yunmi.jpg",
     repoUrl: "https://github.com/makefamily/script-writer",
-    shortDescription: "주제와 목적을 받아 A/B/C 타깃별 숏폼 스크립트 1안/2안/3안을 만들어주는 스크립트작가 직원입니다.",
+    shortDescription: "주제와 목적을 받아 A/B/C 타깃별 숏폼 대본, 촬영 가이드, CTA 후보를 나눠 쓰는 스크립트작가입니다.",
     capabilities: ["숏폼 후킹 설계", "시간대별 대본", "촬영 가이드", "CTA 후보"],
   },
   songi_data_research: {
@@ -345,7 +381,7 @@ const WORKERS = {
     profileImage: "/assets/avatar_songi.jpg",
     avatarImage: "/assets/avatar_songi.jpg",
     repoUrl: "https://github.com/makefamily/data-research",
-    shortDescription: "URL과 메모를 받아 근거, 태그, 핵심 포인트를 정리하고 다음 제작 직원에게 넘길 리서치 브리프를 만듭니다.",
+    shortDescription: "URL과 메모를 읽고 근거, 태그, 핵심 포인트를 정리해 다음 제작 직원이 바로 쓰는 브리프로 넘깁니다.",
     capabilities: ["자료조사", "태그 정리", "브리프 생성"],
   },
   jieun_office_support: {
@@ -371,8 +407,75 @@ const WORKERS = {
     downloadLabel: "Setup exe 다운로드",
     supportedPlatforms: ["windows"],
     version: "0.1.6",
-    shortDescription: "화면 캡처, 캡처 이미지 모자이크, Windows 종료, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
+    shortDescription: "캡처, 모자이크, OCR, 화면 녹화, Windows 종료처럼 자주 쓰는 사무 작업을 조용히 처리하는 데스크톱 직원입니다.",
     capabilities: ["화면 캡처", "캡처 이미지 모자이크", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+  },
+  eunseo: {
+    code: "eunseo",
+    staffCode: "eunseo",
+    name: "은서",
+    label: "은서",
+    role: "녹화 프롬프터",
+    category: "content",
+    product: "eunseo",
+    jobKind: "",
+    execution: "external_tool",
+    type: "multi_channel",
+    status: "available",
+    accessPolicy: "makefamily_member",
+    requiredSettings: [],
+    moduleKey: "prompter",
+    profileImage: "/assets/avatar_eunseo.jpg",
+    avatarImage: "/assets/avatar_eunseo.jpg",
+    shortDescription: "모바일에서는 카메라 근처 대본을 띄우고, PC에서는 화면녹화용 프롬프터로 출근하는 다중 실행형 직원입니다.",
+    capabilities: ["웹 프롬프터", "Mac 앱", "모바일 촬영", "Toss 미니앱 준비"],
+    executionOptions: [
+      {
+        kind: "web_app",
+        label: "웹에서 바로 사용",
+        platforms: ["web"],
+        status: "available",
+        url: "/eunseo",
+        primary: true,
+        description: "브라우저에서 바로 여는 모바일/PC 공용 프롬프터입니다.",
+      },
+      {
+        kind: "mac_download",
+        label: "Mac 앱 다운로드",
+        platforms: ["macos"],
+        status: "available",
+        url: "/api/downloads/agent?platform=macos&product=eunseo",
+        primary: false,
+        description: "Mac 화면녹화용 로컬 앱입니다. 숨김 여부는 녹화 프로그램별로 실측 확인이 필요합니다.",
+      },
+      {
+        kind: "windows_download",
+        label: "Windows 앱",
+        platforms: ["windows"],
+        status: "coming_soon",
+        url: "",
+        primary: false,
+        description: "Windows 화면녹화용 앱은 준비 중입니다.",
+      },
+      {
+        kind: "android_apk",
+        label: "Android APK",
+        platforms: ["android"],
+        status: "testing",
+        url: "",
+        primary: false,
+        description: "Android 설치 파일은 실기기 검증 후 공개 다운로드로 연결합니다.",
+      },
+      {
+        kind: "toss_mini",
+        label: "Toss 미니앱",
+        platforms: ["ios", "android"],
+        status: "coming_soon",
+        url: "",
+        primary: false,
+        description: "토스 앱 안에서 실행하는 미니앱 버전입니다. 앱인토스 검수 후 활성화됩니다.",
+      },
+    ],
   },
 };
 const JOB_KINDS = {
@@ -412,6 +515,7 @@ const DOWNLOAD_CATALOG = {
     bundle: { filename: "aimax-bundle-macos.dmg", label: "AIMAX 통합 macOS 설치 파일" },
     yeri: { filename: "aimax-yeri-macos.dmg", label: "AIMAX 예리 macOS 설치 파일" },
     hyunju: { filename: "aimax-hyunju-macos.dmg", label: "AIMAX 현주 macOS 설치 파일" },
+    eunseo: { filename: "EunseoPrompter-mac-0.1.0.zip", label: "은서 Mac 프롬프터 앱" },
   },
   windows: {
     bundle: { filename: "aimax-bundle-windows.exe", label: "AIMAX 통합 Windows 설치 파일" },
@@ -429,6 +533,7 @@ const PUBLIC_DOWNLOAD_FILES = new Set([
 ]);
 const researchPaidLocks = new Map();
 const downloadTickets = new Map();
+const eunseoLaunchTickets = new Map();
 const JOB_STATUSES = new Set(["queued", "generating", "ready_for_publish", "running", "done", "failed", "cancelled"]);
 const TERMINAL_JOB_STATUSES = new Set(["done", "failed", "cancelled"]);
 const AGENT_CLAIMABLE_JOB_STATUSES = new Set([
@@ -971,7 +1076,7 @@ function isValidEmail(email) {
 
 function productList(product) {
   if (product === "blog_team") return ["yeri", "hyunju", "blog_team"];
-  if (product === "bundle") return [...PRODUCT_ORDER];
+  if (product === "bundle") return [...BUNDLE_PRODUCTS];
   return [product];
 }
 
@@ -2515,6 +2620,16 @@ function adminProductCatalog() {
       download_product: "",
     },
     {
+      product: "eunseo",
+      label: "은서",
+      price_won: 0,
+      products: productList("eunseo"),
+      job_kinds: [],
+      download_product: "eunseo",
+      access_policy: "makefamily_member",
+      member_only: true,
+    },
+    {
       product: "blog_team",
       label: "블로그팀",
       price_won: 66000,
@@ -3296,6 +3411,9 @@ function researchIntegrationStatus(options = {}) {
         instagram_profile: SONGI_APIFY_INSTAGRAM_PROFILE_ACTOR,
         tiktok: SONGI_APIFY_TIKTOK_ACTOR,
       },
+      discovery_actors: { ...SONGI_APIFY_DISCOVERY_ACTORS },
+      discovery_pricing_usd: { ...SONGI_APIFY_DISCOVERY_PRICING_USD },
+      discovery_min_results: { meta_ads: SONGI_META_ADS_MIN_RESULTS },
     },
   };
 }
@@ -3474,6 +3592,7 @@ function publicResearchDiscoveryRun(run) {
     project_id: run.project_id,
     keyword: run.keyword || "",
     platform: run.platform || "youtube",
+    sort_mode: run.sort_mode || "",
     date_range_days: run.date_range_days || 30,
     region_code: run.region_code || "",
     relevance_language: run.relevance_language || "",
@@ -3520,6 +3639,17 @@ function pruneResearchDiscovery(research) {
   research.discovery_runs = (Array.isArray(research.discovery_runs) ? research.discovery_runs : [])
     .filter((run) => !run.expires_at || Date.parse(run.expires_at) > now)
     .slice(-80);
+  const staleRunningBefore = now - 10 * 60 * 1000;
+  for (const run of research.discovery_runs) {
+    if (String(run.status || "") !== "running" || !/^server_/.test(String(run.source_mode || ""))) continue;
+    const updatedAt = Date.parse(run.updated_at || run.created_at || "");
+    if (Number.isFinite(updatedAt) && updatedAt < staleRunningBefore) {
+      run.status = "failed";
+      run.error = run.error || "research_discovery_timeout";
+      run.error_detail = run.error_detail || "서버가 이 수집 실행을 더 이상 추적하지 못해 실패로 정리했습니다. 다시 시도해주세요.";
+      run.updated_at = nowIso();
+    }
+  }
   for (const run of research.discovery_runs) activeRuns.add(run.id);
   research.discovery_candidates = (Array.isArray(research.discovery_candidates) ? research.discovery_candidates : [])
     .filter((candidate) => activeRuns.has(candidate.run_id) && (!candidate.expires_at || Date.parse(candidate.expires_at) > now))
@@ -4076,6 +4206,428 @@ async function runApifyCollection(config, token, existingRunId = "") {
 
 async function runApifyResearchCollection(url, token, existingRunId = "") {
   return runApifyCollection(apifyRunConfigForUrl(url), token, existingRunId);
+}
+
+const SONGI_DISCOVERY_PLATFORM_LABELS = {
+  youtube: "YouTube",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  threads: "Threads",
+  meta_ads: "Meta 광고",
+};
+
+function songiDiscoveryHashtag(keyword) {
+  return String(keyword || "")
+    .replace(/^#+/, "")
+    .replace(/[!?.,:;\-+=*&%$#@/\\~^|<>()[\]{}"'`\s]+/g, "")
+    .trim();
+}
+
+function songiApifyDiscoveryConfig(platform, keyword, maxResults) {
+  const actorId = SONGI_APIFY_DISCOVERY_ACTORS[platform];
+  if (!actorId) return null;
+  const trimmedKeyword = compactText(keyword, 120);
+  if (platform === "instagram") {
+    const hashtag = songiDiscoveryHashtag(trimmedKeyword);
+    if (!hashtag) return null;
+    return { actorId, input: { hashtags: [hashtag], resultsLimit: maxResults }, query: `#${hashtag}` };
+  }
+  if (platform === "tiktok") {
+    const hashtag = songiDiscoveryHashtag(trimmedKeyword);
+    const singleToken = hashtag && !/\s/.test(trimmedKeyword);
+    return singleToken
+      ? { actorId, input: { hashtags: [hashtag], resultsPerPage: maxResults }, query: `#${hashtag}` }
+      : { actorId, input: { searchQueries: [trimmedKeyword], resultsPerPage: maxResults }, query: trimmedKeyword };
+  }
+  if (platform === "threads") {
+    return { actorId, input: { mode: "search", searchQueries: [trimmedKeyword], maxPosts: maxResults }, query: trimmedKeyword };
+  }
+  if (platform === "meta_ads") {
+    const libraryUrl = new URL("https://www.facebook.com/ads/library/");
+    libraryUrl.searchParams.set("active_status", "active");
+    libraryUrl.searchParams.set("ad_type", "all");
+    libraryUrl.searchParams.set("country", "KR");
+    libraryUrl.searchParams.set("q", trimmedKeyword);
+    libraryUrl.searchParams.set("search_type", "keyword_unordered");
+    return {
+      actorId,
+      input: { urls: [{ url: libraryUrl.toString() }], count: Math.max(SONGI_META_ADS_MIN_RESULTS, maxResults) },
+      query: trimmedKeyword,
+    };
+  }
+  return null;
+}
+
+async function fetchApifyDiscoveryItems(datasetId, token, limit = 12) {
+  const safeLimit = Math.max(1, Math.min(25, Number(limit || 12)));
+  const endpoint = `https://api.apify.com/v2/datasets/${encodeURIComponent(datasetId)}/items?clean=true&limit=${encodeURIComponent(safeLimit)}`;
+  const response = await requestExternalJson(endpoint, {
+    headers: { authorization: `Bearer ${token}` },
+    timeoutMs: 30000,
+    maxBytes: 8 * 1024 * 1024,
+  });
+  return Array.isArray(response.json) ? response.json : [];
+}
+
+async function runSongiApifyDiscovery(config, token, limit, options = {}) {
+  const existingRunId = compactText(options.existingRunId, 120);
+  const startedRun = existingRunId ? await getApifyRun(existingRunId, token, 0) : await startApifyActorRun(config, token);
+  const runId = startedRun.id || existingRunId;
+  if (!runId) {
+    throw blockedResearchFetchError("research_apify_run_missing", "Apify 실행 ID를 받지 못했습니다.");
+  }
+  if (typeof options.onRunStarted === "function") {
+    try { options.onRunStarted(String(runId)); } catch (_error) {}
+  }
+  const finishedRun = apifyTerminalStatus(startedRun.status) ? startedRun : await waitForApifyRun(runId, token);
+  if (String(finishedRun.status || "").toUpperCase() !== "SUCCEEDED") {
+    const error = blockedResearchFetchError("research_apify_run_failed", "Apify 수집 실행이 실패했습니다.");
+    error.run = finishedRun;
+    throw error;
+  }
+  const datasetId = finishedRun.defaultDatasetId || startedRun.defaultDatasetId || "";
+  const items = datasetId ? await fetchApifyDiscoveryItems(datasetId, token, limit) : [];
+  return { run: finishedRun, items };
+}
+
+function safeExternalHttpUrl(value, maxLength = 1000) {
+  const text = compactText(value, maxLength);
+  if (!text) return "";
+  try {
+    const parsed = new URL(text);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+    return parsed.toString();
+  } catch (_error) {
+    return "";
+  }
+}
+
+function songiDiscoveryAgeHours(publishedAt) {
+  const time = Date.parse(publishedAt || "");
+  if (!Number.isFinite(time)) return null;
+  return Math.max(0, (Date.now() - time) / (60 * 60 * 1000));
+}
+
+function songiApifyDiscoveryRows(platform, keyword, items) {
+  const rows = [];
+  for (const item of Array.isArray(items) ? items : []) {
+    if (!item || typeof item !== "object" || item.error) continue;
+    if (platform === "tiktok") {
+      const url = compactText(item.webVideoUrl, 1000);
+      if (!url) continue;
+      const plays = parseCount(item.playCount);
+      const likes = parseCount(item.diggCount);
+      const comments = parseCount(item.commentCount);
+      const shares = parseCount(item.shareCount);
+      rows.push({
+        platform: "TikTok",
+        url,
+        title: compactText(item.text, 120) || "TikTok 영상",
+        creator: compactText(item.authorMeta?.name, 80),
+        description: compactText(item.text, 500),
+        thumbnail_url: compactText(item.videoMeta?.coverUrl, 1000),
+        published_at: compactText(item.createTimeISO, 40),
+        content_format: "tiktok_video",
+        metrics: {
+          view_count: plays,
+          like_count: likes,
+          comment_count: comments,
+          share_count: shares,
+          save_count: parseCount(item.collectCount),
+          duration_seconds: Math.round(Number(item.videoMeta?.duration || 0)),
+          is_short_form: true,
+          engagement_rate: plays > 0 ? (likes + comments + shares) / plays : 0,
+          language: compactText(item.textLanguage, 12),
+        },
+      });
+      continue;
+    }
+    if (platform === "threads") {
+      const url = compactText(item.url, 1000);
+      if (!url) continue;
+      rows.push({
+        platform: "Threads",
+        url,
+        title: compactText(item.text, 120) || "Threads 게시물",
+        creator: compactText(item.fullName || item.username, 80),
+        description: compactText(item.text, 500),
+        thumbnail_url: "",
+        published_at: compactText(item.date, 40),
+        content_format: "threads_post",
+        metrics: {
+          like_count: parseCount(item.likeCount),
+          comment_count: parseCount(item.replyCount),
+          share_count: parseCount(item.repostCount) + parseCount(item.quoteCount),
+          media_type: compactText(item.mediaType, 20),
+        },
+      });
+      continue;
+    }
+    if (platform === "instagram") {
+      const url = compactText(item.url, 1000);
+      if (!url) continue;
+      const views = parseCount(item.videoViewCount || item.videoPlayCount);
+      const likes = parseCount(item.likesCount);
+      const comments = parseCount(item.commentsCount);
+      rows.push({
+        platform: "Instagram",
+        url,
+        title: compactText(item.caption, 120) || "Instagram 게시물",
+        creator: compactText(item.ownerFullName || item.ownerUsername, 80),
+        description: compactText(item.caption, 500),
+        thumbnail_url: compactText(item.displayUrl || (Array.isArray(item.images) ? item.images[0] : ""), 1000),
+        published_at: compactText(item.timestamp, 40),
+        content_format: String(item.type || "").toLowerCase() === "video" ? "instagram_reel" : "instagram_post",
+        metrics: {
+          view_count: views,
+          like_count: likes,
+          comment_count: comments,
+          is_short_form: String(item.type || "").toLowerCase() === "video",
+          engagement_rate: views > 0 ? (likes + comments) / views : 0,
+        },
+      });
+      continue;
+    }
+    if (platform === "meta_ads") {
+      const snapshot = item.snapshot && typeof item.snapshot === "object" ? item.snapshot : {};
+      const bodyText = compactText(snapshot.body?.text, 500);
+      const url = compactText(item.ad_library_url || item.url, 1000)
+        || (item.ad_archive_id ? `https://www.facebook.com/ads/library/?id=${encodeURIComponent(item.ad_archive_id)}` : "");
+      if (!url) continue;
+      const firstVideo = Array.isArray(snapshot.videos) ? snapshot.videos[0] : null;
+      const firstImage = Array.isArray(snapshot.images) ? snapshot.images[0] : null;
+      const publishedAt = compactText(item.start_date_formatted, 40)
+        || (Number(item.start_date) ? new Date(Number(item.start_date) * 1000).toISOString() : "");
+      rows.push({
+        platform: "Meta 광고",
+        url,
+        title: compactText(snapshot.title, 120) || bodyText.slice(0, 120) || `${compactText(item.page_name, 60) || "광고주"} 광고`,
+        creator: compactText(item.page_name || snapshot.page_name, 80),
+        description: cleanMultilineText([
+          bodyText,
+          snapshot.cta_text ? `CTA: ${compactText(snapshot.cta_text, 60)}` : "",
+          snapshot.link_url ? `랜딩: ${compactText(snapshot.link_url, 200)}` : "",
+        ].filter(Boolean).join("\n"), 600),
+        thumbnail_url: compactText(
+          firstVideo?.video_preview_image_url || (typeof firstImage === "string" ? firstImage : firstImage?.original_image_url || firstImage?.resized_image_url) || snapshot.page_profile_picture_url,
+          1000,
+        ),
+        published_at: publishedAt,
+        content_format: String(snapshot.display_format || "").toLowerCase() === "video" ? "meta_video_ad" : "meta_ad",
+        metrics: {
+          like_count: parseCount(snapshot.page_like_count),
+          ad_variant_count: parseCount(item.collation_count || item.ads_count),
+          is_active_ad: Boolean(item.is_active),
+        },
+      });
+      continue;
+    }
+  }
+  const seen = new Set();
+  return rows
+    .map((row) => ({ ...row, keyword, url: safeExternalHttpUrl(row.url), thumbnail_url: safeExternalHttpUrl(row.thumbnail_url) }))
+    .filter((row) => {
+      if (!row.url || seen.has(row.url)) return false;
+      seen.add(row.url);
+      return true;
+    });
+}
+
+function scoreSongiApifyCandidates(rows, sortMode = "top") {
+  const maxViews = Math.max(1, ...rows.map((row) => Number(row.metrics?.view_count || 0)));
+  const maxLikes = Math.max(1, ...rows.map((row) => Number(row.metrics?.like_count || 0)));
+  const scored = rows.map((row) => {
+    const metrics = row.metrics || {};
+    const ageHours = songiDiscoveryAgeHours(row.published_at);
+    const recencyScore = ageHours == null ? 0.4 : Math.max(0, Math.min(1, 1 - ageHours / (24 * 30)));
+    const viewScore = Math.min(1, Number(metrics.view_count || 0) / maxViews);
+    const likeScore = Math.min(1, Number(metrics.like_count || 0) / maxLikes);
+    const popularity = metrics.view_count ? viewScore * 0.6 + likeScore * 0.4 : likeScore;
+    const activeBoost = metrics.is_active_ad ? 0.15 : 0;
+    const weighted = sortMode === "recent"
+      ? recencyScore * 0.7 + popularity * 0.3
+      : popularity * 0.75 + recencyScore * 0.25;
+    const candidateScore = Math.round(Math.max(0, Math.min(1, weighted + activeBoost)) * 100);
+    const reasonParts = [
+      Number(metrics.view_count || 0) ? `조회수 ${Number(metrics.view_count).toLocaleString("ko-KR")}` : "",
+      Number(metrics.like_count || 0) ? `좋아요 ${Number(metrics.like_count).toLocaleString("ko-KR")}` : "",
+      Number(metrics.comment_count || 0) ? `댓글 ${Number(metrics.comment_count).toLocaleString("ko-KR")}` : "",
+      Number(metrics.ad_variant_count || 0) ? `광고 변형 ${Number(metrics.ad_variant_count)}개` : "",
+      metrics.is_active_ad ? "현재 집행 중 광고" : "",
+      ageHours != null && ageHours <= 72 ? "최근 3일 내 게시" : "",
+      metrics.language && metrics.language !== "ko" ? `언어 ${metrics.language}` : "",
+    ].filter(Boolean);
+    return {
+      ...row,
+      candidate_score: candidateScore,
+      reason: reasonParts.join(" · ") || (sortMode === "recent" ? "최신 공개 게시물 기준 후보입니다." : "공개 반응 지표 기준 후보입니다."),
+      measurement_badge: "Apify 공개 수집",
+      confidence_label: "공개 지표 기반",
+    };
+  });
+  return scored.sort((a, b) => Number(b.candidate_score || 0) - Number(a.candidate_score || 0));
+}
+
+function songiApifyDiscoverySourceText(candidate) {
+  const metrics = candidate.metrics || {};
+  return cleanMultilineText([
+    `${candidate.platform || "SNS"} 키워드 벤치마킹 후보`,
+    `키워드: ${candidate.keyword || ""}`,
+    `제목/본문 요약: ${candidate.title || ""}`,
+    `작성자/광고주: ${candidate.creator || ""}`,
+    `게시일: ${candidate.published_at || ""}`,
+    Number(metrics.view_count || 0) ? `조회수: ${Number(metrics.view_count).toLocaleString("ko-KR")}` : "",
+    Number(metrics.like_count || 0) ? `좋아요: ${Number(metrics.like_count).toLocaleString("ko-KR")}` : "",
+    Number(metrics.comment_count || 0) ? `댓글: ${Number(metrics.comment_count).toLocaleString("ko-KR")}` : "",
+    Number(metrics.share_count || 0) ? `공유/리포스트: ${Number(metrics.share_count).toLocaleString("ko-KR")}` : "",
+    Number(metrics.ad_variant_count || 0) ? `광고 변형 수: ${Number(metrics.ad_variant_count)}` : "",
+    metrics.is_active_ad ? "상태: 현재 집행 중 광고" : "",
+    candidate.reason ? `선정 이유: ${candidate.reason}` : "",
+    candidate.description ? `본문:\n${candidate.description}` : "",
+    `원본 링크: ${candidate.url || ""}`,
+  ].filter(Boolean).join("\n"), 8000);
+}
+
+function materializeSongiApifyDiscoveryCandidates(research, run, userId, rows, options = {}) {
+  const project = research.projects.find((item) => item.id === run.project_id && item.user_id === userId);
+  const maxResults = boundedInteger(run.max_results, 12, 1, 25);
+  const candidates = scoreSongiApifyCandidates(rows.slice(0, maxResults), options.sortMode || "top").map((candidate) => ({
+    id: crypto.randomUUID(),
+    run_id: run.id,
+    user_id: userId,
+    project_id: run.project_id,
+    keyword: run.keyword,
+    created_at: nowIso(),
+    expires_at: run.expires_at || new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString(),
+    ...candidate,
+  }));
+  for (const candidate of candidates) {
+    candidate.source_text = songiApifyDiscoverySourceText(candidate);
+  }
+  research.discovery_candidates = (research.discovery_candidates || []).filter((candidate) => candidate.run_id !== run.id);
+  research.discovery_candidates.push(...candidates);
+  run.status = "completed";
+  run.result_count = candidates.length;
+  run.error = "";
+  run.error_detail = "";
+  run.source_mode = compactText(options.sourceMode || "server_apify", 80);
+  run.updated_at = nowIso();
+  if (project) project.updated_at = run.updated_at;
+  pruneResearchDiscovery(research);
+  return candidates;
+}
+
+function songiApifyDiscoveryErrorInfo(error, platform) {
+  const status = Number(error?.status || 0);
+  const detail = String(error?.detail || error?.message || "").toLowerCase();
+  if (status === 401 || /token.*(invalid|not valid)|user was not found/i.test(detail)) {
+    return {
+      code: "research_apify_invalid_token",
+      message: "Apify 키가 유효하지 않습니다. 설정 > AI/API 연결에서 키를 다시 저장해주세요.",
+    };
+  }
+  if (status === 402 || /payment|credit|usage hard limit|exceeded/.test(detail)) {
+    return {
+      code: "research_apify_credit_exhausted",
+      message: "Apify 크레딧이 부족합니다. Apify 콘솔에서 잔액을 확인하거나 플랜을 올린 뒤 다시 시도해주세요.",
+    };
+  }
+  if (String(error?.code || "") === "research_apify_run_still_running") {
+    return {
+      code: "research_apify_run_still_running",
+      message: "Apify 수집이 평소보다 오래 걸리고 있습니다. 1~2분 뒤 다시 시도해주세요.",
+    };
+  }
+  if (String(error?.code || "") === "research_apify_no_items" || /no_items/.test(detail)) {
+    return songiApifyEmptyResultInfo(platform);
+  }
+  return {
+    code: String(error?.code || "research_apify_discovery_failed"),
+    message: "Apify 수집 실행이 실패했습니다. 잠시 뒤 다시 시도해주세요.",
+  };
+}
+
+function parseJson3TranscriptText(payload) {
+  const events = Array.isArray(payload?.events) ? payload.events : [];
+  const parts = [];
+  for (const event of events) {
+    const segs = Array.isArray(event?.segs) ? event.segs : [];
+    const text = segs.map((seg) => String(seg?.utf8 || "")).join("");
+    if (text.trim()) parts.push(text.replace(/\s+/g, " ").trim());
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function parseVttTranscriptText(raw) {
+  return String(raw || "")
+    .split(/\r?\n/)
+    .filter((line) => line && !/^WEBVTT/i.test(line) && !/^\d+$/.test(line.trim()) && !/-->/.test(line) && !/^(Kind|Language):/i.test(line))
+    .map((line) => line.replace(/<[^>]+>/g, "").trim())
+    .filter(Boolean)
+    .filter((line, index, lines) => line !== lines[index - 1])
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pickYouTubeSubtitleTrack(info) {
+  const sources = [info?.subtitles, info?.automatic_captions];
+  const langPriority = ["ko", "ko-orig", "en", "en-orig"];
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    const available = Object.keys(source);
+    const lang = langPriority.find((code) => available.includes(code))
+      || available.find((code) => code.startsWith("ko"))
+      || available.find((code) => code.startsWith("en"));
+    if (!lang) continue;
+    const entries = Array.isArray(source[lang]) ? source[lang] : [];
+    const entry = entries.find((row) => row?.ext === "json3") || entries.find((row) => row?.ext === "vtt") || entries[0];
+    if (entry?.url) return { lang, ext: entry.ext || "", url: entry.url };
+  }
+  return null;
+}
+
+async function fetchYouTubeAutoTranscript(url) {
+  const result = await runBoundedProcess(songiYtDlpPath(), [
+    "--skip-download",
+    "--no-warnings",
+    "--no-playlist",
+    "--dump-single-json",
+    url,
+  ], {
+    timeoutMs: 45000,
+    maxOutput: 6 * 1024 * 1024,
+    errorCode: "server_ytdlp_subtitle_failed",
+    timeoutCode: "server_ytdlp_subtitle_timeout",
+    missingCode: "server_ytdlp_missing",
+    missingMessage: "YouTube 자막 도구를 찾지 못했습니다.",
+  });
+  let info = null;
+  try {
+    info = JSON.parse(String(result.stdout || "").trim());
+  } catch (_error) {
+    return "";
+  }
+  const track = pickYouTubeSubtitleTrack(info);
+  if (!track) return "";
+  const response = await requestExternalJson(track.url, { timeoutMs: 20000, maxBytes: 4 * 1024 * 1024 });
+  const text = track.ext === "json3" || response.json
+    ? parseJson3TranscriptText(response.json)
+    : parseVttTranscriptText(response.text);
+  return compactText(text, 6000);
+}
+
+function songiApifyEmptyResultInfo(platform) {
+  if (platform === "instagram") {
+    return {
+      code: "research_apify_no_items",
+      message: "수집 결과가 비어 있습니다. 인스타그램이 제한한 해시태그(의료·시술 등)일 수 있으니 비슷한 다른 키워드로 시도해주세요.",
+    };
+  }
+  return {
+    code: "research_apify_no_items",
+    message: "이 키워드로 수집된 공개 게시물이 없습니다. 키워드를 바꿔 다시 시도해주세요.",
+  };
 }
 
 function readObjectPath(value, pathExpression) {
@@ -5970,6 +6522,7 @@ function normalizePlatform(value) {
 }
 
 function productAllowed(user, product) {
+  if (MEMBER_ONLY_PRODUCTS.has(product)) return canAccessEunseo(user);
   const products = userProducts(user);
   return products.has("bundle") || products.has(product);
 }
@@ -5987,6 +6540,7 @@ function defaultDownloadProduct(user, platformValue = "") {
   if (products.has("bundle")) return "bundle";
   if (products.has("yeri")) return "yeri";
   if (products.has("hyunju")) return "hyunju";
+  if (canAccessEunseo(user)) return "eunseo";
   return "";
 }
 
@@ -6076,10 +6630,65 @@ function downloadInfoFromTicket(ticketValue) {
   };
 }
 
+function eunseoAccessCookie(req, value, maxAgeSeconds) {
+  const parts = [
+    `${EUNSEO_ACCESS_COOKIE_NAME}=${encodeURIComponent(value)}`,
+    "Path=/eunseo",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${Math.max(0, maxAgeSeconds)}`,
+  ];
+  if (isSecureRequest(req)) parts.push("Secure");
+  return parts.join("; ");
+}
+
+function cleanupEunseoLaunchTickets() {
+  const now = Date.now();
+  for (const [ticket, entry] of eunseoLaunchTickets.entries()) {
+    if (!entry || Number(entry.expires_at_ms || 0) <= now) {
+      eunseoLaunchTickets.delete(ticket);
+    }
+  }
+}
+
+function createEunseoLaunchTicket(user) {
+  cleanupEunseoLaunchTickets();
+  if (!canAccessEunseo(user)) return { error: "eunseo_not_allowed" };
+  const ticket = crypto.randomBytes(24).toString("base64url");
+  const expiresAtMs = Date.now() + Math.max(60 * 1000, EUNSEO_ACCESS_TTL_MS);
+  eunseoLaunchTickets.set(ticket, {
+    ticket,
+    user_id: user.id,
+    expires_at_ms: expiresAtMs,
+    created_at: nowIso(),
+  });
+  return {
+    ticket,
+    expires_at: new Date(expiresAtMs).toISOString(),
+    url: `/eunseo?ticket=${encodeURIComponent(ticket)}`,
+  };
+}
+
+function eunseoAccessFromTicket(ticketValue) {
+  cleanupEunseoLaunchTickets();
+  const ticket = String(ticketValue || "").trim();
+  if (!ticket) return null;
+  const entry = eunseoLaunchTickets.get(ticket);
+  if (!entry) return null;
+  if (Number(entry.expires_at_ms || 0) <= Date.now()) {
+    eunseoLaunchTickets.delete(ticket);
+    return null;
+  }
+  return entry;
+}
+
 function downloadContentType(filename) {
   const lower = String(filename || "").toLowerCase();
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html; charset=utf-8";
   if (lower.endsWith(".json")) return "application/json; charset=utf-8";
+  if (lower.endsWith(".webmanifest")) return "application/manifest+json; charset=utf-8";
+  if (lower.endsWith(".js")) return "text/javascript; charset=utf-8";
+  if (lower.endsWith(".css")) return "text/css; charset=utf-8";
   if (lower.endsWith(".dmg")) return "application/x-apple-diskimage";
   if (lower.endsWith(".exe")) return "application/vnd.microsoft.portable-executable";
   if (lower.endsWith(".msi")) return "application/x-msi";
@@ -6170,6 +6779,29 @@ function canAccessYunmi(user) {
   if (YUNMI_PUBLIC_ENABLED) return true;
   if (user && productAllowed(user, "yunmi")) return true;
   return userAccessIdentifierVariants(user).some((identifier) => YUNMI_ALLOWED_USER_IDENTIFIERS.has(identifier));
+}
+
+function isMakefamilyMemberSegment(segment) {
+  return ["makefamily_member", "member_and_buyer", "operator", "test"].includes(segment);
+}
+
+function isMakefamilyMemberAccount(user) {
+  const segment = normalizeAccountSegment(user?.account_segment || user?.accountSegment || "", "paid_buyer");
+  return isMakefamilyMemberSegment(segment);
+}
+
+function canAccessEunseo(user) {
+  return Boolean(user && canExecute(user) && isMakefamilyMemberAccount(user));
+}
+
+function canAccessWorker(worker, user) {
+  if (!worker) return false;
+  if (worker.accessPolicy === "public") return Boolean(user && user.status === "active");
+  if (worker.accessPolicy === "makefamily_member" || worker.accessPolicy === "member_only") {
+    if (worker.staffCode === "eunseo" || worker.product === "eunseo") return canAccessEunseo(user);
+    return Boolean(user && canExecute(user) && isMakefamilyMemberAccount(user));
+  }
+  return Boolean(user && canExecute(user) && (!worker.product || productAllowed(user, worker.product)));
 }
 
 function isYunmiWorker(worker) {
@@ -7606,6 +8238,17 @@ function publicCommand(command) {
 }
 
 function publicWorker(worker) {
+  const executionOptions = Array.isArray(worker.executionOptions)
+    ? worker.executionOptions.map((option) => ({
+      kind: String(option.kind || ""),
+      label: String(option.label || ""),
+      platforms: Array.isArray(option.platforms) ? option.platforms.filter(Boolean) : [],
+      status: ["available", "coming_soon", "testing", "unsupported"].includes(option.status) ? option.status : "coming_soon",
+      url: String(option.url || ""),
+      primary: Boolean(option.primary),
+      description: String(option.description || ""),
+    })).filter((option) => option.kind && option.label)
+    : [];
   return {
     code: worker.code,
     staff_code: worker.staffCode,
@@ -7632,6 +8275,7 @@ function publicWorker(worker) {
     version: worker.version || "",
     short_description: worker.shortDescription || "",
     capabilities: worker.capabilities || [],
+    execution_options: executionOptions,
   };
 }
 
@@ -9268,6 +9912,10 @@ function validateAdminProvisionInput(body) {
   if (!PRODUCTS.has(product)) {
     return { error: "invalid_product", email, product };
   }
+  const requestedSegment = normalizeAccountSegment(body.account_segment || body.accountSegment || body.member_segment || body.memberSegment || "", defaultAccountSegmentForSource(body.source || "buyer"));
+  if (MEMBER_ONLY_PRODUCTS.has(product) && !isMakefamilyMemberSegment(requestedSegment)) {
+    return { error: "member_only_product_requires_makefamily_member", email, product };
+  }
   return { email, product };
 }
 
@@ -9394,6 +10042,10 @@ async function handleAdminGrantProduct(req, res) {
     json(req, res, 400, { ok: false, error: "invalid_scope" });
     return;
   }
+  if (MEMBER_ONLY_PRODUCTS.has(product) && !email && scope !== "makefamily_members") {
+    json(req, res, 400, { ok: false, error: "member_only_product_requires_makefamily_member_scope" });
+    return;
+  }
 
   const users = loadUsers();
   const now = nowIso();
@@ -9404,6 +10056,10 @@ async function handleAdminGrantProduct(req, res) {
     const user = users.users.find((item) => item.email === email);
     if (!user) {
       json(req, res, 404, { ok: false, error: "user_not_found" });
+      return;
+    }
+    if (MEMBER_ONLY_PRODUCTS.has(product) && !isMakefamilyMemberAccount(user)) {
+      json(req, res, 403, { ok: false, error: "member_only_product_requires_makefamily_member" });
       return;
     }
     scanned = 1;
@@ -10264,6 +10920,33 @@ async function handlePutUserSecret(req, res, provider) {
   const body = await readJsonBody(req, res);
   if (!body) return;
   const value = body.value || body.secret || body.api_key || body.token || "";
+  let verification = null;
+  const providerConfig = secretProviderConfig(provider);
+  if (providerConfig?.secretName === "APIFY_API_TOKEN" && String(value || "").trim()) {
+    try {
+      const me = await requestExternalJson("https://api.apify.com/v2/users/me", {
+        headers: { authorization: `Bearer ${String(value).trim()}` },
+        timeoutMs: 8000,
+        maxBytes: 256 * 1024,
+      });
+      const data = me.json?.data || {};
+      verification = {
+        verified: true,
+        username: compactText(data.username, 60),
+        plan: compactText(data.plan?.id, 30),
+      };
+    } catch (error) {
+      if (Number(error?.status || 0) === 401) {
+        json(req, res, 400, {
+          ok: false,
+          error: "apify_token_invalid",
+          message: "Apify 키가 유효하지 않습니다. Apify 콘솔 > API & Integrations에서 키를 다시 복사해주세요.",
+        });
+        return;
+      }
+      verification = { verified: false, reason: "network_unreachable" };
+    }
+  }
   const result = setUserSecret(auth.user.id, provider, value);
   if (result.error) {
     const statusCode = result.error === "invalid_secret_provider" ? 404 : 400;
@@ -10272,6 +10955,7 @@ async function handlePutUserSecret(req, res, provider) {
   }
   json(req, res, 200, {
     ok: true,
+    verification,
     secret: publicUserSecretStatus(auth.user.id, result.config.provider),
     secrets: publicUserSecretStatuses(auth.user.id),
   });
@@ -10437,7 +11121,7 @@ function handleDownloadOptions(req, res) {
   for (const platform of platforms) {
     const products = platform === "windows"
       ? ["bundle"]
-      : ["bundle", "yeri", "hyunju"].filter((product) => downloadProductAllowed(auth.user, platform, product));
+      : ["bundle", "yeri", "hyunju", "eunseo"].filter((product) => downloadProductAllowed(auth.user, platform, product));
     for (const product of products) {
       downloads.push(downloadInfo(auth.user, platform, product));
     }
@@ -10474,6 +11158,21 @@ async function handleCreateDownloadTicket(req, res) {
     url: result.url,
     expires_at: result.expires_at,
     download,
+  });
+}
+
+function handleCreateEunseoLaunch(req, res) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  const result = createEunseoLaunchTicket(auth.user);
+  if (result.error) {
+    json(req, res, 403, { ok: false, error: result.error });
+    return;
+  }
+  json(req, res, 201, {
+    ok: true,
+    url: result.url,
+    expires_at: result.expires_at,
   });
 }
 
@@ -10789,6 +11488,126 @@ function handleListResearchDiscovery(req, res, url) {
   });
 }
 
+async function runSongiApifyDiscoveryRequest(req, res, auth, research, project, { platform, keyword, body }) {
+  const sortMode = String(body.sort_mode || "top").trim() === "recent" ? "recent" : "top";
+  let maxResults = boundedInteger(body.max_results, 12, 5, 25);
+  if (platform === "meta_ads") maxResults = Math.max(SONGI_META_ADS_MIN_RESULTS, maxResults);
+  const token = getUserSecret(auth.user.id, "apify");
+  if (!token) {
+    json(req, res, 400, {
+      ok: false,
+      error: "research_apify_key_missing",
+      message: "이 플랫폼 수집에는 본인 Apify 키가 필요합니다. 비용이 본인 Apify 계정에서 차감되도록 설정 > AI/API 연결에서 키를 저장해주세요.",
+    });
+    return;
+  }
+  const config = songiApifyDiscoveryConfig(platform, keyword, maxResults);
+  if (!config) {
+    json(req, res, 400, {
+      ok: false,
+      error: "research_discovery_keyword_invalid",
+      message: "이 키워드로는 해시태그를 만들 수 없습니다. 특수문자를 빼고 다시 입력해주세요.",
+    });
+    return;
+  }
+  const lockKey = researchPaidLockKey(auth.user.id, "discovery_apify", project.id);
+  if (!acquireResearchPaidLock(lockKey)) {
+    json(req, res, 409, {
+      ok: false,
+      error: "research_paid_operation_in_progress",
+      message: "이 프로젝트에서 유료 수집이 이미 진행 중입니다. 잠시 뒤 다시 시도해주세요.",
+    });
+    return;
+  }
+  try {
+    const now = nowIso();
+    const resumableRun = research.discovery_runs.find((item) => item.user_id === auth.user.id
+      && item.project_id === project.id
+      && item.platform === platform
+      && item.keyword === keyword
+      && item.status === "running"
+      && item.source_mode === "server_apify"
+      && item.apify_run_id);
+    const run = resumableRun || {
+      id: crypto.randomUUID(),
+      user_id: auth.user.id,
+      project_id: project.id,
+      keyword,
+      platform,
+      sort_mode: sortMode,
+      date_range_days: boundedInteger(body.date_range_days, 30, 1, 90),
+      max_results: maxResults,
+      status: "running",
+      source_mode: "server_apify",
+      quota_units_estimate: 0,
+      created_at: now,
+      updated_at: now,
+      expires_at: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    if (resumableRun) {
+      resumableRun.updated_at = now;
+    } else {
+      research.discovery_runs.push(run);
+    }
+    pruneResearchDiscovery(research);
+    project.updated_at = now;
+    saveResearch(research);
+    let failureInfo = null;
+    let rows = [];
+    try {
+      const { items } = await runSongiApifyDiscovery(config, token, maxResults, {
+        existingRunId: resumableRun ? resumableRun.apify_run_id : "",
+        onRunStarted: (apifyRunId) => {
+          const current = loadResearch();
+          const currentRun = current.discovery_runs.find((item) => item.id === run.id && item.user_id === auth.user.id);
+          if (currentRun && currentRun.apify_run_id !== apifyRunId) {
+            currentRun.apify_run_id = apifyRunId;
+            currentRun.updated_at = nowIso();
+            saveResearch(current);
+          }
+        },
+      });
+      rows = songiApifyDiscoveryRows(platform, keyword, items);
+      if (!rows.length) failureInfo = songiApifyEmptyResultInfo(platform);
+    } catch (error) {
+      failureInfo = songiApifyDiscoveryErrorInfo(error, platform);
+    }
+    const nextResearch = loadResearch();
+    const nextRun = nextResearch.discovery_runs.find((item) => item.id === run.id && item.user_id === auth.user.id);
+    if (!nextRun) {
+      json(req, res, 404, { ok: false, error: "research_discovery_run_not_found" });
+      return;
+    }
+    if (failureInfo) {
+      // 실행이 Apify에서 아직 도는 중이면 running 유지 → 재시도 시 같은 실행을 재개해 중복 과금을 막는다
+      const stillRunning = failureInfo.code === "research_apify_run_still_running";
+      nextRun.status = stillRunning ? "running" : "failed";
+      nextRun.error = failureInfo.code;
+      nextRun.error_detail = compactText(failureInfo.message, 500);
+      nextRun.updated_at = nowIso();
+      saveResearch(nextResearch);
+      json(req, res, 422, {
+        ok: false,
+        error: failureInfo.code,
+        message: failureInfo.message,
+        run: publicResearchDiscoveryRun(nextRun),
+      });
+      return;
+    }
+    const candidates = materializeSongiApifyDiscoveryCandidates(nextResearch, nextRun, auth.user.id, rows, { sortMode });
+    saveResearch(nextResearch);
+    json(req, res, 200, {
+      ok: true,
+      pending_runner: false,
+      run: publicResearchDiscoveryRun(nextRun),
+      command: null,
+      candidates: candidates.map(publicResearchDiscoveryCandidate),
+    });
+  } finally {
+    releaseResearchPaidLock(lockKey);
+  }
+}
+
 async function handleRunResearchDiscovery(req, res) {
   const auth = requireResearchAccess(req, res);
   if (!auth) return;
@@ -10807,8 +11626,12 @@ async function handleRunResearchDiscovery(req, res) {
     json(req, res, 400, { ok: false, error: "research_discovery_keyword_required" });
     return;
   }
+  if (SONGI_APIFY_DISCOVERY_PLATFORMS.has(platform)) {
+    await runSongiApifyDiscoveryRequest(req, res, auth, research, project, { platform, keyword, body });
+    return;
+  }
   if (platform !== "youtube") {
-    json(req, res, 400, { ok: false, error: "research_discovery_platform_not_ready", message: "현재 키워드 찾기 MVP는 YouTube 쇼츠 후보부터 지원합니다." });
+    json(req, res, 400, { ok: false, error: "research_discovery_platform_not_ready", message: "지원하지 않는 플랫폼입니다. 유튜브/인스타그램/틱톡/스레드/메타 광고 중에서 선택해주세요." });
     return;
   }
 
@@ -10956,13 +11779,29 @@ async function handleImportResearchDiscoveryCandidate(req, res, candidateId) {
     return;
   }
   const now = nowIso();
-  const sourceText = candidate.source_text || youtubeDiscoverySourceText(candidate);
+  const platformLabel = compactText(candidate.platform, 30) || "YouTube";
+  const isYouTubeCandidate = /youtube/i.test(platformLabel) || /^youtube/.test(String(candidate.content_format || ""));
+  let transcriptText = "";
+  let transcriptStatus = "";
+  if (isYouTubeCandidate && candidate.url && SONGI_SERVER_YTDLP_DISCOVERY_ENABLED && researchMediaToolStatus().video_download.available) {
+    try {
+      transcriptText = await fetchYouTubeAutoTranscript(candidate.url);
+      transcriptStatus = transcriptText ? "fetched" : "unavailable";
+    } catch (error) {
+      transcriptStatus = "failed";
+      console.warn("[songi] 자막 추출 실패", error.code || error.message || "transcript_failed");
+    }
+  }
+  const sourceText = cleanMultilineText([
+    candidate.source_text || youtubeDiscoverySourceText(candidate),
+    transcriptText ? `자동 자막 발췌:\n${transcriptText}` : "",
+  ].filter(Boolean).join("\n\n"), 8000);
   const analysis = analyzeResearchInput({
     title: candidate.title,
     url: candidate.url,
     source_text: sourceText,
     category: project.industry || "벤치마킹 후보",
-    tags: [candidate.keyword, "YouTube", "키워드 후보"],
+    tags: [candidate.keyword, platformLabel, "키워드 후보"],
     content_category: project.content_category || project.industry || "",
     content_topic: project.content_topic || candidate.keyword || "",
   });
@@ -10972,11 +11811,12 @@ async function handleImportResearchDiscoveryCandidate(req, res, candidateId) {
     project_id: project.id,
     type: "reference",
     url: candidate.url || "",
-    title: candidate.title || candidate.url || "YouTube 후보",
+    title: candidate.title || candidate.url || `${platformLabel} 후보`,
     source_text: sourceText,
     discovery_candidate_id: candidate.id,
     discovery_metrics: candidate.metrics || {},
-    link_fetch_status: "youtube_discovery",
+    transcript_status: transcriptStatus,
+    link_fetch_status: isYouTubeCandidate ? "youtube_discovery" : "apify_discovery",
     link_final_url: candidate.url || "",
     link_fetched_at: now,
     ...analysis,
@@ -12234,6 +13074,64 @@ function serveStaticAsset(req, res, url) {
   fs.createReadStream(filePath).pipe(res);
 }
 
+function serveEunseoWebApp(req, res, url) {
+  let rawPath = "";
+  try {
+    rawPath = decodeURIComponent(url.pathname.replace(/^\/eunseo\/?/, ""));
+  } catch (_error) {
+    json(req, res, 404, { ok: false, error: "not_found" });
+    return;
+  }
+  if (!rawPath) rawPath = "index.html";
+  if (rawPath.includes("\0")) {
+    json(req, res, 404, { ok: false, error: "not_found" });
+    return;
+  }
+  const auth = lookupSession(req);
+  let accessCookie = "";
+  let allowed = Boolean(auth?.user && canAccessEunseo(auth.user));
+  if (!allowed) {
+    const queryTicket = String(url.searchParams.get("ticket") || "").trim();
+    const cookieTicket = parseCookies(req)[EUNSEO_ACCESS_COOKIE_NAME] || "";
+    const access = eunseoAccessFromTicket(queryTicket || cookieTicket);
+    if (access) {
+      allowed = true;
+      if (queryTicket) {
+        accessCookie = eunseoAccessCookie(req, queryTicket, Math.ceil((Number(access.expires_at_ms || 0) - Date.now()) / 1000));
+      }
+    }
+  }
+  if (!allowed) {
+    if (req.method === "GET" && rawPath === "index.html") {
+      redirect(res, "/app#staff");
+      return;
+    }
+    json(req, res, 403, { ok: false, error: "eunseo_not_allowed" });
+    return;
+  }
+  const appRoot = path.join(STATIC_DIR, "eunseo");
+  const filePath = path.normalize(path.join(appRoot, rawPath));
+  if (!filePath.startsWith(`${appRoot}${path.sep}`) || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    json(req, res, 404, { ok: false, error: "not_found" });
+    return;
+  }
+  const stat = fs.statSync(filePath);
+  const isHtml = filePath.endsWith(".html");
+  res.writeHead(200, {
+    "content-type": downloadContentType(filePath),
+    "content-length": stat.size,
+    "cache-control": isHtml ? "no-store" : "public, max-age=300",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "same-origin",
+    ...(accessCookie ? { "set-cookie": accessCookie } : {}),
+  });
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  fs.createReadStream(filePath).pipe(res);
+}
+
 function serveResearchHtml(req, res, url) {
   const queryToken = String(url.searchParams.get("token") || url.searchParams.get("session_token") || "").trim();
   if (queryToken && !req.headers.authorization && !req.headers["x-aimax-session-token"]) {
@@ -12299,6 +13197,10 @@ function route(req, res) {
   }
   if (req.method === "GET" && (url.pathname === "/setup" || url.pathname === "/setup/")) {
     serveSetup(req, res);
+    return;
+  }
+  if ((req.method === "GET" || req.method === "HEAD") && (url.pathname === "/eunseo" || url.pathname.startsWith("/eunseo/"))) {
+    serveEunseoWebApp(req, res, url);
     return;
   }
   if ((req.method === "GET" || req.method === "HEAD") && url.pathname.startsWith("/downloads/")) {
@@ -12416,6 +13318,10 @@ function route(req, res) {
   }
   if (req.method === "POST" && url.pathname === "/api/downloads/tickets") {
     handleCreateDownloadTicket(req, res);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/eunseo/launch") {
+    handleCreateEunseoLaunch(req, res);
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/downloads/agent") {
@@ -12658,6 +13564,7 @@ module.exports = {
     WORKERS,
     adminProductCatalog,
     adminUserRow,
+    canAccessEunseo,
     grantProductToUser,
     isJobAllowed,
     primaryProductForEntitlements,
