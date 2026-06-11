@@ -1469,6 +1469,32 @@
       margin-bottom: 14px;
     }
 
+    .staff-execution-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .staff-execution-tabs button {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      color: var(--muted);
+      padding: 9px 14px;
+      cursor: pointer;
+      font-weight: 800;
+      box-shadow: 0 1px 0 rgba(22, 29, 25, .04);
+    }
+
+    .staff-execution-tabs button.active {
+      border-color: var(--brand);
+      color: var(--brand-dark);
+      background: #e8f7f2;
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, .08);
+    }
+
     .segmented {
       display: inline-flex;
       flex-wrap: wrap;
@@ -1591,54 +1617,82 @@
       align-items: center;
     }
 
-    .staff-detail {
-      position: static;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 18px;
+    .execution-options {
       display: grid;
-      gap: 14px;
-      min-width: 0;
-      overflow: visible;
-      box-shadow: var(--shadow-soft);
+      gap: 10px;
     }
 
-    .staff-detail-photo {
-      width: min(100%, 520px);
-      aspect-ratio: 16 / 11;
-      border-radius: 8px;
-      object-fit: cover;
+    .execution-option {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
       border: 1px solid var(--line);
-      background: #eef2f7;
+      border-radius: 8px;
+      background: #f8fbfa;
+      padding: 12px;
+      min-width: 0;
     }
 
-    .staff-detail h3 {
-      margin: 0;
-      font-size: 22px;
-      line-height: 1.25;
+    .execution-option.primary {
+      border-color: rgba(15, 118, 110, .45);
+      background: #eef9f5;
     }
 
-    .staff-detail p {
-      margin: 7px 0 0;
+    .execution-option-copy {
+      min-width: 0;
+      display: grid;
+      gap: 5px;
+    }
+
+    .execution-option-title {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .execution-option-title strong {
+      line-height: 1.3;
+    }
+
+    .execution-option-description {
       color: var(--muted);
-      line-height: 1.55;
+      font-size: 13px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .execution-option button {
+      min-height: 36px;
+      border-radius: 8px;
+      white-space: nowrap;
     }
 
     .resume-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+
+    .resume-profile-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
     }
 
     .resume-box {
       min-width: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-soft);
-      padding: 12px;
+      background: #ffffff;
+      border: 0;
+      border-bottom: 1px solid #ececec;
+      border-radius: 0;
+      padding: 4px 2px;
       display: grid;
-      gap: 6px;
+      grid-template-columns: 118px minmax(0, 1fr);
+      gap: 14px;
+      align-items: center;
     }
 
     .resume-box strong,
@@ -1648,9 +1702,185 @@
     }
 
     .resume-box span {
-      color: var(--muted);
+      color: #202124;
       font-size: 13px;
       line-height: 1.45;
+    }
+
+    .resume-intro,
+    .resume-quote,
+    .resume-signature {
+      border: 0;
+      border-top: 2px solid #242424;
+      border-bottom: 1px solid #ececec;
+      border-radius: 0;
+      background: #ffffff;
+      padding: 9px 2px;
+      color: var(--ink);
+      line-height: 1.65;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-intro {
+      color: #202124;
+    }
+
+    .resume-career-list {
+      display: grid;
+      gap: 0;
+      border-top: 2px solid #242424;
+    }
+
+    .resume-career-item {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 16px;
+      border: 0;
+      border-bottom: 1px solid #ececec;
+      border-radius: 0;
+      background: #ffffff;
+      padding: 6px 2px;
+      min-width: 0;
+    }
+
+    .resume-career-period {
+      color: #202124;
+      font-size: 12px;
+      font-weight: 900;
+      line-height: 1.4;
+    }
+
+    .resume-career-copy {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .resume-career-copy strong,
+    .resume-career-copy span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-career-copy span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .resume-skill-list {
+      display: grid;
+      gap: 0;
+      border-top: 2px solid #242424;
+    }
+
+    .resume-skill-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      border-bottom: 1px solid #ececec;
+      padding: 5px 2px;
+    }
+
+    .resume-skill-row strong {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+    }
+
+    .resume-skill-dots {
+      display: inline-flex;
+      gap: 5px;
+      white-space: nowrap;
+    }
+
+    .resume-skill-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #d9d9d9;
+      display: inline-block;
+    }
+
+    .resume-skill-dots span.filled {
+      background: #202124;
+    }
+
+    .resume-quote {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .resume-quote strong,
+    .resume-signature strong {
+      color: var(--ink);
+      font-style: normal;
+    }
+
+    .resume-signature {
+      display: grid;
+      gap: 6px;
+      background: #ffffff;
+    }
+
+    .staff-resume-sheet .employee-meta {
+      border-top: 2px solid #242424;
+      gap: 0;
+    }
+
+    .staff-resume-sheet .employee-meta .pill {
+      border: 0;
+      border-bottom: 1px solid #ececec;
+      border-radius: 0;
+      background: #ffffff;
+      color: #202124;
+      padding: 5px 2px;
+      font-size: 13px;
+      justify-content: flex-start;
+    }
+
+    .staff-resume-sheet .execution-options {
+      gap: 0;
+      border-top: 2px solid #242424;
+    }
+
+    .staff-resume-sheet .execution-option,
+    .staff-resume-sheet .execution-option.primary {
+      border: 0;
+      border-bottom: 1px solid #ececec;
+      border-radius: 0;
+      background: #ffffff;
+      gap: 6px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: 3px 2px;
+    }
+
+    .staff-resume-sheet .execution-option-copy {
+      gap: 0;
+    }
+
+    .staff-resume-sheet .execution-option-title {
+      flex-wrap: nowrap;
+    }
+
+    .staff-resume-sheet .execution-option-title strong {
+      min-width: 0;
+    }
+
+    .staff-resume-sheet .execution-option-description {
+      color: #60646c;
+      display: none;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .staff-resume-sheet .execution-option button {
+      border-radius: 6px;
+      font-size: 11px;
+      min-height: 26px;
+      padding: 4px 8px;
     }
 
     .resume-video {
@@ -1672,6 +1902,218 @@
       color: #42617e;
       font-size: 13px;
       line-height: 1.45;
+    }
+
+    .staff-resume-prompt {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      place-items: start center;
+      padding: 28px;
+      overflow: auto;
+      background: rgba(248, 250, 247, .62);
+      backdrop-filter: blur(4px) saturate(1.04);
+    }
+
+    .staff-resume-sheet {
+      position: relative;
+      width: min(1120px, calc(100vw - 56px), calc((100vh - 56px) * 1.414));
+      aspect-ratio: 297 / 210;
+      min-height: 0;
+      max-height: calc(100vh - 56px);
+      border: 1px solid rgba(22, 29, 25, .14);
+      border-radius: 2px;
+      background: #ffffff;
+      color: var(--ink);
+      padding: 0 30px 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
+      gap: 12px 22px;
+      overflow: hidden;
+      box-shadow: 0 24px 70px rgba(22, 29, 25, .16);
+    }
+
+    .staff-resume-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #ffffff;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 24px;
+      line-height: 1;
+      box-shadow: 0 1px 0 rgba(22, 29, 25, .04);
+    }
+
+    .staff-resume-close:hover {
+      color: var(--ink);
+      border-color: var(--line-strong);
+      background: #fbfaf7;
+    }
+
+    .staff-resume-head {
+      display: grid;
+      grid-template-columns: 100px minmax(0, 1fr) auto;
+      gap: 18px;
+      align-items: center;
+      grid-column: 1 / -1;
+      margin: 0 -30px;
+      padding: 16px 72px 15px 34px;
+      background: #eeeeee;
+      border-bottom: 0;
+      min-width: 0;
+    }
+
+    .staff-resume-photo {
+      width: 100px;
+      height: 100px;
+      border-radius: 0;
+      object-fit: cover;
+      border: 0;
+      background: #ffffff;
+      box-shadow: none;
+    }
+
+    .staff-resume-title {
+      min-width: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .staff-resume-kicker {
+      color: #5f6368;
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .staff-resume-title h2 {
+      margin: 0;
+      font-size: 27px;
+      line-height: 1.15;
+      color: #111111;
+    }
+
+    .staff-resume-title p {
+      margin: 5px 0 0;
+      color: #3d3d3d;
+      line-height: 1.45;
+      font-size: 14px;
+    }
+
+    .staff-resume-action {
+      justify-self: end;
+      align-self: center;
+      min-width: 142px;
+      min-height: 58px;
+      border: 2px solid #0b5f58;
+      border-radius: 4px;
+      background: #0f766e;
+      color: #ffffff;
+      padding: 10px 14px;
+      display: grid;
+      place-items: center;
+      gap: 2px;
+      text-align: center;
+      cursor: pointer;
+      box-shadow: 0 10px 20px rgba(15, 118, 110, .2), inset 0 0 0 1px rgba(255, 255, 255, .24);
+    }
+
+    .staff-resume-action:hover {
+      background: #0b5f58;
+      border-color: #084d47;
+    }
+
+    .staff-resume-action span,
+    .staff-resume-action small {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      line-height: 1.2;
+    }
+
+    .staff-resume-action span {
+      font-size: 15px;
+      font-weight: 900;
+    }
+
+    .staff-resume-action small {
+      color: rgba(255, 255, 255, .78);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .staff-resume-action:disabled {
+      border-color: #aeb6ae;
+      background: #eef1ec;
+      color: #59635d;
+      cursor: not-allowed;
+      box-shadow: inset 0 0 0 1px rgba(22, 29, 25, .05);
+    }
+
+    .staff-resume-action:disabled small {
+      color: #7a827c;
+    }
+
+    .staff-resume-section {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+      min-width: 0;
+      padding: 0;
+      align-items: start;
+    }
+
+    .staff-resume-section-title {
+      color: #111111;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: 0;
+      padding-bottom: 0;
+      border-bottom: 0;
+      line-height: 1.15;
+    }
+
+    .staff-resume-section-title small {
+      display: block;
+      margin-top: 5px;
+      color: #9aa0a6;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .staff-resume-columns {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 22px;
+      min-width: 0;
+    }
+
+    .staff-resume-column {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .staff-resume-column:last-child .staff-resume-section:last-child {
+      display: none;
+    }
+
+    .staff-resume-column:first-child .resume-grid .resume-box {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .staff-resume-column:first-child .resume-grid .resume-box span {
+      display: none;
     }
 
     .research-layout {
@@ -2950,6 +3392,7 @@
       .staff-toolbar,
       .staff-layout,
       .staff-grid,
+      .execution-option,
       .research-layout,
       .job-workspace,
       .sangsu-layout,
@@ -2969,9 +3412,130 @@
       .api-secret-list,
       .setup-list,
       .resume-grid,
+      .resume-profile-grid,
+      .resume-career-item,
       .report-meta-grid,
       .update-alert {
         grid-template-columns: minmax(0, 1fr);
+      }
+
+      .staff-execution-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+      }
+
+      .staff-execution-tabs button {
+        flex: 0 0 auto;
+      }
+
+      .staff-resume-prompt {
+        align-items: stretch;
+        padding: 0;
+      }
+
+      .staff-resume-sheet {
+        width: 100%;
+        min-height: 100vh;
+        max-height: none;
+        aspect-ratio: auto;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 28px;
+        overflow: visible;
+        border-radius: 0;
+        padding: 0 0 30px;
+      }
+
+      .staff-resume-head {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+        margin: 0;
+        padding: 26px 62px 26px 18px;
+      }
+
+      .staff-resume-photo {
+        width: 112px;
+        height: 112px;
+      }
+
+      .staff-resume-title h2 {
+        font-size: 28px;
+      }
+
+      .staff-resume-action {
+        justify-self: stretch;
+        width: min(100%, 320px);
+        min-height: 54px;
+      }
+
+      .staff-resume-section {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        padding: 0 18px;
+      }
+
+      .staff-resume-columns {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 28px;
+      }
+
+      .staff-resume-column {
+        gap: 28px;
+      }
+
+      .staff-resume-column:last-child .staff-resume-section:last-child {
+        display: grid;
+      }
+
+      .staff-resume-column:first-child .resume-grid .resume-box {
+        grid-template-columns: 94px minmax(0, 1fr);
+      }
+
+      .staff-resume-column:first-child .resume-grid .resume-box span {
+        display: inline;
+      }
+
+      .staff-resume-section-title {
+        font-size: 18px;
+      }
+
+      .resume-box {
+        grid-template-columns: 94px minmax(0, 1fr);
+        padding: 10px 2px;
+      }
+
+      .resume-career-item {
+        gap: 5px;
+        padding: 12px 2px;
+      }
+
+      .resume-intro,
+      .resume-quote,
+      .resume-signature {
+        padding: 13px 2px;
+      }
+
+      .resume-career-copy span {
+        font-size: 13px;
+      }
+
+      .resume-skill-row,
+      .staff-resume-sheet .employee-meta .pill,
+      .staff-resume-sheet .execution-option,
+      .staff-resume-sheet .execution-option.primary {
+        padding: 9px 2px;
+      }
+
+      .staff-resume-sheet .execution-option-description {
+        display: block;
+      }
+
+      .staff-resume-sheet .execution-option button {
+        min-height: 36px;
+      }
+
+      .staff-resume-sheet .execution-option button:disabled {
+        display: inline-block;
       }
 
       .sangsu-item-row {
@@ -3031,11 +3595,6 @@
 
       .segmented {
         justify-content: flex-start;
-      }
-
-      .staff-detail {
-        position: static;
-        max-height: none;
       }
 
       .staff-layout,
@@ -3247,6 +3806,12 @@
         </section>
 
         <section class="panel span-12">
+          <div class="staff-execution-tabs" role="group" aria-label="직원 실행 방식">
+            <button class="active" type="button" data-staff-execution-filter="all">전체</button>
+            <button type="button" data-staff-execution-filter="web">웹에서 바로 사용</button>
+            <button type="button" data-staff-execution-filter="pc">PC 설치형</button>
+            <button type="button" data-staff-execution-filter="mobile">모바일/토스</button>
+          </div>
           <div class="staff-toolbar">
             <input id="staffSearch" type="search" placeholder="직원 검색">
             <div class="segmented" role="group" aria-label="직원 상태 필터">
@@ -3258,40 +3823,6 @@
           </div>
           <div class="staff-layout">
             <div id="staffGrid" class="staff-grid"></div>
-            <article class="staff-detail">
-              <img id="staffDetailPhoto" class="staff-detail-photo" src="/assets/avatar_yeri.jpg" alt="예리 프로필 사진">
-              <div class="employee-detail-head">
-                <div>
-                  <h3 id="staffDetailName">예리</h3>
-                  <p id="staffDetailRole">블로그 글쓰기 직원</p>
-                </div>
-                <span id="staffDetailStatus" class="pill">확인</span>
-              </div>
-              <p id="staffDetailDescription">키워드와 CTA를 바탕으로 네이버 블로그 글을 작성합니다.</p>
-              <div>
-                <div class="small muted">필요 설정</div>
-                <div id="staffRequiredSettings" class="employee-meta"></div>
-              </div>
-              <div>
-                <div class="small muted">대표 업무</div>
-                <div id="staffDetailMeta" class="employee-meta"></div>
-              </div>
-              <div>
-                <div class="small muted">직원 이력서</div>
-                <div id="staffResumeGrid" class="resume-grid" style="margin-top:8px;"></div>
-              </div>
-              <div>
-                <div class="small muted">영상 설명</div>
-                <div id="staffResumeVideo" class="resume-video" style="margin-top:8px;"></div>
-              </div>
-              <div>
-                <div class="small muted">최근 일 맡긴 기록</div>
-                <div id="staffRecentJobs" class="stack" style="margin-top:8px;"></div>
-              </div>
-              <div class="employee-actions">
-                <button id="staffDetailAction" class="btn primary" type="button">직원 업무지시</button>
-              </div>
-            </article>
           </div>
         </section>
       </div>
@@ -3725,6 +4256,23 @@
                             <input id="songiDiscoveryKeyword" placeholder="예: 30대 피부관리 쇼츠, 부동산 숏폼, AI 직원">
                           </div>
                           <div class="field">
+                            <label for="songiDiscoveryPlatform">플랫폼</label>
+                            <select id="songiDiscoveryPlatform">
+                              <option value="youtube" selected>유튜브 (무료)</option>
+                              <option value="instagram">인스타그램 (Apify 유료)</option>
+                              <option value="tiktok">틱톡 (Apify 유료)</option>
+                              <option value="threads">스레드 (Apify 유료)</option>
+                              <option value="meta_ads">메타 광고 (Apify 유료)</option>
+                            </select>
+                          </div>
+                          <div class="field">
+                            <label for="songiDiscoverySort">수집 모드</label>
+                            <select id="songiDiscoverySort">
+                              <option value="top" selected>인기 우선</option>
+                              <option value="recent">최신 우선</option>
+                            </select>
+                          </div>
+                          <div class="field">
                             <label for="songiDiscoveryDays">최근성 기준</label>
                             <select id="songiDiscoveryDays">
                               <option value="7">최근 7일</option>
@@ -3742,6 +4290,7 @@
                           </div>
                           <button id="songiDiscoveryBtn" class="btn primary" type="button">후보 찾기</button>
                         </div>
+                        <div id="songiDiscoveryCost" class="notice ok small"></div>
                         <div id="songiDiscoveryNotice" class="notice small"></div>
                       </section>
                     </div>
@@ -3907,7 +4456,7 @@
                 <span id="secretApifyStatus" class="pill">확인 중</span>
               </div>
               <label for="secretApifyInput">Apify API Token</label>
-              <input id="secretApifyInput" type="password" autocomplete="off" placeholder="Instagram/TikTok 수집에 사용합니다.">
+              <input id="secretApifyInput" type="password" autocomplete="off" placeholder="인스타그램/틱톡/스레드/메타 광고 수집에 사용합니다. 무료 플랜으로 시작 가능.">
               <div class="actions">
                 <button class="btn primary" type="button" data-secret-save="apify">저장</button>
                 <button class="btn" type="button" data-secret-delete="apify">삭제</button>
@@ -3964,8 +4513,9 @@
             </div>
             <div class="api-guide-item">
               <strong>Apify</strong>
-              <span class="small muted">Instagram/TikTok 링크와 프로필 수집</span>
-              <a class="guide-link" href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">API & Integrations 열기</a>
+              <span class="small muted">인스타그램/틱톡/스레드/메타 광고 키워드 수집 (무료 플랜 월 $5 크레딧으로 시작 가능)</span>
+              <a class="guide-link" href="https://makefriends.notion.site/Apify-API-Token-367b31f1da5581608873f0bb3a0475ba" target="_blank" rel="noopener noreferrer">발급 가이드 보기</a>
+              <a class="guide-link" href="https://console.apify.com/settings/integrations" target="_blank" rel="noopener noreferrer">API & Integrations 열기</a>
             </div>
             <div class="api-guide-item">
               <strong>YouTube</strong>
@@ -4191,6 +4741,76 @@
   </main>
 
   <div id="toast" class="toast hidden" role="status"></div>
+  <div id="staffResumePrompt" class="staff-resume-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="staffResumeName" aria-describedby="staffResumeDescription">
+    <article class="staff-resume-sheet">
+      <button id="staffResumeCloseBtn" class="staff-resume-close" type="button" aria-label="이력서 닫기">×</button>
+      <header class="staff-resume-head">
+        <img id="staffResumePhoto" class="staff-resume-photo" src="/assets/avatar_yeri.jpg" alt="예리 프로필 사진">
+        <div class="staff-resume-title">
+          <div class="staff-resume-kicker">AIMAX STAFF RESUME</div>
+          <div class="employee-detail-head">
+            <div>
+              <h2 id="staffResumeName">예리</h2>
+              <p id="staffResumeRole">블로그 글쓰기 직원</p>
+            </div>
+          </div>
+          <p id="staffResumeDescription">키워드와 CTA를 바탕으로 네이버 블로그 글을 작성합니다.</p>
+        </div>
+        <button id="staffResumeActionBtn" class="staff-resume-action" type="button">
+          <span id="staffResumeActionLabel">직원 업무지시</span>
+          <small id="staffResumeActionSub">AIMAX WORK ORDER</small>
+        </button>
+      </header>
+      <div class="staff-resume-columns">
+        <div class="staff-resume-column">
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">기본정보<small>Personal Information</small></div>
+            <div id="staffResumeIdentity" class="resume-profile-grid"></div>
+          </section>
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">기술<small>Skills</small></div>
+            <div id="staffResumeMeta" class="resume-skill-list"></div>
+          </section>
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">업무성향<small>Working Style</small></div>
+            <div id="staffResumeGrid" class="resume-grid"></div>
+          </section>
+        </div>
+        <div class="staff-resume-column">
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">자기소개<small>Objective</small></div>
+            <div id="staffResumeIntro" class="resume-intro"></div>
+          </section>
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">경력사항<small>Work Experience</small></div>
+            <div id="staffResumeCareer" class="resume-career-list"></div>
+          </section>
+        </div>
+        <div class="staff-resume-column">
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">근무환경<small>Workplace</small></div>
+            <div id="staffResumeExecutionOptions" class="execution-options"></div>
+          </section>
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">채용조건<small>Requirements</small></div>
+            <div id="staffResumeRequiredSettings" class="employee-meta"></div>
+          </section>
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">추천사<small>Reference</small></div>
+            <div id="staffResumeReference" class="resume-quote"></div>
+          </section>
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">면접 한마디<small>Interview Note</small></div>
+            <div id="staffResumeInterview" class="resume-signature"></div>
+          </section>
+          <section class="staff-resume-section">
+            <div class="staff-resume-section-title">근무기록<small>Recent Jobs</small></div>
+            <div id="staffRecentJobs" class="stack"></div>
+          </section>
+        </div>
+      </div>
+    </article>
+  </div>
   <div id="smartScreenDownloadPrompt" class="install-guide-prompt hidden" role="dialog" aria-modal="true" aria-labelledby="smartScreenDownloadTitle" aria-describedby="smartScreenDownloadBody">
     <div class="install-guide-card">
       <h2 id="smartScreenDownloadTitle">설치 전 꼭 확인하세요</h2>
@@ -4364,6 +4984,20 @@
       InstagramProfile: 0.0016,
       TikTok: 0.01,
     };
+    const SONGI_DISCOVERY_PLATFORM_LABELS = {
+      youtube: "유튜브",
+      instagram: "인스타그램",
+      tiktok: "틱톡",
+      threads: "스레드",
+      meta_ads: "메타 광고",
+    };
+    const SONGI_DISCOVERY_FALLBACK_PRICING_USD = {
+      instagram: { start: 0.005, per_result: 0.0026 },
+      tiktok: { start: 0.012, per_result: 0.0017 },
+      threads: { start: 0.01, per_result: 0.002 },
+      meta_ads: { start: 0.005, per_result: 0.00075 },
+    };
+    const SONGI_META_ADS_MIN_RESULTS = 10;
     const AI_MODEL_OPTIONS = [
       ["gemini-2.5-flash", "Gemini 2.5 Flash (기본/무료 티어 가능)"],
       ["gemini-3.5-flash", "Gemini 3.5 Flash (고품질/유료)"],
@@ -4478,11 +5112,13 @@
       selectedEmployee: "yeri",
       selectedJobKind: "yeri_write",
       staffFilter: "all",
+      staffExecutionFilter: "all",
       staffQuery: "",
       webSettings: null,
       webSettingsDirty: false,
       songiTaskMode: "discover",
       songiDiscoveryBusy: false,
+      songiDiscoveryLastError: "",
       lastReport: null,
       lastFeedback: null,
       sidebarCollapsed: storageGet("localStorage", SIDEBAR_COLLAPSED_KEY) === "1",
@@ -4510,6 +5146,7 @@
       nakyung: "나경",
       hyojin: "효진",
       sangsu: "상수",
+      eunseo: "은서",
       blog_team: "블로그팀",
       bundle: "전체 통합",
       free: "무료 공개",
@@ -4557,8 +5194,34 @@
         execution: "local_agent",
         type: "local_agent",
         requiredSettings: ["naver_account", "ai_key"],
-        description: "키워드와 CTA를 바탕으로 네이버 블로그 글을 작성하고 임시 저장, 즉시 발행, 예약 발행 흐름으로 넘깁니다.",
+        description: "키워드와 CTA를 받아 검색에 걸리는 블로그 글로 정리하고, 임시 저장·즉시 발행·예약 발행 흐름까지 넘깁니다.",
         meta: ["글쓰기", "CTA", "예약 발행"],
+        resume: {
+          employeeNo: "AIMAX-2026-YERI",
+          team: "콘텐츠제작팀",
+          experience: "8년차",
+          hometown: "충북 제천",
+          formerRole: "동네 편집실 마감 담당",
+          statement: "\"초안은 빠르게, 퇴고는 집요하게\"",
+          intro: "키워드 하나를 받으면 검색 의도, 문장 흐름, CTA까지 맞춰 블로그 글로 정리하는 콘텐츠 라이터입니다.",
+          career: [
+            { period: "2016-2019", org: "생활정보 매거진 편집실", note: "지역 상권 소개 글과 체험단 원고를 맡으며 읽히는 제목과 자연스러운 CTA를 익혔습니다." },
+            { period: "2019-2023", org: "온라인 마케팅 대행사", note: "병원, 교육, 소상공인 블로그 원고를 빠르게 쓰고 고치는 마감형 글쓰기 담당으로 근무했습니다." },
+            { period: "2023-현재", org: "AIMAX 콘텐츠제작팀", note: "키워드, 이미지 수, 발행 방식에 맞춰 네이버 블로그 초안을 안정적으로 넘기는 직원으로 근무 중입니다." },
+          ],
+          reference: {
+            quote: "예리가 쓴 글은 수정 요청보다 발행 요청이 먼저 왔습니다.",
+            from: "전 직장 편집장",
+          },
+          interviewLine: "키워드만 주시면, 읽히는 문장으로 출근하겠습니다.",
+          skills: [
+            { label: "키워드 글쓰기", score: 5 },
+            { label: "CTA 설계", score: 5 },
+            { label: "톤 맞춤", score: 4 },
+            { label: "예약 발행 흐름", score: 4 },
+            { label: "마감 대응", score: 5 },
+          ],
+        },
       },
       hyunju: {
         code: "hyunju",
@@ -4571,8 +5234,34 @@
         execution: "local_agent",
         type: "local_agent",
         requiredSettings: ["naver_account", "neighbor_messages"],
-        description: "검색 키워드로 잠재 고객을 찾고, 설정한 신청 수와 속도에 맞춰 서로이웃 신청 작업을 로컬 실행기로 넘깁니다.",
+        description: "검색 키워드에서 잠재 고객을 찾고, 설정한 신청 수와 안전 속도에 맞춰 서로이웃 첫인사를 보냅니다.",
         meta: ["고객 찾기", "서로이웃", "안전 속도"],
+        resume: {
+          employeeNo: "AIMAX-2026-HYUNJU",
+          team: "영업개척팀",
+          experience: "7년차",
+          hometown: "전남 순천",
+          formerRole: "거리 영업 노트 정리 담당",
+          statement: "\"거절은 데이터로 남기고, 가능성은 다시 찾아갑니다\"",
+          intro: "검색 키워드에서 잠재 고객을 찾고, 무리하지 않는 속도로 관계의 첫 문을 여는 영업사원입니다.",
+          career: [
+            { period: "2017-2020", org: "지역 제휴 영업팀", note: "상권별 고객 리스트를 만들고 첫 연락 문장을 다듬으며 안전한 접근 속도를 익혔습니다." },
+            { period: "2020-2023", org: "소상공인 마케팅팀", note: "서로이웃, 댓글, 문의 흐름을 정리하며 무리한 자동화보다 오래 가는 접점을 우선했습니다." },
+            { period: "2023-현재", org: "AIMAX 영업개척팀", note: "키워드 기반 고객 탐색과 서로이웃 신청을 로컬 실행기와 함께 맡고 있습니다." },
+          ],
+          reference: {
+            quote: "현주는 숫자를 올리기 전에 먼저 민망하지 않은 첫인사를 챙겼습니다.",
+            from: "전 영업팀장",
+          },
+          interviewLine: "리스트는 제가 찾고, 속도는 조심스럽게 맞추겠습니다.",
+          skills: [
+            { label: "잠재 고객 탐색", score: 5 },
+            { label: "서로이웃 신청", score: 5 },
+            { label: "안전 속도 조절", score: 4 },
+            { label: "멘트 적용", score: 4 },
+            { label: "반복 업무 집중력", score: 5 },
+          ],
+        },
       },
       nakyung: {
         code: "nakyung",
@@ -4594,8 +5283,34 @@
         downloadLabel: "Setup exe 다운로드",
         supportedPlatforms: ["windows"],
         version: "1.0.0",
-        description: "화면 위에 자유롭게 판서하고 같은 와이파이에서 실시간으로 공유할 수 있는 Windows 전용 데스크톱 판서 직원입니다.",
+        description: "강의와 회의 화면 위에 바로 밑줄을 긋고, 같은 와이파이에서 실시간으로 공유하는 Windows 판서 직원입니다.",
         meta: ["전체화면 판서", "실시간 공유", "형광펜/도형/텍스트", "스포트라이트"],
+        resume: {
+          employeeNo: "AIMAX-2026-NAKYUNG",
+          team: "라이브판서팀",
+          experience: "6년차",
+          hometown: "경북 안동",
+          formerRole: "방과후 칠판 정리반",
+          statement: "\"말이 흘러가기 전에 화면 위에 붙잡아둡니다\"",
+          intro: "강의, 회의, 시연 중 놓치기 쉬운 포인트를 화면 위에 바로 표시하는 Windows 전용 판서 담당입니다.",
+          career: [
+            { period: "2018-2020", org: "온라인 강의 보조실", note: "강의 화면 위 중요 포인트를 색과 선으로 정리하며 설명의 리듬을 맞췄습니다." },
+            { period: "2020-2023", org: "원격 워크숍 운영팀", note: "실시간 공유와 스포트라이트를 활용해 참가자가 봐야 할 곳을 정확히 짚었습니다." },
+            { period: "2023-현재", org: "AIMAX 라이브판서팀", note: "전체화면 판서, 형광펜, 도형, 텍스트 표시를 전담하는 설치형 직원으로 근무 중입니다." },
+          ],
+          reference: {
+            quote: "나경이 지나간 화면은 회의록보다 빨리 이해됐습니다.",
+            from: "전 워크숍 운영자",
+          },
+          interviewLine: "말은 발표자가 하고, 밑줄은 제가 긋겠습니다.",
+          skills: [
+            { label: "전체화면 판서", score: 5 },
+            { label: "실시간 공유", score: 4 },
+            { label: "형광펜 표시", score: 5 },
+            { label: "스포트라이트", score: 4 },
+            { label: "강의 흐름 보조", score: 4 },
+          ],
+        },
       },
       hyunseong: {
         code: "hyunseong",
@@ -4608,8 +5323,34 @@
         status: "needs_setup",
         requiredSettings: ["future_staff_setup"],
         repoUrl: "https://github.com/makefamily/Project-manager",
-        description: "프로젝트 진행 상황과 할 일을 정리해줄 PM 직원입니다. 기능 연결 전이라 기본 설정이 필요한 상태로 먼저 등록했습니다.",
+        description: "흩어진 할 일과 진행 상황을 줄 세우는 PM 직원입니다. 정식 배치 전이라 기능 연결을 준비 중입니다.",
         meta: ["프로젝트 관리", "일정 정리", "기능 준비 중"],
+        resume: {
+          employeeNo: "AIMAX-2026-HYUNSEONG",
+          team: "프로젝트관리팀",
+          experience: "9년차",
+          hometown: "강원 원주",
+          formerRole: "회의실 화이트보드 담당",
+          statement: "\"할 일은 흩어지기 전에 줄을 세워야 합니다\"",
+          intro: "진행 상황, 담당자, 다음 액션을 한눈에 보이게 정리하는 PM 직원입니다. 아직 정식 배치는 준비 중입니다.",
+          career: [
+            { period: "2015-2018", org: "작은 제작사 운영실", note: "촬영, 디자인, 개발 일정이 섞인 프로젝트를 체크리스트로 정리했습니다." },
+            { period: "2018-2023", org: "디지털 제품 TF", note: "회의록과 액션 아이템을 분리해 팀이 다음에 무엇을 해야 하는지 선명하게 만들었습니다." },
+            { period: "2023-현재", org: "AIMAX 프로젝트관리팀", note: "AIMAX 내부 업무 흐름을 정리할 PM 직원으로 채용 대기 중입니다." },
+          ],
+          reference: {
+            quote: "현성이 회의에 들어오면 '누가 뭘 하지?'라는 말이 줄었습니다.",
+            from: "전 프로젝트 리드",
+          },
+          interviewLine: "일정표는 차갑게, 사람은 따뜻하게 챙기겠습니다.",
+          skills: [
+            { label: "업무 정리", score: 5 },
+            { label: "일정 관리", score: 5 },
+            { label: "회의록 구조화", score: 4 },
+            { label: "리스크 체크", score: 4 },
+            { label: "기능 준비", score: 3 },
+          ],
+        },
       },
       sangsu: {
         code: "sangsu",
@@ -4624,8 +5365,34 @@
         type: "web_module",
         requiredSettings: [],
         moduleKey: "quote_generator",
-        description: "상호, 작업 항목, 금액, 유의사항을 입력하면 브라우저에서 바로 견적서를 작성하고 PDF 저장용 인쇄 화면으로 넘깁니다.",
+        description: "상호, 작업 항목, 금액, 유의사항을 보기 좋은 견적서로 정리하고 PDF 저장용 인쇄 화면으로 넘깁니다.",
         meta: ["견적서 작성", "로고 업로드", "PDF 저장"],
+        resume: {
+          employeeNo: "AIMAX-2026-SANGSU",
+          team: "정산관리팀",
+          experience: "11년차",
+          hometown: "대구 달성",
+          formerRole: "문구점 장부 담당",
+          statement: "\"금액은 감으로 맞추지 않고, 줄 맞춰 정리합니다\"",
+          intro: "상호, 항목, 금액, 유의사항을 받아 견적서로 정리하고 PDF 저장 흐름까지 넘기는 경리 직원입니다.",
+          career: [
+            { period: "2013-2017", org: "지역 인쇄소 견적실", note: "작업 항목과 단가를 빠르게 정리하며 헷갈리는 금액 표기를 줄였습니다." },
+            { period: "2017-2022", org: "디자인 스튜디오 운영팀", note: "로고, 금액, 비고가 섞인 견적서를 거래처가 보기 좋게 정리했습니다." },
+            { period: "2022-현재", org: "AIMAX 정산관리팀", note: "브라우저에서 바로 견적서를 만들고 PDF 인쇄 화면으로 넘기는 일을 맡고 있습니다." },
+          ],
+          reference: {
+            quote: "상수가 만든 견적서는 설명 전화를 한 통 줄여줬습니다.",
+            from: "전 스튜디오 대표",
+          },
+          interviewLine: "숫자는 제가 맞추고, 대표님은 승인만 하시면 됩니다.",
+          skills: [
+            { label: "견적서 작성", score: 5 },
+            { label: "항목 정리", score: 5 },
+            { label: "로고 업로드", score: 4 },
+            { label: "PDF 저장", score: 5 },
+            { label: "비고 정리", score: 4 },
+          ],
+        },
       },
       songi: {
         code: "songi",
@@ -4641,8 +5408,34 @@
         requiredSettings: [],
         moduleKey: "research",
         repoUrl: "https://github.com/makefamily/data-research",
-        description: "URL과 메모를 받아 근거, 태그, 핵심 포인트를 정리하고 다음 제작 직원에게 넘길 리서치 브리프를 만듭니다.",
+        description: "URL과 메모를 읽고 근거, 태그, 핵심 포인트를 정리해 다음 제작 직원이 바로 쓰는 브리프로 넘깁니다.",
         meta: ["자료조사", "태그 정리", "브리프 생성"],
+        resume: {
+          employeeNo: "AIMAX-2026-SONGI",
+          team: "자료조사팀",
+          experience: "9년차",
+          hometown: "충남 공주",
+          formerRole: "도서관 기사 스크랩 담당",
+          statement: "\"출처 없는 정보는 정보가 아니라 소문입니다\"",
+          intro: "URL과 메모를 받아 근거, 태그, 핵심 포인트를 정리하고 다음 제작 직원이 바로 쓸 수 있는 브리프를 만듭니다.",
+          career: [
+            { period: "2015-2018", org: "콘텐츠 리서치랩", note: "기사, 영상, 게시글을 읽고 출처와 핵심 문장을 분리하는 기초 체력을 쌓았습니다." },
+            { period: "2018-2023", org: "브랜드 전략팀", note: "벤치마킹 자료를 태그와 인사이트로 정리해 회의 시간을 줄이는 일을 맡았습니다." },
+            { period: "2023-현재", org: "AIMAX 자료조사팀", note: "조사한 자료를 예리, 윤미 등 제작 직원에게 넘기기 좋은 브리프로 정리합니다." },
+          ],
+          reference: {
+            quote: "송이의 리서치는 자료 더미가 아니라 바로 쓰는 지도였습니다.",
+            from: "전 기획팀장",
+          },
+          interviewLine: "궁금한 건 못 넘기는 편이라, 이 일이 제법 잘 맞습니다.",
+          skills: [
+            { label: "근거 정리", score: 5 },
+            { label: "태그 분류", score: 5 },
+            { label: "브리프 생성", score: 5 },
+            { label: "핵심 포인트 추출", score: 4 },
+            { label: "제작 인수인계", score: 4 },
+          ],
+        },
       },
       jieun: {
         code: "jieun",
@@ -4664,8 +5457,136 @@
         downloadLabel: "Setup exe 다운로드",
         supportedPlatforms: ["windows"],
         version: "0.1.6",
-        description: "화면 캡처, 캡처 이미지 모자이크, Windows 종료, OCR 텍스트 캡처, 화면 녹화, 블로그 글쓰기 진입을 돕는 Windows 전용 데스크톱 사무 보조 직원입니다.",
+        description: "캡처, 모자이크, OCR, 화면 녹화, Windows 종료처럼 자주 쓰는 사무 작업을 조용히 처리하는 데스크톱 직원입니다.",
         meta: ["화면 캡처", "캡처 이미지 모자이크", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+        resume: {
+          employeeNo: "AIMAX-2026-JIEUN",
+          team: "오피스지원팀",
+          experience: "10년차",
+          hometown: "경남 진주",
+          formerRole: "사무실 만능 단축키 담당",
+          statement: "\"티 안 나는 일이 잘 돼야 사무실이 굴러갑니다\"",
+          intro: "캡처, 모자이크, OCR, 화면녹화, Windows 종료처럼 자주 쓰지만 번거로운 일을 조용히 처리하는 오피스 지원 직원입니다.",
+          career: [
+            { period: "2014-2018", org: "교육 운영 사무국", note: "강의 자료 캡처와 개인정보 가림 작업을 반복하며 실수 없는 사무 보조를 익혔습니다." },
+            { period: "2018-2023", org: "콘텐츠 운영팀", note: "OCR 텍스트 캡처, 녹화 보조, 자료 정리처럼 손이 많이 가는 일을 맡았습니다." },
+            { period: "2023-현재", org: "AIMAX 오피스지원팀", note: "Windows 전용 데스크톱 앱으로 화면 작업과 블로그 진입 보조를 담당합니다." },
+          ],
+          reference: {
+            quote: "지은이 쉬는 날에는 작은 불편들이 줄을 서기 시작했습니다.",
+            from: "전 운영 매니저",
+          },
+          interviewLine: "부탁받기 전에 끝내두는 쪽을 선호합니다.",
+          skills: [
+            { label: "화면 캡처", score: 5 },
+            { label: "이미지 모자이크", score: 5 },
+            { label: "OCR 텍스트 캡처", score: 4 },
+            { label: "화면 녹화", score: 4 },
+            { label: "Windows 보조", score: 5 },
+          ],
+        },
+      },
+      eunseo: {
+        code: "eunseo",
+        name: "은서",
+        role: "녹화 프롬프터",
+        avatar: "/assets/avatar_eunseo.jpg",
+        photo: "/assets/avatar_eunseo.jpg",
+        product: "eunseo",
+        jobKind: "",
+        status: "available",
+        execution: "external_tool",
+        type: "multi_channel",
+        accessPolicy: "makefamily_member",
+        requiredSettings: [],
+        moduleKey: "prompter",
+        description: "모바일에서는 카메라 근처 대본을 띄우고, PC에서는 화면녹화용 프롬프터로 출근하는 다중 실행형 직원입니다.",
+        meta: ["웹 프롬프터", "Mac 앱", "모바일 촬영", "Toss 미니앱 준비"],
+        resume: {
+          employeeNo: "AIMAX-2026-EUNSEO",
+          team: "촬영지원팀",
+          experience: "10년차",
+          hometown: "강원 평창",
+          formerRole: "지역 방송국 프롬프터실",
+          statement: "\"카메라 앞의 침묵은 제가 책임집니다\"",
+          intro: "카메라 앞에서 말이 막히는 순간을 줄이는 일이 제 역할입니다. 대본을 올려두시면 읽는 속도에 맞춰 화면에 흘려드리고, 촬영이 끝날 때까지 조용히 자리를 지킵니다.",
+          career: [
+            {
+              period: "2016-2019",
+              org: "지역 방송국 보도국 프롬프터실",
+              note: "생방송 큐시트와 뉴스 대본 흐름을 맞추던 시절. 빠른 수정과 차분한 속도 조절을 배웠습니다.",
+            },
+            {
+              period: "2019-2023",
+              org: "1인 크리에이터 스튜디오",
+              note: "유튜브, 강의, 세일즈 영상 촬영 현장에서 카메라 근처 대본 읽기를 지원했습니다.",
+            },
+            {
+              period: "2023-현재",
+              org: "AIMAX 촬영지원팀",
+              note: "웹, Mac, Android, Toss 미니앱까지 촬영 환경에 맞춰 출근하는 다중 실행형 프롬프터로 근무 중입니다.",
+            },
+          ],
+          reference: {
+            quote: "은서가 붙은 촬영은 재녹화보다 바로 저장이 많았습니다.",
+            from: "전 촬영 PD",
+          },
+          interviewLine: "대본이 길어도 괜찮습니다. 속도는 제가 맞추니까요.",
+          skills: [
+            { label: "자동 스크롤", score: 5 },
+            { label: "속도 조절", score: 5 },
+            { label: "카메라 시선 유지", score: 4 },
+            { label: "반투명 대본 표시", score: 4 },
+            { label: "현장 대본 수정 대응", score: 5 },
+          ],
+        },
+        executionOptions: [
+          {
+            kind: "web_app",
+            label: "웹에서 바로 사용",
+            platforms: ["web"],
+            status: "available",
+            url: "/eunseo",
+            primary: true,
+            description: "브라우저에서 바로 여는 모바일/PC 공용 프롬프터입니다.",
+          },
+          {
+            kind: "mac_download",
+            label: "Mac 앱 다운로드",
+            platforms: ["macos"],
+            status: "available",
+            url: "/api/downloads/agent?platform=macos&product=eunseo",
+            primary: false,
+            description: "Mac 화면녹화용 로컬 앱입니다. 숨김 여부는 녹화 프로그램별로 실측 확인이 필요합니다.",
+          },
+          {
+            kind: "windows_download",
+            label: "Windows 앱",
+            platforms: ["windows"],
+            status: "coming_soon",
+            url: "",
+            primary: false,
+            description: "Windows 화면녹화용 앱은 준비 중입니다.",
+          },
+          {
+            kind: "android_apk",
+            label: "Android APK",
+            platforms: ["android"],
+            status: "testing",
+            url: "",
+            primary: false,
+            description: "Android 설치 파일은 실기기 검증 후 공개 다운로드로 연결합니다.",
+          },
+          {
+            kind: "toss_mini",
+            label: "Toss 미니앱",
+            platforms: ["ios", "android"],
+            status: "coming_soon",
+            url: "",
+            primary: false,
+            description: "토스 앱 안에서 실행하는 미니앱 버전입니다. 앱인토스 검수 후 활성화됩니다.",
+          },
+        ],
       },
     };
 
@@ -4829,6 +5750,9 @@
     function platformLabel(platform) {
       if (platform === "macos") return "macOS";
       if (platform === "windows") return "Windows";
+      if (platform === "web") return "Web";
+      if (platform === "ios") return "iPhone";
+      if (platform === "android") return "Android";
       return "알 수 없음";
     }
 
@@ -6068,6 +6992,11 @@
         research_gemini_timeout: "Gemini 분석 시간이 초과되었습니다. 입력 길이나 영상 첨부 용량을 줄인 뒤 다시 시도해주세요.",
         research_gemini_provider_error: "Gemini 서버 오류입니다. 잠시 뒤 다시 시도해주세요.",
         research_gemini_failed: "Gemini AI 분석이 실패했습니다.",
+        research_apify_invalid_token: "Apify 키가 유효하지 않습니다. 설정 > AI/API 연결에서 키를 다시 저장해주세요.",
+        research_apify_credit_exhausted: "Apify 크레딧이 부족합니다. Apify 콘솔에서 잔액을 확인해주세요.",
+        research_apify_discovery_failed: "Apify 후보 수집이 실패했습니다. 잠시 뒤 다시 시도해주세요.",
+        research_discovery_keyword_invalid: "이 키워드로는 해시태그를 만들 수 없습니다. 특수문자를 빼고 다시 입력해주세요.",
+        apify_token_invalid: "Apify 키가 유효하지 않습니다. Apify 콘솔 > API & Integrations에서 키를 다시 복사해주세요.",
       }[code] || fallback || "요청을 처리하지 못했습니다.";
     }
 
@@ -6128,7 +7057,10 @@
       }
       if (products.has("bundle")) {
         const bundledProducts = state.workers?.length
-          ? state.workers.map((item) => item.product).filter((product) => product && product !== "free")
+          ? state.workers
+            .filter((item) => !["makefamily_member", "member_only"].includes(item.access_policy || ""))
+            .map((item) => item.product)
+            .filter((product) => product && product !== "free")
           : ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
         bundledProducts.push("bundle", "blog_team");
         bundledProducts.forEach((product) => products.add(product));
@@ -6140,6 +7072,7 @@
       const products = new Set(productsForUser());
       const visible = [];
       if (products.has("bundle")) {
+        if (products.has("eunseo")) return ["bundle", "eunseo"];
         return ["bundle"];
       } else if (products.has("blog_team")) {
         visible.push("blog_team");
@@ -6153,6 +7086,7 @@
       if (products.has("nakyung")) visible.push("nakyung");
       if (products.has("hyojin")) visible.push("hyojin");
       if (products.has("sangsu")) visible.push("sangsu");
+      if (products.has("eunseo")) visible.push("eunseo");
       return visible;
     }
 
@@ -6213,6 +7147,7 @@
             version: worker.version || "",
             description: worker.short_description || "기능 연결 전이라 기본 설정이 필요한 상태입니다.",
             meta: Array.isArray(worker.capabilities) ? worker.capabilities : [],
+            executionOptions: Array.isArray(worker.execution_options) ? worker.execution_options : [],
           };
           continue;
         }
@@ -6245,6 +7180,9 @@
         employees[key].meta = Array.isArray(worker.capabilities) && worker.capabilities.length
           ? worker.capabilities
           : employees[key].meta;
+        employees[key].executionOptions = Array.isArray(worker.execution_options)
+          ? worker.execution_options
+          : employees[key].executionOptions;
       }
       for (const jobKind of state.jobKindCatalog || []) {
         if (!jobKind.kind) continue;
@@ -6285,6 +7223,7 @@
     function hasEmployeeEntitlement(employee) {
       if (!employee) return false;
       if (isPublicEmployee(employee)) return Boolean(state.me?.user?.status === "active" || state.me?.can_execute);
+      if (isMemberOnlyEmployee(employee)) return hasMakefamilyMemberAccess();
       if (!state.me?.can_execute) return false;
       const products = new Set(productsForUser());
       return products.has(employee.product);
@@ -6294,10 +7233,126 @@
       return employee?.accessPolicy === "public";
     }
 
+    function normalizeAccountSegment(value) {
+      const raw = String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
+      if (["makefamily", "makefamily_member", "member", "student", "course", "course_member", "원회원", "수강생", "메이크패밀리", "메이크패밀리회원", "메이크패밀리원회원"].includes(raw)) return "makefamily_member";
+      if (["both", "member_and_buyer", "makefamily_buyer", "원회원+구매자", "수강생+구매자"].includes(raw)) return "member_and_buyer";
+      if (["test", "demo", "테스트", "운영테스트"].includes(raw)) return "test";
+      if (["operator", "admin", "운영자"].includes(raw)) return "operator";
+      return raw || "paid_buyer";
+    }
+
+    function hasMakefamilyMemberAccess() {
+      if (!state.me?.can_execute) return false;
+      const segment = normalizeAccountSegment(state.me?.user?.account_segment || state.me?.user?.accountSegment || "");
+      return ["makefamily_member", "member_and_buyer", "operator", "test"].includes(segment);
+    }
+
+    function isMemberOnlyEmployee(employee) {
+      return ["makefamily_member", "member_only"].includes(employee?.accessPolicy || "");
+    }
+
     function isExternalDownloadEmployee(employee) {
       return employee?.execution === "external_download"
         || employee?.type === "desktop_app"
         || Boolean(employee?.setupDownloadUrl || employee?.releaseUrl);
+    }
+
+    function isMultiChannelEmployee(employee) {
+      return Array.isArray(employee?.executionOptions) && employee.executionOptions.length > 0
+        || employee?.execution === "external_tool"
+        || employee?.type === "multi_channel";
+    }
+
+    function executionOptionStatusInfo(status) {
+      if (status === "available") return { label: "사용 가능", className: "ok" };
+      if (status === "testing") return { label: "검수 중", className: "warn" };
+      if (status === "unsupported") return { label: "미지원", className: "bad" };
+      return { label: "발령 대기", className: "warn" };
+    }
+
+    function employeeExecutionOptions(employee) {
+      const configured = Array.isArray(employee?.executionOptions) ? employee.executionOptions : [];
+      if (configured.length) {
+        return configured.map((option) => ({
+          kind: option.kind || "",
+          label: option.label || "실행 방법",
+          platforms: Array.isArray(option.platforms) ? option.platforms : [],
+          status: option.status || "coming_soon",
+          url: option.url || "",
+          primary: Boolean(option.primary),
+          description: option.description || "",
+        })).filter((option) => option.kind && option.label);
+      }
+      if (isExternalDownloadEmployee(employee)) {
+        const supported = employeeSupportsCurrentPlatform(employee);
+        return [{
+          kind: "pc_download",
+          label: `${employeePlatformLabel(employee)} 앱 다운로드`,
+          platforms: employeeSupportedPlatforms(employee),
+          status: supported ? "available" : "unsupported",
+          url: externalEmployeeDownloadUrl(employee),
+          primary: true,
+          description: supported
+            ? "설치 파일을 내려받아 PC에서 실행합니다."
+            : `${employeePlatformLabel(employee)}에서만 설치와 사용을 지원합니다.`,
+        }];
+      }
+      if (isWebModuleEmployee(employee)) {
+        return [{
+          kind: "web_module",
+          label: "웹에서 바로 사용",
+          platforms: ["web"],
+          status: "available",
+          url: "",
+          primary: true,
+          description: "설치 없이 AIMAX 웹에서 바로 일을 맡길 수 있습니다.",
+        }];
+      }
+      if (requiresLocalAgentEmployee(employee)) {
+        const status = employeeStatusInfo(employee?.code || "");
+        return [{
+          kind: "local_agent",
+          label: "로컬 실행기 연동",
+          platforms: ["windows", "macos"],
+          status: status.status === "available" ? "available" : "testing",
+          url: "",
+          primary: true,
+          description: status.reason || "AIMAX 로컬 실행기와 연결해 PC 작업을 수행합니다.",
+        }];
+      }
+      return [];
+    }
+
+    function optionMatchesExecutionFilter(option, filter) {
+      if (filter === "all") return true;
+      const kind = String(option?.kind || "");
+      const platforms = Array.isArray(option?.platforms) ? option.platforms : [];
+      if (filter === "web") return kind === "web_app" || kind === "web_module" || platforms.includes("web");
+      if (filter === "pc") {
+        return ["pc_download", "mac_download", "windows_download"].includes(kind)
+          || (kind !== "local_agent" && (platforms.includes("windows") || platforms.includes("macos")));
+      }
+      if (filter === "mobile") {
+        return ["android_apk", "toss_mini", "mobile_web"].includes(kind)
+          || platforms.includes("android")
+          || platforms.includes("ios");
+      }
+      return true;
+    }
+
+    function employeeMatchesExecutionFilter(employee, filter = state.staffExecutionFilter) {
+      if (filter === "all") return true;
+      return employeeExecutionOptions(employee).some((option) => optionMatchesExecutionFilter(option, filter));
+    }
+
+    function executionOptionButtonLabel(option) {
+      if (option.status === "testing") return "검수 중";
+      if (option.status === "unsupported") return "미지원";
+      if (option.status !== "available") return "발령 대기";
+      if (String(option.kind || "").includes("download")) return "다운로드";
+      if (option.kind === "android_apk") return "APK 받기";
+      return "열기";
     }
 
     function employeeSupportedPlatforms(employee) {
@@ -6328,13 +7383,133 @@
     }
 
     function employeeExecutionLabel(employee) {
+      if (isMultiChannelEmployee(employee)) return "다중 실행";
       if (isExternalDownloadEmployee(employee)) return "직접 다운로드";
       if (isWebModuleEmployee(employee)) return "웹 기반";
       if (isPlannedEmployee(employee)) return "기능 준비 중";
       return "로컬 실행기 연동";
     }
 
+    function staffCardExecutionLabel(employee, recent) {
+      if (isMultiChannelEmployee(employee)) return "실행 방법 선택";
+      if (isExternalDownloadEmployee(employee)) return `${employeePlatformLabel(employee)} 앱`;
+      if (isWebModuleEmployee(employee)) return "웹에서 바로 사용";
+      return recent ? `최근 ${recent.status}` : "로컬 실행기";
+    }
+
+    const employeeResumeProfiles = {
+      yunmi: {
+        employeeNo: "AIMAX-2026-YUNMI",
+        team: "숏폼작가팀",
+        experience: "8년차",
+        hometown: "부산 영도",
+        formerRole: "새벽 편집실 훅 담당",
+        statement: "\"첫 3초가 지나가기 전에 시선을 붙잡겠습니다\"",
+        intro: "주제와 목적을 받아 A/B/C 타깃별 숏폼 스크립트와 촬영 가이드, CTA 후보까지 나눠 쓰는 스크립트작가입니다.",
+        career: [
+          { period: "2016-2019", org: "바이럴 영상 제작팀", note: "짧은 영상의 첫 문장, 화면 전환, 마지막 행동 유도 문장을 다듬는 일을 맡았습니다." },
+          { period: "2019-2023", org: "브랜드 숏폼 스튜디오", note: "타깃별 반응 차이를 기준으로 여러 버전의 대본과 촬영 가이드를 설계했습니다." },
+          { period: "2023-현재", org: "AIMAX 숏폼작가팀", note: "A/B/C 타깃별 스크립트와 CTA 후보를 빠르게 비교할 수 있게 정리합니다." },
+        ],
+        reference: {
+          quote: "윤미는 같은 주제도 세 사람에게 다르게 말하는 법을 압니다.",
+          from: "전 콘텐츠 PD",
+        },
+        interviewLine: "짧은 영상일수록 문장은 더 정확해야 합니다.",
+        skills: [
+          { label: "숏폼 후킹", score: 5 },
+          { label: "타깃별 변주", score: 5 },
+          { label: "시간대별 대본", score: 4 },
+          { label: "촬영 가이드", score: 4 },
+          { label: "CTA 후보 작성", score: 5 },
+        ],
+      },
+    };
+
+    function employeeResumeData(employee) {
+      if (employee?.resume && typeof employee.resume === "object") return employee.resume;
+      const code = employee?.code || employee?.staffCode || "";
+      return employeeResumeProfiles[code] || {};
+    }
+
+    function employeeResumeHeadline(employee, status) {
+      const resume = employeeResumeData(employee);
+      if (resume.statement) return resume.statement;
+      const parts = [
+        resume.employeeNo,
+        resume.team,
+        resume.experience,
+        resume.hometown ? `${resume.hometown} 출신` : "",
+      ].filter(Boolean);
+      if (parts.length) return parts.join(" · ");
+      return status.reason ? `${employee.description} ${status.reason}` : employee.description;
+    }
+
+    function employeeResumeIdentityBoxes(employee, status) {
+      const resume = employeeResumeData(employee);
+      const code = String(employee?.code || "staff").toUpperCase();
+      return [
+        { label: "사번", detail: resume.employeeNo || `AIMAX-${code}` },
+        { label: "소속", detail: resume.team || `${employee.role || "AI 직원"}팀` },
+        { label: "경력", detail: resume.experience || employeeExecutionLabel(employee) },
+        { label: "출신", detail: resume.hometown || "AIMAX 채용 풀" },
+        { label: "전 직장", detail: resume.formerRole || "기능 검증실" },
+        { label: "재직 상태", detail: status.label || "확인 중" },
+      ];
+    }
+
+    function employeeResumeIntro(employee) {
+      const resume = employeeResumeData(employee);
+      return resume.intro || employee.description || "아직 자기소개를 준비 중인 직원입니다.";
+    }
+
+    function employeeResumeCareer(employee) {
+      const resume = employeeResumeData(employee);
+      const configured = Array.isArray(resume.career) ? resume.career.filter((item) => item?.period || item?.org || item?.note) : [];
+      if (configured.length) return configured;
+      return [{
+        period: "현재",
+        org: employee.role || "AIMAX 직원",
+        note: employee.description || "담당 업무와 실행 환경을 준비하고 있습니다.",
+      }];
+    }
+
+    function employeeResumeReference(employee) {
+      const resume = employeeResumeData(employee);
+      if (resume.reference?.quote) return resume.reference;
+      return {
+        quote: `${employee.name || "이 직원"}은 담당 업무가 정해지면 조용히 끝까지 처리하는 편입니다.`,
+        from: "AIMAX 운영팀",
+      };
+    }
+
+    function employeeResumeInterviewLine(employee) {
+      const resume = employeeResumeData(employee);
+      return resume.interviewLine || `${employee.role || "맡은 일"}은 제 자리에서 차분하게 처리하겠습니다.`;
+    }
+
+    function employeeResumeSkills(employee) {
+      const resume = employeeResumeData(employee);
+      const configured = Array.isArray(resume.skills) ? resume.skills.filter((item) => item?.label) : [];
+      if (configured.length) return configured;
+      return (employee.meta || []).slice(0, 5).map((item) => ({ label: item, score: 4 }));
+    }
+
+    function skillDots(score) {
+      const value = Math.max(0, Math.min(5, Number(score) || 0));
+      return Array.from({ length: 5 }, (_, index) => `<span class="${index < value ? "filled" : ""}"></span>`).join("");
+    }
+
     function employeeResumeBoxes(employee, status) {
+      if (isMultiChannelEmployee(employee)) {
+        const resume = employeeResumeData(employee);
+        return [
+          { label: "업무 태도", detail: resume.workStyle || "말은 적고, 화면 위 대본은 꾸준히 흘려보냅니다." },
+          { label: "배치 방식", detail: "웹앱, PC 앱, 모바일/토스 근무지를 한 직원 안에서 선택합니다." },
+          { label: "채용 메모", detail: status.reason || "근무지별 발령 상태를 확인해주세요." },
+          { label: "특기", detail: (employee.meta || []).join(", ") || "기능 준비 중" },
+        ];
+      }
       if (isExternalDownloadEmployee(employee)) {
         return [
           { label: "직무", detail: employee.role || "AI 직원" },
@@ -6533,10 +7708,23 @@
       }
       const allowed = hasEmployeeEntitlement(employee);
       if (!allowed) {
+        if (isMemberOnlyEmployee(employee)) {
+          return { status: "no_entitlement", label: "원회원 전용", className: "warn", reason: "메이크패밀리 원회원 계정에서 사용할 수 있습니다." };
+        }
         return { status: "no_entitlement", label: "권한 없음", className: "warn", reason: "현재 계정 권한으로는 이 직원을 사용할 수 없습니다." };
       }
       if (!state.me?.can_execute && !isPublicEmployee(employee)) {
         return { status: "needs_setup", label: "권한 확인", className: "warn", reason: "계정 권한 확인 후 사용할 수 있습니다." };
+      }
+      if (isMultiChannelEmployee(employee)) {
+        const options = employeeExecutionOptions(employee);
+        if (options.some((option) => option.status === "available" && option.url)) {
+          return { status: "available", label: "사용 가능", className: "ok", reason: "" };
+        }
+        if (options.some((option) => option.status === "testing")) {
+          return { status: "needs_setup", label: "테스트 중", className: "warn", reason: "실행 링크는 검증 후 활성화됩니다." };
+        }
+        return { status: "needs_setup", label: "준비 중", className: "warn", reason: "실행 방법별 배포 준비가 진행 중입니다." };
       }
       if (isPlannedEmployee(employee)) {
         return { status: "needs_setup", label: "설정 필요", className: "warn", reason: "기능 연결 전이라 직원 기본 설정을 준비 중입니다." };
@@ -6570,6 +7758,7 @@
       const query = state.staffQuery.trim().toLowerCase();
       return staffCatalogEmployees().map(({ key, employee }) => [key, employee]).filter(([key, employee]) => {
         const status = employeeStatusInfo(key).status;
+        const executionMatch = employeeMatchesExecutionFilter(employee);
         const statusMatch = state.staffFilter === "all"
           || status === state.staffFilter
           || (state.staffFilter === "needs_setup" && ["needs_setup", "agent_offline", "unsupported_agent", "windows_only"].includes(status));
@@ -6577,7 +7766,7 @@
           .join(" ")
           .toLowerCase();
         const queryMatch = !query || text.includes(query);
-        return statusMatch && queryMatch;
+        return executionMatch && statusMatch && queryMatch;
       });
     }
 
@@ -6795,7 +7984,7 @@
     }
 
     function requiresLocalAgentEmployee(employee) {
-      return !isWebModuleEmployee(employee) && !isExternalDownloadEmployee(employee);
+      return !isMultiChannelEmployee(employee) && !isWebModuleEmployee(employee) && !isExternalDownloadEmployee(employee);
     }
 
     function employeeJobKind(key) {
@@ -6804,6 +7993,7 @@
 
     function isPlannedEmployee(employee) {
       if (!employee) return true;
+      if (isMultiChannelEmployee(employee)) return false;
       if (isWebModuleEmployee(employee)) return false;
       if (isExternalDownloadEmployee(employee)) return false;
       return (employee.status === "needs_setup" && !employee.jobKind)
@@ -6837,6 +8027,14 @@
       }
       if (isWebModuleEmployee(employee)) {
         return { label: "직원 업무지시", action: "quick-actions", disabled: !state.me?.can_execute };
+      }
+      if (isMultiChannelEmployee(employee)) {
+        const options = employeeExecutionOptions(employee);
+        const primary = options.find((option) => option.primary) || options[0];
+        if (primary?.status === "available" && primary.url) {
+          return { label: primary.label || "열기", action: "execution-option", disabled: false };
+        }
+        return { label: "실행 준비 중", action: "", disabled: true };
       }
       if (isPlannedEmployee(employee)) {
         return { label: "기능 준비 중", action: "", disabled: true };
@@ -6892,6 +8090,20 @@
       }
     }
 
+    function openExternalLink(value, options = {}) {
+      if (!value) return false;
+      const anchor = document.createElement("a");
+      anchor.href = value;
+      const directDownload = options.download || isDirectExternalDownloadUrl(value);
+      if (directDownload) anchor.download = filenameFromUrl(value);
+      anchor.rel = "noopener noreferrer";
+      anchor.target = "_blank";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return directDownload;
+    }
+
     function downloadExternalEmployee(employee) {
       if (!employee) {
         showToast("직원 정보를 확인할 수 없습니다.");
@@ -6906,15 +8118,7 @@
         showToast("다운로드 링크가 아직 준비되지 않았습니다.");
         return;
       }
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      const directDownload = isDirectExternalDownloadUrl(url);
-      if (directDownload) anchor.download = filenameFromUrl(url);
-      anchor.rel = "noopener noreferrer";
-      anchor.target = "_blank";
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
+      const directDownload = openExternalLink(url);
       showToast(directDownload
         ? `${employee.name || "직원"} 설치 파일 다운로드를 시작했습니다.`
         : `${employee.name || "직원"} 다운로드 페이지를 열었습니다.`);
@@ -8301,6 +9505,9 @@
       $("#staffOverall").className = `pill ${availableCount ? "ok" : "warn"}`;
 
       const visibleEntries = filteredStaffEntries();
+      if (visibleEntries.length && !visibleEntries.some(([key]) => key === state.selectedEmployee)) {
+        state.selectedEmployee = visibleEntries[0][0];
+      }
       $("#staffGrid").innerHTML = visibleEntries.length
         ? visibleEntries.map(([key, employee]) => {
           const status = employeeStatusInfo(key);
@@ -8318,7 +9525,7 @@
               </span>
               <span class="staff-card-meta">
                 ${(employee.meta || []).slice(0, 3).map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("")}
-                <span class="pill">${isExternalDownloadEmployee(employee) ? `${escapeHtml(employeePlatformLabel(employee))} 앱` : recent ? `최근 ${escapeHtml(recent.status)}` : "작업 없음"}</span>
+                <span class="pill">${escapeHtml(staffCardExecutionLabel(employee, recent))}</span>
               </span>
             </button>
           `;
@@ -8330,28 +9537,127 @@
           state.selectedEmployee = card.dataset.staffCard || state.selectedEmployee;
           renderEmployeeProfile();
           renderStaffConsole();
+          openStaffResumePrompt();
         });
       });
-
-      renderStaffDetail();
     }
 
-    function renderStaffDetail() {
+    function renderStaffExecutionOptions(employee, selector = "#staffResumeExecutionOptions") {
+      const container = $(selector);
+      if (!container) return;
+      const options = employeeExecutionOptions(employee);
+      if (!options.length) {
+        container.innerHTML = `<div class="empty">아직 연결된 실행 방법이 없습니다.</div>`;
+        return;
+      }
+      container.innerHTML = options.map((option) => {
+        const platforms = (option.platforms || []).map(platformLabel).join(", ");
+        const description = [platforms, option.description || employeeExecutionLabel(employee)]
+          .filter(Boolean)
+          .join(" · ");
+        const disabled = option.status !== "available" || !hasEmployeeEntitlement(employee);
+        return `
+          <div class="execution-option ${option.primary ? "primary" : ""}">
+            <div class="execution-option-copy">
+              <div class="execution-option-title">
+                <strong>${escapeHtml(option.label)}</strong>
+              </div>
+              <div class="execution-option-description">${escapeHtml(description)}</div>
+            </div>
+            <button class="btn" type="button" data-execution-option="${escapeHtml(option.kind)}" ${disabled ? "disabled" : ""}>${escapeHtml(executionOptionButtonLabel(option))}</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function openStaffExecutionOption(kind, fallbackAction = "") {
+      const employee = employees[state.selectedEmployee];
+      const option = employeeExecutionOptions(employee).find((item) => item.kind === kind);
+      if (!employee || !option) {
+        showToast("실행 방법을 확인할 수 없습니다.");
+        return;
+      }
+      if (!hasEmployeeEntitlement(employee)) {
+        const status = employeeStatusInfo(employee.code || state.selectedEmployee);
+        showToast(status.reason || "현재 계정 권한으로는 이 직원을 사용할 수 없습니다.");
+        return;
+      }
+      if (option.status === "available" && option.url) {
+        try {
+          if (employee.product === "eunseo" && option.kind === "web_app") {
+            const launch = await api("/api/eunseo/launch", { method: "POST", body: "{}" });
+            openExternalLink(launch.url || option.url);
+            showToast(`${option.label} 페이지를 열었습니다.`);
+            return;
+          }
+          const optionUrl = new URL(option.url, window.location.origin);
+          if (optionUrl.pathname === "/api/downloads/agent" && optionUrl.searchParams.get("platform") && optionUrl.searchParams.get("product")) {
+            const ticket = await api("/api/downloads/tickets", {
+              method: "POST",
+              body: JSON.stringify({
+                platform: optionUrl.searchParams.get("platform"),
+                product: optionUrl.searchParams.get("product"),
+              }),
+            });
+            openExternalLink(ticket.url || option.url, { download: true });
+            showToast(`${option.label} 다운로드를 시작했습니다.`);
+            return;
+          }
+          const directDownload = openExternalLink(option.url);
+          showToast(directDownload ? `${option.label} 다운로드를 시작했습니다.` : `${option.label} 페이지를 열었습니다.`);
+          return;
+        } catch (error) {
+          showToast(error.body?.error || error.message || `${option.label} 실행에 실패했습니다.`);
+          return;
+        }
+      }
+      if (fallbackAction) {
+        runUiAction(fallbackAction);
+        return;
+      }
+      const status = executionOptionStatusInfo(option.status);
+      showToast(`${option.label}은 아직 ${status.label} 상태입니다.`);
+    }
+
+    function renderStaffResumePrompt() {
       const selected = employees[state.selectedEmployee] || employeeEntries()[0]?.[1];
       const selectedKey = selected?.code || state.selectedEmployee;
       if (!selected) return;
       const status = employeeStatusInfo(selectedKey);
-      $("#staffDetailPhoto").src = selected.photo;
-      $("#staffDetailPhoto").alt = `${selected.name} 프로필 사진`;
-      $("#staffDetailName").textContent = selected.name;
-      $("#staffDetailRole").textContent = selected.role;
-      $("#staffDetailStatus").textContent = status.label;
-      $("#staffDetailStatus").className = `pill ${status.className}`;
-      $("#staffDetailDescription").textContent = status.reason ? `${selected.description} ${status.reason}` : selected.description;
-      $("#staffRequiredSettings").innerHTML = requiredSettingsPills(selected.requiredSettings);
-      $("#staffDetailMeta").innerHTML = (selected.meta || [])
-        .map((item) => `<span class="pill">${escapeHtml(item)}</span>`)
-        .join("") || `<span class="pill">준비 중</span>`;
+      $("#staffResumePhoto").src = selected.photo;
+      $("#staffResumePhoto").alt = `${selected.name} 프로필 사진`;
+      $("#staffResumeName").textContent = selected.name;
+      $("#staffResumeRole").textContent = selected.role;
+      const statusNode = $("#staffResumeStatus");
+      if (statusNode) {
+        statusNode.textContent = status.label;
+        statusNode.className = `pill ${status.className}`;
+      }
+      $("#staffResumeDescription").textContent = employeeResumeHeadline(selected, status);
+      $("#staffResumeIdentity").innerHTML = employeeResumeIdentityBoxes(selected, status).map((item) => `
+        <div class="resume-box">
+          <strong>${escapeHtml(item.label)}</strong>
+          <span>${escapeHtml(item.detail)}</span>
+        </div>
+      `).join("");
+      $("#staffResumeIntro").textContent = employeeResumeIntro(selected);
+      $("#staffResumeRequiredSettings").innerHTML = requiredSettingsPills(selected.requiredSettings);
+      $("#staffResumeMeta").innerHTML = employeeResumeSkills(selected).map((item) => `
+        <div class="resume-skill-row">
+          <strong>${escapeHtml(item.label)}</strong>
+          <span class="resume-skill-dots" aria-label="${escapeHtml(`${item.score || 0}점`)}">${skillDots(item.score)}</span>
+        </div>
+      `).join("") || `<div class="empty">기술 항목 준비 중</div>`;
+      renderStaffExecutionOptions(selected);
+      $("#staffResumeCareer").innerHTML = employeeResumeCareer(selected).map((item) => `
+        <div class="resume-career-item">
+          <div class="resume-career-period">${escapeHtml(item.period || "현재")}</div>
+          <div class="resume-career-copy">
+            <strong>${escapeHtml(item.org || selected.role || "AIMAX")}</strong>
+            <span>${escapeHtml(item.note || selected.description || "")}</span>
+          </div>
+        </div>
+      `).join("");
       const resumeGrid = $("#staffResumeGrid");
       if (resumeGrid) {
         resumeGrid.innerHTML = employeeResumeBoxes(selected, status).map((item) => `
@@ -8361,13 +9667,15 @@
           </div>
         `).join("");
       }
-      const resumeVideo = $("#staffResumeVideo");
-      if (resumeVideo) {
-        resumeVideo.innerHTML = `
-          <strong>${escapeHtml(selected.name)} 데모 영상</strong>
-          <span>${escapeHtml(selected.name)}가 실제로 어떤 일을 맡는지 보여주는 짧은 영상 설명 영역입니다. 영상 파일은 이후 연결 예정입니다.</span>
-        `;
-      }
+      const reference = employeeResumeReference(selected);
+      $("#staffResumeReference").innerHTML = `
+        <span>"${escapeHtml(reference.quote)}"</span><br>
+        <strong>- ${escapeHtml(reference.from || "AIMAX 운영팀")}</strong>
+      `;
+      $("#staffResumeInterview").innerHTML = `
+        <span>${escapeHtml(employeeResumeInterviewLine(selected))}</span>
+        <strong>${escapeHtml(selected.name || "AIMAX 직원")}</strong>
+      `;
       const recentJobs = employeeRecentJobs(selectedKey, 3);
       $("#staffRecentJobs").innerHTML = recentJobs.length
         ? recentJobs.map((job) => `
@@ -8383,10 +9691,30 @@
           ? `<div class="empty">${escapeHtml(selected.name)}은 설치형 앱이라 웹 작업 기록을 만들지 않습니다.</div>`
           : `<div class="empty">최근 일 맡긴 기록이 없습니다.</div>`;
       const action = employeeAction(selectedKey);
-      $("#staffDetailAction").textContent = action.label;
-      $("#staffDetailAction").dataset.action = action.action;
-      $("#staffDetailAction").dataset.jobKind = selected.jobKind || "";
-      $("#staffDetailAction").disabled = action.disabled;
+      $("#staffResumePrompt").dataset.action = action.action;
+      $("#staffResumePrompt").dataset.jobKind = selected.jobKind || "";
+      const actionButton = $("#staffResumeActionBtn");
+      if (actionButton) {
+        const isPendingMultiChannel = isMultiChannelEmployee(selected) && action.disabled;
+        const actionLabel = isPendingMultiChannel ? "업무지시 준비 중" : action.label || "직원 업무지시";
+        $("#staffResumeActionLabel").textContent = actionLabel;
+        $("#staffResumeActionSub").textContent = action.disabled ? "STATUS HOLD" : "AIMAX WORK ORDER";
+        actionButton.dataset.action = action.action || "";
+        actionButton.dataset.jobKind = selected.jobKind || "";
+        actionButton.disabled = action.disabled;
+        actionButton.title = action.disabled
+          ? `${selected.name || "직원"}은 아직 바로 업무지시할 수 없습니다.`
+          : `${selected.name || "직원"}에게 업무를 지시합니다.`;
+      }
+    }
+
+    function openStaffResumePrompt() {
+      renderStaffResumePrompt();
+      $("#staffResumePrompt")?.classList.remove("hidden");
+    }
+
+    function hideStaffResumePrompt() {
+      $("#staffResumePrompt")?.classList.add("hidden");
     }
 
     function selectedResearchProject() {
@@ -8468,7 +9796,80 @@
         .sort((a, b) => Number(b.candidate_score || 0) - Number(a.candidate_score || 0));
     }
 
+    function songiDiscoveryPlatform() {
+      return $("#songiDiscoveryPlatform")?.value || "youtube";
+    }
+
+    function songiDiscoveryPlatformLabel(platform = songiDiscoveryPlatform()) {
+      return SONGI_DISCOVERY_PLATFORM_LABELS[platform] || platform;
+    }
+
+    function songiDiscoveryMaxResults() {
+      const platform = songiDiscoveryPlatform();
+      const raw = Number($("#songiDiscoveryMaxResults")?.value || "12");
+      if (platform === "meta_ads") return Math.max(SONGI_META_ADS_MIN_RESULTS, raw);
+      return raw;
+    }
+
+    function songiDiscoveryPricing(platform) {
+      return state.researchIntegrations?.apify?.discovery_pricing_usd?.[platform]
+        || SONGI_DISCOVERY_FALLBACK_PRICING_USD[platform]
+        || null;
+    }
+
+    function songiDiscoveryCostEstimate(platform = songiDiscoveryPlatform(), count = songiDiscoveryMaxResults()) {
+      if (platform === "youtube") return { free: true, usd: 0, won: 0, count };
+      const pricing = songiDiscoveryPricing(platform);
+      if (!pricing) return null;
+      const usd = Number(pricing.start || 0) + count * Number(pricing.per_result || 0);
+      return { free: false, usd, won: wonFromUsd(usd), count };
+    }
+
+    function songiDiscoveryCostLabel(estimate) {
+      if (!estimate) return "";
+      if (estimate.free) return "예상 비용: 무료 (AIMAX 웹 서버 공개 검색)";
+      const usdLabel = `$${estimate.usd.toFixed(3)}`;
+      return `예상 최대 비용: ${usdLabel} (약 ${wonLabel(estimate.won)}) · 후보 ${estimate.count}개 기준 · 내 Apify 크레딧에서 차감 (실행 시작 고정비 포함)`;
+    }
+
+    function renderSongiDiscoveryCost() {
+      const costBox = $("#songiDiscoveryCost");
+      if (!costBox) return;
+      const platform = songiDiscoveryPlatform();
+      const estimate = songiDiscoveryCostEstimate(platform);
+      const parts = [songiDiscoveryCostLabel(estimate)];
+      if (platform === "meta_ads" && Number($("#songiDiscoveryMaxResults")?.value || "12") < SONGI_META_ADS_MIN_RESULTS) {
+        parts.push(`메타 광고는 최소 ${SONGI_META_ADS_MIN_RESULTS}건부터 수집됩니다.`);
+      }
+      costBox.className = `notice ${estimate?.free ? "ok" : "warn"} small`;
+      costBox.textContent = parts.filter(Boolean).join(" · ");
+    }
+
     function songiDiscoveryStatusInfo() {
+      const platform = songiDiscoveryPlatform();
+      if (platform !== "youtube") {
+        const apify = state.researchIntegrations?.apify || {};
+        const label = songiDiscoveryPlatformLabel(platform);
+        if (apify.user_configured) {
+          return {
+            label: "Apify 수집 준비됨",
+            className: "ok",
+            notice: `${label} 후보는 AIMAX 웹 서버가 Apify로 수집합니다. 로컬 실행기는 필요 없고, 결과 수만큼 내 Apify 크레딧이 차감됩니다.`,
+          };
+        }
+        if (apify.local_configured) {
+          return {
+            label: "웹 저장 필요",
+            className: "warn",
+            notice: "Apify 키가 이 PC 실행기에만 저장되어 있습니다. 설정 > AI/API 연결에서 웹 보안 저장소로 저장하면 바로 수집할 수 있습니다.",
+          };
+        }
+        return {
+          label: "Apify 키 필요",
+          className: "warn",
+          notice: `${label} 후보 수집에는 Apify 키가 필요합니다. 설정 > AI/API 연결에서 키를 저장해주세요. 무료 플랜(월 $5 크레딧)으로도 시작할 수 있습니다.`,
+        };
+      }
       const youtube = state.researchIntegrations?.youtube || {};
       if (youtube.server_configured) {
         return {
@@ -8519,35 +9920,64 @@
       renderSongiDiscovery();
     }
 
+    function songiDiscoveryMetricCells(candidate) {
+      const metrics = candidate.metrics || {};
+      const platform = String(candidate.platform || "YouTube");
+      if (/youtube/i.test(platform)) {
+        return [
+          ["조회수", compactNumber(metrics.view_count)],
+          ["시간당", compactNumber(metrics.views_per_hour)],
+          ["길이", compactDuration(metrics.duration_seconds)],
+          ["참여율", `${((Number(metrics.engagement_rate || 0)) * 100).toFixed(1)}%`],
+        ];
+      }
+      if (/광고/.test(platform)) {
+        return [
+          ["광고주 팔로워", compactNumber(metrics.like_count)],
+          ["광고 변형", compactNumber(metrics.ad_variant_count)],
+          ["상태", metrics.is_active_ad ? "집행 중" : "종료/미상"],
+          ["형식", /video/.test(String(candidate.content_format || "")) ? "영상" : "이미지/기타"],
+        ];
+      }
+      const cells = [];
+      if (Number(metrics.view_count || 0)) cells.push(["조회수", compactNumber(metrics.view_count)]);
+      cells.push(["좋아요", compactNumber(metrics.like_count)]);
+      cells.push(["댓글", compactNumber(metrics.comment_count)]);
+      cells.push(["공유", compactNumber(metrics.share_count)]);
+      if (cells.length < 4 && Number(metrics.duration_seconds || 0)) cells.push(["길이", compactDuration(metrics.duration_seconds)]);
+      return cells.slice(0, 4);
+    }
+
     function songiDiscoveryCardHtml(candidate) {
       const metrics = candidate.metrics || {};
       const imported = Boolean(candidate.imported_item_id);
       const published = candidate.published_at ? formatTime(candidate.published_at) : "게시일 없음";
-      const duration = compactDuration(metrics.duration_seconds);
+      const platformLabel = candidate.platform || "YouTube";
       const shortBadge = metrics.is_short_form || candidate.content_format === "youtube_shorts"
-        ? `<span class="pill ok">쇼츠</span>`
+        ? `<span class="pill ok">${/tiktok|instagram/i.test(String(candidate.content_format || "")) ? "숏폼" : "쇼츠"}</span>`
         : "";
       const thumb = candidate.thumbnail_url
-        ? `<img class="songi-discovery-thumb" src="${escapeHtml(candidate.thumbnail_url)}" alt="${escapeHtml(candidate.title || "YouTube 후보")}">`
+        ? `<img class="songi-discovery-thumb" src="${escapeHtml(candidate.thumbnail_url)}" alt="${escapeHtml(candidate.title || `${platformLabel} 후보`)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'songi-discovery-thumb'}))">`
         : `<div class="songi-discovery-thumb"></div>`;
+      const metricCells = songiDiscoveryMetricCells(candidate)
+        .map(([label, value]) => `<div class="songi-discovery-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`)
+        .join("");
       return `
         <article class="songi-discovery-card">
           ${thumb}
           <div class="songi-discovery-body">
             <div class="research-meta">
               <span class="pill ok">후보 ${Math.round(Number(candidate.candidate_score || 0))}</span>
+              <span class="pill">${escapeHtml(platformLabel)}</span>
               ${shortBadge}
               <span class="pill">${escapeHtml(candidate.measurement_badge || "공개 지표")}</span>
             </div>
             <h4>${escapeHtml(candidate.title || "제목 없음")}</h4>
-            <p>${escapeHtml(candidate.creator || "채널 정보 없음")} · ${escapeHtml(published)}</p>
+            <p>${escapeHtml(candidate.creator || "작성자 정보 없음")} · ${escapeHtml(published)}</p>
             <div class="songi-discovery-metrics">
-              <div class="songi-discovery-metric"><span>조회수</span><strong>${compactNumber(metrics.view_count)}</strong></div>
-              <div class="songi-discovery-metric"><span>시간당</span><strong>${compactNumber(metrics.views_per_hour)}</strong></div>
-              <div class="songi-discovery-metric"><span>길이</span><strong>${escapeHtml(duration)}</strong></div>
-              <div class="songi-discovery-metric"><span>참여율</span><strong>${((Number(metrics.engagement_rate || 0)) * 100).toFixed(1)}%</strong></div>
+              ${metricCells}
             </div>
-            <p class="songi-discovery-reason">${escapeHtml(candidate.reason || "공개 지표 기준으로 쇼츠 벤치마킹 후보에 포함되었습니다.")}</p>
+            <p class="songi-discovery-reason">${escapeHtml(candidate.reason || "공개 지표 기준으로 벤치마킹 후보에 포함되었습니다.")}</p>
             <div class="actions">
               <button class="btn primary" type="button" data-songi-import-candidate="${escapeHtml(candidate.id)}" ${imported ? "disabled" : ""}>${imported ? "분석에 추가됨" : "분석에 추가"}</button>
               ${candidate.url ? `<a class="btn" href="${escapeHtml(candidate.url)}" target="_blank" rel="noreferrer">원문 열기</a>` : ""}
@@ -8562,13 +9992,20 @@
       const notice = $("#songiDiscoveryNotice");
       const button = $("#songiDiscoveryBtn");
       const info = songiDiscoveryStatusInfo();
+      renderSongiDiscoveryCost();
+      const title = $("#songiDiscoveryTitle");
+      if (title) {
+        const platform = songiDiscoveryPlatform();
+        title.textContent = platform === "youtube" ? "YouTube 쇼츠 키워드 벤치마킹" : `${songiDiscoveryPlatformLabel(platform)} 키워드 벤치마킹`;
+      }
       if (status) {
         status.textContent = state.songiDiscoveryBusy ? "찾는 중" : info.label;
         status.className = `pill ${state.songiDiscoveryBusy ? "warn" : info.className || ""}`;
       }
       if (notice) {
-        notice.className = `notice ${info.className === "warn" ? "warn" : "ok"} small`;
-        notice.textContent = info.notice;
+        const lastError = state.songiDiscoveryBusy ? "" : state.songiDiscoveryLastError || "";
+        notice.className = `notice ${lastError || info.className === "warn" ? "warn" : "ok"} small`;
+        notice.textContent = lastError || info.notice;
       }
       if (button) {
         button.disabled = state.songiDiscoveryBusy || !canUseJob("songi_research");
@@ -8584,18 +10021,22 @@
             ? `<span class="pill warn">검색 중</span><span>후보 카드가 준비되면 점수순으로 정렬됩니다.</span>`
             : `<span class="pill">0개 후보</span><span>조회수와 반응(좋아요, 댓글)이 우수한 동영상을 점수순으로 비교합니다.</span>`;
         }
-        results.innerHTML = `<div class="empty">키워드를 입력하면 최근 YouTube 벤치마킹 후보가 카드로 표시됩니다.</div>`;
+        results.innerHTML = `<div class="empty">키워드를 입력하면 ${escapeHtml(songiDiscoveryPlatformLabel())} 벤치마킹 후보가 카드로 표시됩니다.</div>`;
         return;
       }
       if (summary) {
         const importedCount = candidates.filter((candidate) => candidate.imported_item_id).length;
         const totalViews = candidates.reduce((sum, candidate) => sum + Number(candidate.metrics?.view_count || 0), 0);
+        const totalLikes = candidates.reduce((sum, candidate) => sum + Number(candidate.metrics?.like_count || 0), 0);
         const topViewsPerHour = Math.max(...candidates.map((candidate) => Number(candidate.metrics?.views_per_hour || 0)));
+        const volumeLabel = totalViews > 0
+          ? `총 조회수 ${escapeHtml(compactNumber(totalViews))}`
+          : `총 좋아요 ${escapeHtml(compactNumber(totalLikes))}`;
         summary.innerHTML = `
           <span class="pill ok">${candidates.length}개 후보</span>
           <span>조회수/반응 우대</span>
-          <span>총 조회수 ${escapeHtml(compactNumber(totalViews))}</span>
-          <span>최고 시간당 ${escapeHtml(compactNumber(topViewsPerHour))}</span>
+          <span>${volumeLabel}</span>
+          ${topViewsPerHour > 0 ? `<span>최고 시간당 ${escapeHtml(compactNumber(topViewsPerHour))}</span>` : ""}
           <span>분석 추가 ${importedCount}개</span>
         `;
       }
@@ -9684,15 +11125,29 @@
         input.focus();
         return;
       }
-      const response = await api(`/api/user/secrets/${encodeURIComponent(provider)}`, {
-        method: "PUT",
-        body: JSON.stringify({ value }),
-      });
+      let response = null;
+      try {
+        response = await api(`/api/user/secrets/${encodeURIComponent(provider)}`, {
+          method: "PUT",
+          body: JSON.stringify({ value }),
+        });
+      } catch (error) {
+        showToast(error?.body?.message || errorMessage(error, `${field.label} 키를 저장하지 못했습니다.`));
+        return;
+      }
       state.userSecrets = response.secrets || state.userSecrets;
       input.value = "";
       await loadResearchIntegrations();
       renderAll();
-      showToast(`${field.label} 연결을 저장했습니다.`);
+      const verification = response.verification;
+      if (verification?.verified) {
+        const detail = [verification.username, verification.plan ? `${verification.plan} 플랜` : ""].filter(Boolean).join(" · ");
+        showToast(`${field.label} 키 인증 완료${detail ? ` (${detail})` : ""}. 저장했습니다.`);
+      } else if (verification && verification.verified === false) {
+        showToast(`${field.label} 키를 저장했지만 인증 확인은 네트워크 문제로 건너뛰었습니다.`);
+      } else {
+        showToast(`${field.label} 연결을 저장했습니다.`);
+      }
     }
 
     async function deleteUserSecret(provider) {
@@ -10726,6 +12181,10 @@
     function runUiAction(action) {
       if (action === "employee-download") {
         downloadExternalEmployee(employees[state.selectedEmployee]);
+      } else if (action === "execution-option") {
+        const option = employeeExecutionOptions(employees[state.selectedEmployee]).find((item) => item.primary)
+          || employeeExecutionOptions(employees[state.selectedEmployee])[0];
+        if (option) openStaffExecutionOption(option.kind);
       } else if (action === "download") {
         downloadAgent();
       } else if (action === "launch") {
@@ -11519,9 +12978,28 @@
         $("#songiDiscoveryKeyword")?.focus();
         return;
       }
+      const platform = songiDiscoveryPlatform();
+      const platformLabel = songiDiscoveryPlatformLabel(platform);
+      const sortMode = $("#songiDiscoverySort")?.value || "top";
+      const maxResults = songiDiscoveryMaxResults();
+      if (platform !== "youtube") {
+        const apify = state.researchIntegrations?.apify || {};
+        if (!apify.user_configured) {
+          showToast(apify.local_configured
+            ? "Apify 키가 이 PC에만 있습니다. 설정 > AI/API 연결에서 웹 보안 저장소로 저장해주세요."
+            : "비용이 본인 Apify 계정에서 차감되도록 설정 > AI/API 연결에서 본인 Apify 키를 먼저 저장해주세요.");
+          return;
+        }
+        const estimate = songiDiscoveryCostEstimate(platform, maxResults);
+        const confirmed = window.confirm(
+          `${platformLabel} 후보 ${maxResults}개를 Apify로 수집합니다.\n\n${songiDiscoveryCostLabel(estimate)}\n\n진행할까요?`
+        );
+        if (!confirmed) return;
+      }
       const button = $("#songiDiscoveryBtn");
       try {
         state.songiDiscoveryBusy = true;
+        state.songiDiscoveryLastError = "";
         renderSongiDiscovery();
         const projectId = await ensureSongiProjectForKeyword(keyword);
         if (!projectId) {
@@ -11530,36 +13008,53 @@
         }
         const result = await runSongiDiscovery(projectId, {
           keyword,
+          platform,
+          sort_mode: sortMode,
           date_range_days: $("#songiDiscoveryDays")?.value || "30",
-          max_results: $("#songiDiscoveryMaxResults")?.value || "12",
+          max_results: String(maxResults),
         });
+        const serverModes = ["server_ytdlp", "server_apify"];
         if (result.candidates?.length) {
-          showToast(`벤치마킹 후보 ${result.candidates.length}개를 찾았습니다.`);
+          showToast(`${platformLabel} 벤치마킹 후보 ${result.candidates.length}개를 찾았습니다.`);
           return;
         }
-        if (result.run?.source_mode !== "server_ytdlp" && !state.agent?.agent?.connected) {
+        if (!serverModes.includes(result.run?.source_mode) && !state.agent?.agent?.connected) {
           launchLocalAgent();
         }
-        if (result.run?.source_mode !== "server_ytdlp") startAgentStatusWatch(90000);
-        const completed = result.run?.source_mode === "server_ytdlp"
+        if (!serverModes.includes(result.run?.source_mode)) startAgentStatusWatch(90000);
+        const completed = serverModes.includes(result.run?.source_mode)
           ? { run: result.run, candidates: result.candidates || [] }
           : await waitForSongiDiscoveryRun(projectId, result.run?.id, 90000);
         if ($("#songiDiscoveryProjectName")) $("#songiDiscoveryProjectName").value = "";
         if (completed.run?.status === "failed") {
-          showToast("로컬 실행기에서 YouTube 쇼츠 후보 찾기에 실패했습니다. 실행기와 yt-dlp 상태를 확인해주세요.");
+          const failMessage = platform === "youtube"
+            ? "로컬 실행기에서 YouTube 쇼츠 후보 찾기에 실패했습니다. 실행기와 yt-dlp 상태를 확인해주세요."
+            : `${platformLabel} 후보 수집에 실패했습니다. ${completed.run?.error_detail || ""}`.trim();
+          state.songiDiscoveryLastError = failMessage;
+          showToast(failMessage);
         } else if (completed.candidates.length) {
-          showToast(`벤치마킹 후보 ${completed.candidates.length}개를 찾았습니다.`);
+          showToast(`${platformLabel} 벤치마킹 후보 ${completed.candidates.length}개를 찾았습니다.`);
         } else {
           showToast("실행기에 후보 찾기를 요청했습니다. 잠시 뒤 카드 영역을 다시 확인해주세요.");
         }
       } catch (error) {
-        showToast(errorMessage(error, "키워드 후보를 찾지 못했습니다."));
+        const message = error?.body?.message || errorMessage(error, `${platformLabel} 키워드 후보를 찾지 못했습니다.`);
+        state.songiDiscoveryLastError = message;
+        showToast(message);
       } finally {
         state.songiDiscoveryBusy = false;
         if (button) button.disabled = !canUseJob("songi_research");
         await loadResearchData();
         renderAll();
       }
+    });
+    $("#songiDiscoveryKeyword")?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      $("#songiDiscoveryBtn")?.click();
+    });
+    ["songiDiscoveryPlatform", "songiDiscoverySort", "songiDiscoveryMaxResults"].forEach((id) => {
+      document.getElementById(id)?.addEventListener("change", () => renderSongiDiscovery());
     });
 
     $("#songiJobForm").addEventListener("submit", async (event) => {
@@ -11997,9 +13492,26 @@
       state.selectedJobKind = $("#employeeDetailAction").dataset.jobKind || state.selectedJobKind;
       runUiAction($("#employeeDetailAction").dataset.action);
     });
-    $("#staffDetailAction").addEventListener("click", () => {
-      state.selectedJobKind = $("#staffDetailAction").dataset.jobKind || state.selectedJobKind;
-      runUiAction($("#staffDetailAction").dataset.action);
+    $("#staffResumeCloseBtn")?.addEventListener("click", hideStaffResumePrompt);
+    $("#staffResumeActionBtn")?.addEventListener("click", () => {
+      const button = $("#staffResumeActionBtn");
+      if (!button || button.disabled) return;
+      state.selectedJobKind = button.dataset.jobKind || state.selectedJobKind;
+      hideStaffResumePrompt();
+      runUiAction(button.dataset.action || "");
+    });
+    $("#staffResumePrompt")?.addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) hideStaffResumePrompt();
+    });
+    $("#staffResumeExecutionOptions")?.addEventListener("click", (event) => {
+      const button = event.target?.closest?.("[data-execution-option]");
+      if (!button || button.disabled) return;
+      openStaffExecutionOption(button.dataset.executionOption || "", button.dataset.executionAction || "");
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !$("#staffResumePrompt")?.classList.contains("hidden")) {
+        hideStaffResumePrompt();
+      }
     });
     $$(".job-blocker").forEach((blocker) => {
       blocker.addEventListener("click", (event) => {
@@ -12017,6 +13529,13 @@
       button.addEventListener("click", () => {
         state.staffFilter = button.dataset.staffFilter || "all";
         $$("[data-staff-filter]").forEach((item) => item.classList.toggle("active", item === button));
+        renderStaffConsole();
+      });
+    });
+    $$("[data-staff-execution-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.staffExecutionFilter = button.dataset.staffExecutionFilter || "all";
+        $$("[data-staff-execution-filter]").forEach((item) => item.classList.toggle("active", item === button));
         renderStaffConsole();
       });
     });

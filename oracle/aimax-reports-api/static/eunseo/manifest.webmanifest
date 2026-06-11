@@ -1,0 +1,19 @@
+{
+  "name": "은서 녹화 프롬프터",
+  "short_name": "은서",
+  "description": "카메라 근처 대본을 보며 촬영하는 AIMAX 웹 프롬프터",
+  "start_url": "/eunseo",
+  "scope": "/eunseo",
+  "display": "standalone",
+  "background_color": "#101514",
+  "theme_color": "#101514",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/assets/avatar_eunseo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}

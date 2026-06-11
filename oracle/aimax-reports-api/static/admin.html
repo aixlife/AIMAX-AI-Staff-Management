@@ -301,6 +301,35 @@
       gap: 6px;
     }
 
+    .catalog-options {
+      display: grid;
+      gap: 6px;
+      padding-top: 4px;
+      border-top: 1px solid var(--line);
+    }
+
+    .catalog-option {
+      display: grid;
+      gap: 5px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .catalog-option-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .catalog-option-head strong,
+    .catalog-option span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
     .notice {
       border: 1px solid #cbe7d9;
       background: #e9f6ef;
@@ -712,15 +741,16 @@
         <div class="row">
           <div>
             <h2>직원 권한 일괄 추가</h2>
-            <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 유료/권한형 직원 권한만 추가합니다. 무료 공개 직원은 기존/신규 계정에 자동 제공됩니다.</p>
+            <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 권한형 직원 권한만 추가합니다. 원회원 전용 직원은 메이크패밀리 원회원 계정에만 동기화합니다.</p>
           </div>
           <div class="actions">
             <button id="grantBundleAllBtn" class="btn primary" type="button">메이크패밀리 원회원에게 전체 통합 권한 추가</button>
             <button id="grantSongiAllBtn" class="btn primary" type="button">활성 사용자에게 송이 권한 추가</button>
             <button id="grantSangsuMembersBtn" class="btn primary" type="button">메이크패밀리 원회원에게 상수 권한 추가</button>
+            <button id="grantEunseoMembersBtn" class="btn primary" type="button">메이크패밀리 원회원에게 은서 권한 추가</button>
           </div>
         </div>
-        <div id="grantProductResult" class="notice warn">무료 공개 직원은 별도 일괄 권한 작업 없이 모든 로그인 사용자에게 자동 적용됩니다.</div>
+        <div id="grantProductResult" class="notice warn">은서는 무료 공개가 아니라 원회원 전용입니다. 웹앱과 Mac 다운로드는 로그인한 원회원 계정에서만 열립니다.</div>
       </section>
 
       <section class="panel stack">
@@ -974,6 +1004,8 @@
       invalid_email: "이메일 형식을 확인해주세요.",
       invalid_product: "상품을 선택해주세요.",
       invalid_scope: "권한 적용 범위를 확인해주세요.",
+      member_only_product_requires_makefamily_member: "원회원 전용 직원은 메이크패밀리 원회원 계정에만 추가할 수 있습니다.",
+      member_only_product_requires_makefamily_member_scope: "원회원 전용 직원은 메이크패밀리 원회원 범위에만 일괄 추가할 수 있습니다.",
       invalid_batch: "구매자 목록에 수정이 필요한 줄이 있습니다.",
       empty_batch: "구매자 목록을 입력해주세요.",
       batch_too_large: "한 번에 최대 100명까지 등록할 수 있습니다.",
@@ -1039,6 +1071,11 @@
       if (["test", "demo", "테스트"].includes(raw)) return "test";
       if (["operator", "admin", "운영자"].includes(raw)) return "operator";
       return raw;
+    }
+
+    function isMakefamilyMemberUser(user) {
+      const segment = normalizeAccountSegment(user?.account_segment || user?.accountSegment || "");
+      return ["makefamily_member", "member_and_buyer", "operator", "test"].includes(segment);
     }
 
     function apiError(error) {
@@ -1131,6 +1168,7 @@
     function workerStatusPill(worker) {
       if (worker.status === "available") return `<span class="pill ok">사용 가능</span>`;
       if (worker.status === "beta") return `<span class="pill warn">베타</span>`;
+      if (worker.status === "testing") return `<span class="pill warn">검수 중</span>`;
       if (worker.status === "needs_setup") return `<span class="pill warn">설정 필요</span>`;
       return `<span class="pill">확인</span>`;
     }
@@ -1139,8 +1177,33 @@
       if (value === "local_agent") return `<span class="pill warn">로컬 실행기</span>`;
       if (value === "web_module") return `<span class="pill ok">웹 실행</span>`;
       if (value === "external_download") return `<span class="pill ok">직접 다운로드</span>`;
+      if (value === "external_tool" || value === "multi_channel") return `<span class="pill ok">다중 실행</span>`;
       if (value === "planned") return `<span class="pill">준비 중</span>`;
       return `<span class="pill">${escapeHtml(value || "미지정")}</span>`;
+    }
+
+    function executionOptionStatusPill(status) {
+      if (status === "available") return `<span class="pill ok">사용 가능</span>`;
+      if (status === "testing") return `<span class="pill warn">검수 중</span>`;
+      if (status === "unsupported") return `<span class="pill bad">미지원</span>`;
+      return `<span class="pill warn">준비 중</span>`;
+    }
+
+    function platformLabel(platform) {
+      const labels = {
+        web: "웹",
+        macos: "Mac",
+        windows: "Windows",
+        android: "Android",
+        ios: "iPhone",
+      };
+      return labels[platform] || platform;
+    }
+
+    function workerExecutionOptions(worker) {
+      return Array.isArray(worker.execution_options)
+        ? worker.execution_options.filter((option) => option && option.kind && option.label)
+        : [];
     }
 
     function workerAccessPills(worker) {
@@ -1148,6 +1211,9 @@
       if (worker.access_policy === "public") {
         pills.push(`<span class="pill ok">무료 공개</span>`);
         pills.push(`<span class="pill ok">신규 계정 자동 제공</span>`);
+      } else if (worker.access_policy === "makefamily_member" || worker.access_policy === "member_only") {
+        pills.push(`<span class="pill ok">원회원 전용</span>`);
+        pills.push(`<span class="pill warn">로그인/권한 확인</span>`);
       } else {
         pills.push(`<span class="pill warn">권한 필요</span>`);
       }
@@ -1162,6 +1228,20 @@
     }
 
     function workerCatalogDetail(worker, jobKind, queue) {
+      const options = workerExecutionOptions(worker);
+      const accessLabel = worker.access_policy === "public"
+        ? "무료 공개 직원"
+        : worker.access_policy === "makefamily_member" || worker.access_policy === "member_only"
+          ? "원회원 전용 직원"
+          : "권한형 직원";
+      if (options.length) {
+        const primary = options.find((option) => option.primary) || options[0];
+        const link = primary?.url || "";
+        const linkHtml = link
+          ? ` · 기본 <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(primary.label)}</a>`
+          : ` · 기본 ${escapeHtml(primary?.label || "실행 방법")}`;
+        return `${accessLabel} · 실행 옵션 ${options.length}개${linkHtml}`;
+      }
       if (worker.execution === "external_download") {
         const label = worker.download_label || "다운로드";
         const link = worker.release_url || worker.setup_download_url || worker.repo_url || "";
@@ -1174,14 +1254,43 @@
       return `${escapeHtml(worker.job_kind || "연결된 작업 없음")} · ${escapeHtml(queue)}${jobKind?.required_product ? ` · 권한 ${escapeHtml(jobKind.required_product)}` : ""}`;
     }
 
+    function workerExecutionOptionsHtml(worker) {
+      const options = workerExecutionOptions(worker);
+      if (!options.length) return "";
+      return `
+        <div class="catalog-options">
+          ${options.map((option) => {
+            const platforms = Array.isArray(option.platforms) && option.platforms.length
+              ? option.platforms.map(platformLabel).join(", ")
+              : "플랫폼 미지정";
+            const link = option.url
+              ? `<a href="${escapeHtml(option.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(option.url)}</a>`
+              : `<span class="muted">링크 없음</span>`;
+            return `
+              <div class="catalog-option">
+                <div class="catalog-option-head">
+                  <strong>${escapeHtml(option.label)}</strong>
+                  ${executionOptionStatusPill(option.status)}
+                </div>
+                <span class="small muted">${escapeHtml(platforms)} · ${escapeHtml(option.description || option.kind)}</span>
+                <span class="small">${link}</span>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
     function renderWorkerCatalog() {
       const workers = state.workers || [];
       const jobKinds = state.jobKinds || [];
       const localCount = workers.filter((worker) => worker.execution === "local_agent").length;
       const webCount = workers.filter((worker) => worker.execution === "web_module").length;
       const downloadCount = workers.filter((worker) => worker.execution === "external_download").length;
+      const multiCount = workers.filter((worker) => worker.execution === "external_tool" || worker.type === "multi_channel" || workerExecutionOptions(worker).length).length;
       const publicCount = workers.filter((worker) => worker.access_policy === "public").length;
-      $("#catalogSummary").textContent = `${workers.length}명 · 작업 ${jobKinds.length}개 · 로컬 ${localCount} · 웹 ${webCount} · 다운로드 ${downloadCount} · 무료 공개 ${publicCount}`;
+      const memberOnlyCount = workers.filter((worker) => worker.access_policy === "makefamily_member" || worker.access_policy === "member_only").length;
+      $("#catalogSummary").textContent = `${workers.length}명 · 작업 ${jobKinds.length}개 · 로컬 ${localCount} · 웹 ${webCount} · 다운로드 ${downloadCount} · 다중 ${multiCount} · 무료 공개 ${publicCount} · 원회원 전용 ${memberOnlyCount}`;
       $("#workerCatalogGrid").innerHTML = workers.length ? workers.map((worker) => {
         const jobKind = jobKindForWorker(worker);
         const apiMode = jobKind?.api_mode || "-";
@@ -1203,6 +1312,7 @@
               ${workerAccessPills(worker)}
             </div>
             <div class="small muted">${workerCatalogDetail(worker, jobKind, queue)}</div>
+            ${workerExecutionOptionsHtml(worker)}
           </article>
         `;
       }).join("") : `<div class="notice warn">직원 카탈로그를 불러오지 못했습니다.</div>`;
@@ -1244,7 +1354,10 @@
       }
       if (products.has("bundle")) {
         const bundledProducts = state.products.length
-          ? state.products.map((item) => item.product).filter(Boolean)
+          ? state.products
+            .filter((item) => !item.member_only)
+            .map((item) => item.product)
+            .filter(Boolean)
           : ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "blog_team", "bundle"];
         bundledProducts.forEach((product) => products.add(product));
       }
@@ -1255,6 +1368,7 @@
       const products = userProducts(user);
       const visible = [];
       if (products.has("bundle")) {
+        if (products.has("eunseo")) return ["bundle", "eunseo"];
         return ["bundle"];
       } else if (products.has("blog_team")) {
         visible.push("blog_team");
@@ -1268,6 +1382,7 @@
       if (products.has("nakyung")) visible.push("nakyung");
       if (products.has("hyojin")) visible.push("hyojin");
       if (products.has("sangsu")) visible.push("sangsu");
+      if (products.has("eunseo")) visible.push("eunseo");
       return visible;
     }
 
@@ -1313,9 +1428,12 @@
           </td>
           <td class="action-cell">
             <div class="actions">
-              ${state.products.map((item) => `
-                <button class="btn ${userProducts(user).has(item.product) ? "active" : ""}" type="button" data-action="product" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(item.product)}">${escapeHtml(item.label)}</button>
-              `).join("")}
+              ${state.products.map((item) => {
+                const disabled = item.member_only && !isMakefamilyMemberUser(user);
+                return `
+                <button class="btn ${userProducts(user).has(item.product) ? "active" : ""}" type="button" data-action="product" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(item.product)}" ${disabled ? "disabled" : ""} title="${disabled ? "원회원 전용 직원입니다." : ""}">${escapeHtml(item.label)}</button>
+              `;
+              }).join("")}
               <button class="btn" type="button" data-action="reset" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(user.product || "bundle")}">비번 재발급</button>
               <button class="btn" type="button" data-action="expire" data-email="${escapeHtml(user.email)}">만료</button>
               <button class="btn danger" type="button" data-action="delete" data-email="${escapeHtml(user.email)}">삭제</button>
@@ -2598,6 +2716,7 @@
     $("#grantBundleAllBtn").addEventListener("click", (event) => grantProductToUsers("bundle", "makefamily_members", event.currentTarget));
     $("#grantSongiAllBtn").addEventListener("click", (event) => grantProductToUsers("songi", "active", event.currentTarget));
     $("#grantSangsuMembersBtn").addEventListener("click", (event) => grantProductToUsers("sangsu", "makefamily_members", event.currentTarget));
+    $("#grantEunseoMembersBtn").addEventListener("click", (event) => grantProductToUsers("eunseo", "makefamily_members", event.currentTarget));
     $("#refreshBtn").addEventListener("click", () => refreshAll().catch((error) => alert(apiError(error))));
     $("#refreshReportsBtn").addEventListener("click", () => loadReports().catch((error) => alert(apiError(error))));
     $("#refreshCafe24OrdersBtn").addEventListener("click", () => loadCafe24Orders().catch((error) => alert(apiError(error))));

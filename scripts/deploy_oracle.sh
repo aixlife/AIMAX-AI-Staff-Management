@@ -14,11 +14,12 @@ DRY_RUN=0
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/deploy_oracle.sh [web|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all] [--dry-run]
+  scripts/deploy_oracle.sh [web|eunseo-mac|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all] [--dry-run]
 
 Modes:
   web                Deploy server.js and static web/admin HTML
-  external-staff     Deploy external staff Windows EXE files only
+  eunseo-mac         Deploy Eunseo Mac prompter zip only
+  external-staff     Deploy external staff download files only
   macos-bundle       Deploy the unified macOS bundle installer only
   windows-bundle     Deploy the unified Windows bundle installer only
   bundle-installers  Deploy unified macOS/Windows bundle installers only
@@ -36,7 +37,7 @@ USAGE
 
 for arg in "$@"; do
   case "$arg" in
-    web|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all)
+    web|eunseo-mac|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all)
       MODE="$arg"
       ;;
     --dry-run)
@@ -127,6 +128,22 @@ if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
     "$REMOTE_APP_DIR/static/setup.html" \
     "setup app"
   add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/eunseo/index.html" \
+    "$REMOTE_APP_DIR/static/eunseo/index.html" \
+    "eunseo web app"
+  add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/eunseo/manifest.webmanifest" \
+    "$REMOTE_APP_DIR/static/eunseo/manifest.webmanifest" \
+    "eunseo manifest"
+  add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/eunseo/sw.js" \
+    "$REMOTE_APP_DIR/static/eunseo/sw.js" \
+    "eunseo service worker"
+  add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_eunseo.jpg" \
+    "$REMOTE_APP_DIR/static/assets/avatar_eunseo.jpg" \
+    "avatar eunseo"
+  add_file \
     "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_nakyung.jpg" \
     "$REMOTE_APP_DIR/static/assets/avatar_nakyung.jpg" \
     "avatar nakyung"
@@ -170,6 +187,10 @@ fi
 
 if [[ "$MODE" == "windows-bundle" || "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-windows.exe" "Windows bundle"
+fi
+
+if [[ "$MODE" == "eunseo-mac" || "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
+  add_file "$ROOT_DIR/dist/upload_installers/EunseoPrompter-mac-0.1.0.zip" "$REMOTE_DOWNLOAD_DIR/EunseoPrompter-mac-0.1.0.zip" "Eunseo Mac zip"
 fi
 
 if [[ "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
@@ -259,7 +280,7 @@ for index in "${!SOURCES[@]}"; do
   echo "[BACKUP] $remote_path"
   ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; if [ -f '$remote_path' ]; then cp '$remote_path' '$REMOTE_BACKUP_DIR/$remote_name'; fi"
   echo "[INSTALL] $remote_path"
-  ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; install -m 0644 '$REMOTE_TMP/$remote_name' '$remote_path'"
+  ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; mkdir -p '$(dirname "$remote_path")'; install -m 0644 '$REMOTE_TMP/$remote_name' '$remote_path'"
 done
 
 echo "[SERVICE] restarting $REMOTE_SERVICE"
