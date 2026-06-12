@@ -4292,6 +4292,15 @@
                         </div>
                         <div id="songiDiscoveryCost" class="notice ok small"></div>
                         <div id="songiDiscoveryNotice" class="notice small"></div>
+                        <div class="actions" style="margin-top:8px; align-items:center;">
+                          <select id="songiDiscoverySubFrequency" style="max-width:140px;">
+                            <option value="weekly" selected>매주 자동수집</option>
+                            <option value="daily">매일 자동수집</option>
+                          </select>
+                          <button id="songiDiscoverySubscribeBtn" class="btn" type="button">이 조건 구독</button>
+                          <span class="small muted">구독하면 송이가 같은 조건으로 주기마다 새 후보만 모아둡니다.</span>
+                        </div>
+                        <div id="songiDiscoverySubscriptions"></div>
                       </section>
                     </div>
                     <div id="songiLinkPanel" class="songi-task-panel hidden">
@@ -5100,6 +5109,7 @@
       researchIntegrations: null,
       researchDiscoveryRuns: [],
       researchDiscoveryCandidates: [],
+      researchDiscoverySubscriptions: [],
       userSecrets: null,
       selectedResearchProjectId: "",
       selectedResearchItemId: "",
@@ -9832,6 +9842,104 @@
       return `예상 최대 비용: ${usdLabel} (약 ${wonLabel(estimate.won)}) · 후보 ${estimate.count}개 기준 · 내 Apify 크레딧에서 차감 (실행 시작 고정비 포함)`;
     }
 
+    const SONGI_DISCOVERY_SUBSCRIPTION_RUNS_PER_MONTH = { daily: 30.4, weekly: 4.35 };
+    const SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCY_LABELS = { daily: "매일", weekly: "매주" };
+
+    function songiDiscoveryMonthlyEstimate(platform, count, frequency) {
+      const estimate = songiDiscoveryCostEstimate(platform, count);
+      if (!estimate) return null;
+      const runsPerMonth = SONGI_DISCOVERY_SUBSCRIPTION_RUNS_PER_MONTH[frequency] || 0;
+      const usd = estimate.usd * runsPerMonth;
+      return { free: estimate.free, perRunUsd: estimate.usd, usd, won: wonFromUsd(usd), runsPerMonth };
+    }
+
+    function songiSubscriptionStatusInfo(subscription) {
+      if (subscription.status === "active") return { label: "구독 중", className: "ok" };
+      const reasons = {
+        user_paused: "일시정지",
+        research_apify_key_missing: "일시정지 · Apify 키 필요",
+        research_apify_invalid_token: "일시정지 · Apify 키 오류",
+        research_apify_credit_exhausted: "일시정지 · Apify 크레딧 부족",
+        repeated_failures: "일시정지 · 연속 실패",
+        research_discovery_keyword_invalid: "일시정지 · 키워드 오류",
+      };
+      return { label: reasons[subscription.pause_reason] || "일시정지", className: "warn" };
+    }
+
+    function renderSongiDiscoverySubscriptions() {
+      const box = $("#songiDiscoverySubscriptions");
+      if (!box) return;
+      const subscriptions = Array.isArray(state.researchDiscoverySubscriptions) ? state.researchDiscoverySubscriptions : [];
+      if (!subscriptions.length) {
+        box.innerHTML = "";
+        return;
+      }
+      const rows = subscriptions.map((subscription) => {
+        const status = songiSubscriptionStatusInfo(subscription);
+        const platformLabel = SONGI_DISCOVERY_PLATFORM_LABELS[subscription.platform] || subscription.platform;
+        const project = state.researchProjects.find((entry) => entry.id === subscription.project_id);
+        const frequencyLabel = subscription.frequency_label || SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCY_LABELS[subscription.frequency] || subscription.frequency;
+        const costLabel = Number(subscription.per_run_estimate_usd || 0) > 0
+          ? `회당 최대 $${Number(subscription.per_run_estimate_usd).toFixed(3)} · 월 예상 $${Number(subscription.monthly_estimate_usd || 0).toFixed(2)} (약 ${wonLabel(wonFromUsd(Number(subscription.monthly_estimate_usd || 0)))})`
+          : "무료 (웹 서버 공개 검색)";
+        const totalLabel = Number(subscription.run_count || 0) > 0
+          ? `누적 ${subscription.run_count}회 · 실제 약 $${Number(subscription.total_cost_usd || 0).toFixed(3)}`
+          : "아직 실행 전";
+        const infoParts = [
+          subscription.status === "active" && subscription.next_run_at ? `다음 수집 ${formatTime(subscription.next_run_at)}` : "",
+          subscription.last_run_at ? `최근 새 후보 ${Number(subscription.last_new_count || 0)}건 (${formatTime(subscription.last_run_at)})` : "",
+          subscription.last_run_error || "",
+        ].filter(Boolean);
+        return `
+          <div class="notice ${status.className === "warn" ? "warn" : "ok"} small" style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:6px;">
+            <span class="pill ${status.className}">${escapeHtml(status.label)}</span>
+            <strong>${escapeHtml(subscription.keyword || "")}</strong>
+            <span class="pill">${escapeHtml(platformLabel)}</span>
+            <span class="pill">${escapeHtml(frequencyLabel)}</span>
+            ${project ? `<span class="pill">${escapeHtml(project.name || "프로젝트")}</span>` : ""}
+            <span>${escapeHtml(costLabel)}</span>
+            <span>${escapeHtml(totalLabel)}</span>
+            ${infoParts.map((part) => `<span class="small muted">${escapeHtml(part)}</span>`).join("")}
+            <button class="btn" type="button" data-songi-sub-toggle="${escapeHtml(subscription.id)}">${subscription.status === "active" ? "일시정지" : "재개"}</button>
+            <button class="btn" type="button" data-songi-sub-delete="${escapeHtml(subscription.id)}">삭제</button>
+          </div>
+        `;
+      }).join("");
+      box.innerHTML = `<div class="small muted" style="margin-top:12px;">자동수집 구독 ${subscriptions.length}개</div>${rows}`;
+      box.querySelectorAll("[data-songi-sub-toggle]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.dataset.songiSubToggle;
+          const subscription = subscriptions.find((entry) => entry.id === id);
+          const action = subscription?.status === "active" ? "pause" : "resume";
+          try {
+            await api(`/api/research/discovery/subscriptions/${encodeURIComponent(id)}`, {
+              method: "PATCH",
+              body: JSON.stringify({ action }),
+            });
+            showToast(action === "pause" ? "구독을 일시정지했습니다." : "구독을 재개했습니다. 다음 수집 예정 시각은 목록에서 확인하세요.");
+          } catch (error) {
+            showToast(error?.body?.message || errorMessage(error, "구독 상태를 바꾸지 못했습니다."));
+          }
+          await loadResearchData();
+          renderAll();
+        });
+      });
+      box.querySelectorAll("[data-songi-sub-delete]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const id = button.dataset.songiSubDelete;
+          if (!window.confirm("이 자동수집 구독을 삭제할까요? 이미 수집된 후보는 남습니다.")) return;
+          try {
+            await api(`/api/research/discovery/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" });
+            showToast("구독을 삭제했습니다.");
+          } catch (error) {
+            showToast(error?.body?.message || errorMessage(error, "구독을 삭제하지 못했습니다."));
+          }
+          await loadResearchData();
+          renderAll();
+        });
+      });
+    }
+
     function renderSongiDiscoveryCost() {
       const costBox = $("#songiDiscoveryCost");
       if (!costBox) return;
@@ -9956,6 +10064,8 @@
       const shortBadge = metrics.is_short_form || candidate.content_format === "youtube_shorts"
         ? `<span class="pill ok">${/tiktok|instagram/i.test(String(candidate.content_format || "")) ? "숏폼" : "쇼츠"}</span>`
         : "";
+      const candidateRun = (state.researchDiscoveryRuns || []).find((entry) => entry.id === candidate.run_id);
+      const subscriptionBadge = candidateRun?.subscription_id ? `<span class="pill">자동수집</span>` : "";
       const thumb = candidate.thumbnail_url
         ? `<img class="songi-discovery-thumb" src="${escapeHtml(candidate.thumbnail_url)}" alt="${escapeHtml(candidate.title || `${platformLabel} 후보`)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'songi-discovery-thumb'}))">`
         : `<div class="songi-discovery-thumb"></div>`;
@@ -9970,6 +10080,7 @@
               <span class="pill ok">후보 ${Math.round(Number(candidate.candidate_score || 0))}</span>
               <span class="pill">${escapeHtml(platformLabel)}</span>
               ${shortBadge}
+              ${subscriptionBadge}
               <span class="pill">${escapeHtml(candidate.measurement_badge || "공개 지표")}</span>
             </div>
             <h4>${escapeHtml(candidate.title || "제목 없음")}</h4>
@@ -9993,6 +10104,7 @@
       const button = $("#songiDiscoveryBtn");
       const info = songiDiscoveryStatusInfo();
       renderSongiDiscoveryCost();
+      renderSongiDiscoverySubscriptions();
       const title = $("#songiDiscoveryTitle");
       if (title) {
         const platform = songiDiscoveryPlatform();
@@ -11087,11 +11199,18 @@
           state.researchDiscoveryRuns = [];
           state.researchDiscoveryCandidates = [];
         }
+        try {
+          const subscriptionsResponse = await api("/api/research/discovery/subscriptions");
+          state.researchDiscoverySubscriptions = subscriptionsResponse.subscriptions || [];
+        } catch (_error) {
+          state.researchDiscoverySubscriptions = [];
+        }
       } catch (_error) {
         state.researchProjects = [];
         state.researchItems = [];
         state.researchDiscoveryRuns = [];
         state.researchDiscoveryCandidates = [];
+        state.researchDiscoverySubscriptions = [];
         state.selectedResearchProjectId = "";
         state.selectedResearchItemId = "";
       }
@@ -13044,6 +13163,65 @@
       } finally {
         state.songiDiscoveryBusy = false;
         if (button) button.disabled = !canUseJob("songi_research");
+        await loadResearchData();
+        renderAll();
+      }
+    });
+    $("#songiDiscoverySubscribeBtn")?.addEventListener("click", async () => {
+      const subscribeButton = $("#songiDiscoverySubscribeBtn");
+      if (subscribeButton?.disabled) return;
+      const keyword = String($("#songiDiscoveryKeyword")?.value || "").trim();
+      if (!keyword) {
+        showToast("구독할 키워드를 먼저 입력해주세요.");
+        $("#songiDiscoveryKeyword")?.focus();
+        return;
+      }
+      const platform = songiDiscoveryPlatform();
+      const platformLabel = songiDiscoveryPlatformLabel(platform);
+      const frequency = $("#songiDiscoverySubFrequency")?.value === "daily" ? "daily" : "weekly";
+      const frequencyLabel = SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCY_LABELS[frequency];
+      const sortMode = $("#songiDiscoverySort")?.value || "top";
+      const maxResults = songiDiscoveryMaxResults();
+      if (platform !== "youtube") {
+        const apify = state.researchIntegrations?.apify || {};
+        if (!apify.user_configured) {
+          showToast(apify.local_configured
+            ? "Apify 키가 이 PC에만 있습니다. 설정 > AI/API 연결에서 웹 보안 저장소로 저장해주세요."
+            : "비용이 본인 Apify 계정에서 차감되도록 설정 > AI/API 연결에서 본인 Apify 키를 먼저 저장해주세요.");
+          return;
+        }
+        const monthly = songiDiscoveryMonthlyEstimate(platform, maxResults, frequency);
+        const confirmed = window.confirm(
+          `${platformLabel} "${keyword}" ${frequencyLabel} 자동수집을 구독합니다.\n\n`
+          + `회당 최대 $${monthly.perRunUsd.toFixed(3)} × 월 약 ${monthly.runsPerMonth}회 = 월 예상 $${monthly.usd.toFixed(2)} (약 ${wonLabel(monthly.won)})\n`
+          + `내 Apify 크레딧에서 차감됩니다. 키 오류나 크레딧 부족 시 자동으로 일시정지됩니다.\n\n진행할까요?`
+        );
+        if (!confirmed) return;
+      }
+      try {
+        if (subscribeButton) subscribeButton.disabled = true;
+        const projectId = await ensureSongiProjectForKeyword(keyword);
+        if (!projectId) {
+          showToast("송이 프로젝트를 만들지 못했습니다.");
+          return;
+        }
+        await api("/api/research/discovery/subscriptions", {
+          method: "POST",
+          body: JSON.stringify({
+            project_id: projectId,
+            keyword,
+            platform,
+            frequency,
+            sort_mode: sortMode,
+            date_range_days: $("#songiDiscoveryDays")?.value || "30",
+            max_results: String(maxResults),
+          }),
+        });
+        showToast(`${frequencyLabel} 자동수집 구독을 만들었습니다. 첫 수집은 다음 주기에 시작됩니다.`);
+      } catch (error) {
+        showToast(error?.body?.message || errorMessage(error, "자동수집 구독을 만들지 못했습니다."));
+      } finally {
+        if (subscribeButton) subscribeButton.disabled = false;
         await loadResearchData();
         renderAll();
       }
