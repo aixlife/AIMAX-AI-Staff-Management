@@ -136,6 +136,8 @@ const SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES = {
   daily: { interval_ms: 24 * 60 * 60 * 1000, runs_per_month: 30.4, label: "매일" },
   weekly: { interval_ms: 7 * 24 * 60 * 60 * 1000, runs_per_month: 4.35, label: "매주" },
 };
+const SONGI_DISCOVERY_RUNS_PER_USER = Number(process.env.AIMAX_SONGI_DISCOVERY_RUNS_PER_USER || 80);
+const SONGI_DISCOVERY_CANDIDATES_PER_USER = Number(process.env.AIMAX_SONGI_DISCOVERY_CANDIDATES_PER_USER || 1200);
 const SONGI_YTDLP_FALLBACK = "yt-dlp";
 const SONGI_FFMPEG_FALLBACK = "ffmpeg";
 const SONGI_SERVER_YTDLP_DISCOVERY_ENABLED = String(process.env.AIMAX_SONGI_SERVER_YTDLP_DISCOVERY_ENABLED || "1").trim() !== "0";
@@ -3647,12 +3649,36 @@ function publicResearchDiscoveryCandidate(candidate) {
   };
 }
 
+function keepLastPerUser(items, limit, isProtected) {
+  // 뒤(최신)에서부터 사용자별 limit개 유지, protected 항목은 캡과 무관하게 유지
+  const counts = new Map();
+  const kept = [];
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i];
+    if (typeof isProtected === "function" && isProtected(item)) {
+      kept.push(item);
+      continue;
+    }
+    const key = String(item.user_id || "");
+    const count = counts.get(key) || 0;
+    if (count < limit) {
+      counts.set(key, count + 1);
+      kept.push(item);
+    }
+  }
+  return kept.reverse();
+}
+
 function pruneResearchDiscovery(research) {
   const now = Date.now();
   const activeRuns = new Set();
-  research.discovery_runs = (Array.isArray(research.discovery_runs) ? research.discovery_runs : [])
-    .filter((run) => !run.expires_at || Date.parse(run.expires_at) > now)
-    .slice(-80);
+  research.discovery_runs = keepLastPerUser(
+    (Array.isArray(research.discovery_runs) ? research.discovery_runs : [])
+      .filter((run) => !run.expires_at || Date.parse(run.expires_at) > now),
+    SONGI_DISCOVERY_RUNS_PER_USER,
+    // 실행 중인 런이 캡으로 밀려나면 apify_run_id 재개 체인이 끊겨 이중 과금 위험
+    (run) => String(run.status || "") === "running",
+  );
   const staleRunningBefore = now - 10 * 60 * 1000;
   for (const run of research.discovery_runs) {
     if (String(run.status || "") !== "running" || !/^server_/.test(String(run.source_mode || ""))) continue;
@@ -3665,9 +3691,11 @@ function pruneResearchDiscovery(research) {
     }
   }
   for (const run of research.discovery_runs) activeRuns.add(run.id);
-  research.discovery_candidates = (Array.isArray(research.discovery_candidates) ? research.discovery_candidates : [])
-    .filter((candidate) => activeRuns.has(candidate.run_id) && (!candidate.expires_at || Date.parse(candidate.expires_at) > now))
-    .slice(-1200);
+  research.discovery_candidates = keepLastPerUser(
+    (Array.isArray(research.discovery_candidates) ? research.discovery_candidates : [])
+      .filter((candidate) => activeRuns.has(candidate.run_id) && (!candidate.expires_at || Date.parse(candidate.expires_at) > now)),
+    SONGI_DISCOVERY_CANDIDATES_PER_USER,
+  );
   const projectIds = new Set((Array.isArray(research.projects) ? research.projects : []).map((project) => project.id));
   research.discovery_subscriptions = (Array.isArray(research.discovery_subscriptions) ? research.discovery_subscriptions : [])
     .filter((subscription) => projectIds.has(subscription.project_id));
