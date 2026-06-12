@@ -126,6 +126,16 @@ const SONGI_APIFY_DISCOVERY_PRICING_USD = (() => {
 })();
 const SONGI_APIFY_DISCOVERY_PLATFORMS = new Set(Object.keys(SONGI_APIFY_DISCOVERY_ACTORS));
 const SONGI_META_ADS_MIN_RESULTS = 10;
+const SONGI_DISCOVERY_SUBSCRIPTION_POLL_MS = Number(process.env.AIMAX_SONGI_DISCOVERY_SUBSCRIPTION_POLL_MS || 5 * 60 * 1000);
+const SONGI_DISCOVERY_SUBSCRIPTION_MAX_PER_USER = Number(process.env.AIMAX_SONGI_DISCOVERY_SUBSCRIPTION_MAX_PER_USER || 10);
+const SONGI_DISCOVERY_SUBSCRIPTION_RETRY_MS = Number(process.env.AIMAX_SONGI_DISCOVERY_SUBSCRIPTION_RETRY_MS || 30 * 60 * 1000);
+const SONGI_DISCOVERY_SUBSCRIPTION_MAX_PER_TICK = Number(process.env.AIMAX_SONGI_DISCOVERY_SUBSCRIPTION_MAX_PER_TICK || 3);
+const SONGI_DISCOVERY_SUBSCRIPTION_SEEN_URL_LIMIT = Number(process.env.AIMAX_SONGI_DISCOVERY_SUBSCRIPTION_SEEN_URL_LIMIT || 600);
+const SONGI_DISCOVERY_SUBSCRIPTION_MAX_CONSECUTIVE_FAILURES = 5;
+const SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES = {
+  daily: { interval_ms: 24 * 60 * 60 * 1000, runs_per_month: 30.4, label: "매일" },
+  weekly: { interval_ms: 7 * 24 * 60 * 60 * 1000, runs_per_month: 4.35, label: "매주" },
+};
 const SONGI_YTDLP_FALLBACK = "yt-dlp";
 const SONGI_FFMPEG_FALLBACK = "ffmpeg";
 const SONGI_SERVER_YTDLP_DISCOVERY_ENABLED = String(process.env.AIMAX_SONGI_SERVER_YTDLP_DISCOVERY_ENABLED || "1").trim() !== "0";
@@ -2505,6 +2515,7 @@ function loadResearch() {
     items: arrayFieldOrThrow(RESEARCH_PATH, data, "items"),
     discovery_runs: Array.isArray(data.discovery_runs) ? data.discovery_runs : [],
     discovery_candidates: Array.isArray(data.discovery_candidates) ? data.discovery_candidates : [],
+    discovery_subscriptions: Array.isArray(data.discovery_subscriptions) ? data.discovery_subscriptions : [],
   };
 }
 
@@ -2515,6 +2526,7 @@ function saveResearch(data) {
     items: arrayFieldOrThrow(RESEARCH_PATH, data, "items"),
     discovery_runs: Array.isArray(data.discovery_runs) ? data.discovery_runs : [],
     discovery_candidates: Array.isArray(data.discovery_candidates) ? data.discovery_candidates : [],
+    discovery_subscriptions: Array.isArray(data.discovery_subscriptions) ? data.discovery_subscriptions : [],
   });
   try {
     writeResearchMarkdownExports(data);
@@ -3603,6 +3615,8 @@ function publicResearchDiscoveryRun(run) {
     command_id: run.command_id || "",
     quota_units_estimate: run.quota_units_estimate || 0,
     source_mode: run.source_mode || "local_ytdlp",
+    subscription_id: run.subscription_id || "",
+    cost_usd: Number(run.cost_usd || 0),
     created_at: run.created_at || "",
     expires_at: run.expires_at || "",
   };
@@ -3654,6 +3668,9 @@ function pruneResearchDiscovery(research) {
   research.discovery_candidates = (Array.isArray(research.discovery_candidates) ? research.discovery_candidates : [])
     .filter((candidate) => activeRuns.has(candidate.run_id) && (!candidate.expires_at || Date.parse(candidate.expires_at) > now))
     .slice(-1200);
+  const projectIds = new Set((Array.isArray(research.projects) ? research.projects : []).map((project) => project.id));
+  research.discovery_subscriptions = (Array.isArray(research.discovery_subscriptions) ? research.discovery_subscriptions : [])
+    .filter((subscription) => projectIds.has(subscription.project_id));
 }
 
 async function requestYouTubeData(pathname, params, apiKey) {
@@ -11355,6 +11372,7 @@ function handleDeleteResearchProject(req, res, projectId) {
   const beforeItems = research.items.length;
   research.projects = research.projects.filter((item) => !(item.id === project.id && item.user_id === auth.user.id));
   research.items = research.items.filter((item) => !(item.project_id === project.id && item.user_id === auth.user.id));
+  research.discovery_subscriptions = (research.discovery_subscriptions || []).filter((item) => item.project_id !== project.id);
   saveResearch(research);
   json(req, res, 200, {
     ok: true,
@@ -11527,6 +11545,7 @@ async function runSongiApifyDiscoveryRequest(req, res, auth, research, project, 
       && item.keyword === keyword
       && item.status === "running"
       && item.source_mode === "server_apify"
+      && !item.subscription_id
       && item.apify_run_id);
     const run = resumableRun || {
       id: crypto.randomUUID(),
@@ -11834,6 +11853,511 @@ async function handleImportResearchDiscoveryCandidate(req, res, candidateId) {
     item: publicResearchItem(item),
     candidate: publicResearchDiscoveryCandidate(candidate),
   });
+}
+
+function songiDiscoveryRunCostUsd(platform, resultCount) {
+  if (!SONGI_APIFY_DISCOVERY_PLATFORMS.has(platform)) return 0;
+  const pricing = SONGI_APIFY_DISCOVERY_PRICING_USD[platform];
+  if (!pricing) return 0;
+  return Number(pricing.start || 0) + Math.max(0, Number(resultCount || 0)) * Number(pricing.per_result || 0);
+}
+
+function songiDiscoverySubscriptionEstimates(platform, maxResults, frequency) {
+  const perRun = songiDiscoveryRunCostUsd(platform, maxResults);
+  const config = SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES[frequency];
+  const monthly = perRun * Number(config?.runs_per_month || 0);
+  return {
+    per_run_estimate_usd: Math.round(perRun * 10000) / 10000,
+    monthly_estimate_usd: Math.round(monthly * 10000) / 10000,
+  };
+}
+
+function publicResearchDiscoverySubscription(subscription) {
+  const platform = subscription.platform || "youtube";
+  const estimates = songiDiscoverySubscriptionEstimates(platform, subscription.max_results, subscription.frequency);
+  return {
+    id: subscription.id,
+    project_id: subscription.project_id,
+    keyword: subscription.keyword || "",
+    platform,
+    sort_mode: subscription.sort_mode || "top",
+    date_range_days: Number(subscription.date_range_days || 30),
+    max_results: Number(subscription.max_results || 12),
+    frequency: subscription.frequency || "weekly",
+    frequency_label: SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES[subscription.frequency]?.label || subscription.frequency || "",
+    status: subscription.status || "active",
+    pause_reason: subscription.pause_reason || "",
+    next_run_at: subscription.next_run_at || "",
+    last_run_at: subscription.last_run_at || "",
+    last_run_status: subscription.last_run_status || "",
+    last_run_error: subscription.last_run_error || "",
+    last_new_count: Number(subscription.last_new_count || 0),
+    run_count: Number(subscription.run_count || 0),
+    total_cost_usd: Math.round(Number(subscription.total_cost_usd || 0) * 10000) / 10000,
+    per_run_estimate_usd: estimates.per_run_estimate_usd,
+    monthly_estimate_usd: estimates.monthly_estimate_usd,
+    created_at: subscription.created_at || "",
+    updated_at: subscription.updated_at || "",
+  };
+}
+
+function handleListResearchDiscoverySubscriptions(req, res, url) {
+  const auth = requireResearchAccess(req, res);
+  if (!auth) return;
+  const projectId = String(url.searchParams.get("project_id") || "").trim();
+  const research = loadResearch();
+  pruneResearchDiscovery(research);
+  const projects = new Set(research.projects.filter((project) => project.user_id === auth.user.id).map((project) => project.id));
+  const subscriptions = (research.discovery_subscriptions || [])
+    .filter((subscription) => subscription.user_id === auth.user.id && projects.has(subscription.project_id))
+    .filter((subscription) => !projectId || subscription.project_id === projectId)
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+  json(req, res, 200, { ok: true, subscriptions: subscriptions.map(publicResearchDiscoverySubscription) });
+}
+
+async function handleCreateResearchDiscoverySubscription(req, res) {
+  const auth = requireResearchAccess(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const projectId = String(body.project_id || "").trim();
+  const keyword = compactText(body.keyword, 120);
+  const platform = String(body.platform || "youtube").trim().toLowerCase();
+  const frequency = String(body.frequency || "").trim();
+  const sortMode = String(body.sort_mode || "top").trim() === "recent" ? "recent" : "top";
+  const research = loadResearch();
+  const project = research.projects.find((item) => item.id === projectId && item.user_id === auth.user.id);
+  if (!project) {
+    json(req, res, 404, { ok: false, error: "research_project_not_found" });
+    return;
+  }
+  if (!keyword) {
+    json(req, res, 400, { ok: false, error: "research_discovery_keyword_required" });
+    return;
+  }
+  if (platform !== "youtube" && !SONGI_APIFY_DISCOVERY_PLATFORMS.has(platform)) {
+    json(req, res, 400, { ok: false, error: "research_discovery_platform_not_ready", message: "지원하지 않는 플랫폼입니다. 유튜브/인스타그램/틱톡/스레드/메타 광고 중에서 선택해주세요." });
+    return;
+  }
+  if (!SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES[frequency]) {
+    json(req, res, 400, { ok: false, error: "research_discovery_subscription_frequency_invalid", message: "수집 주기는 매일 또는 매주만 지원합니다." });
+    return;
+  }
+  let maxResults = boundedInteger(body.max_results, 12, 5, 25);
+  if (platform === "meta_ads") maxResults = Math.max(SONGI_META_ADS_MIN_RESULTS, maxResults);
+  if (SONGI_APIFY_DISCOVERY_PLATFORMS.has(platform)) {
+    if (!hasUserSecret(auth.user.id, "apify")) {
+      json(req, res, 400, {
+        ok: false,
+        error: "research_apify_key_missing",
+        message: "이 플랫폼 자동수집에는 본인 Apify 키가 필요합니다. 설정 > AI/API 연결에서 키를 저장해주세요.",
+      });
+      return;
+    }
+    if (!songiApifyDiscoveryConfig(platform, keyword, maxResults)) {
+      json(req, res, 400, {
+        ok: false,
+        error: "research_discovery_keyword_invalid",
+        message: "이 키워드로는 해시태그를 만들 수 없습니다. 특수문자를 빼고 다시 입력해주세요.",
+      });
+      return;
+    }
+  }
+  pruneResearchDiscovery(research);
+  const mySubscriptions = (research.discovery_subscriptions || []).filter((item) => item.user_id === auth.user.id);
+  if (mySubscriptions.length >= SONGI_DISCOVERY_SUBSCRIPTION_MAX_PER_USER) {
+    json(req, res, 400, {
+      ok: false,
+      error: "research_discovery_subscription_limit",
+      message: `구독은 계정당 최대 ${SONGI_DISCOVERY_SUBSCRIPTION_MAX_PER_USER}개까지 만들 수 있습니다. 기존 구독을 정리해주세요.`,
+    });
+    return;
+  }
+  const duplicate = mySubscriptions.find((item) => item.project_id === projectId
+    && item.platform === platform
+    && item.keyword === keyword
+    && (item.sort_mode || "top") === sortMode);
+  if (duplicate) {
+    json(req, res, 409, {
+      ok: false,
+      error: "research_discovery_subscription_exists",
+      message: "같은 프로젝트에 동일한 키워드·플랫폼·모드 구독이 이미 있습니다.",
+      subscription: publicResearchDiscoverySubscription(duplicate),
+    });
+    return;
+  }
+  const now = nowIso();
+  const platformLabel = SONGI_DISCOVERY_PLATFORM_LABELS[platform] || platform;
+  const seedUrls = (research.discovery_candidates || [])
+    .filter((candidate) => candidate.user_id === auth.user.id
+      && candidate.project_id === projectId
+      && candidate.keyword === keyword
+      && String(candidate.platform || "") === platformLabel
+      && candidate.url)
+    .map((candidate) => candidate.url);
+  const subscription = {
+    id: crypto.randomUUID(),
+    user_id: auth.user.id,
+    project_id: projectId,
+    keyword,
+    platform,
+    sort_mode: sortMode,
+    date_range_days: boundedInteger(body.date_range_days, 30, 1, 90),
+    max_results: maxResults,
+    frequency,
+    status: "active",
+    pause_reason: "",
+    next_run_at: new Date(Date.now() + SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES[frequency].interval_ms).toISOString(),
+    last_run_at: "",
+    last_run_status: "",
+    last_run_error: "",
+    last_new_count: 0,
+    run_count: 0,
+    total_cost_usd: 0,
+    consecutive_failures: 0,
+    seen_urls: Array.from(new Set(seedUrls)).slice(-SONGI_DISCOVERY_SUBSCRIPTION_SEEN_URL_LIMIT),
+    created_at: now,
+    updated_at: now,
+  };
+  research.discovery_subscriptions = research.discovery_subscriptions || [];
+  research.discovery_subscriptions.push(subscription);
+  project.updated_at = now;
+  saveResearch(research);
+  json(req, res, 201, { ok: true, subscription: publicResearchDiscoverySubscription(subscription) });
+}
+
+async function handleUpdateResearchDiscoverySubscription(req, res, subscriptionId) {
+  const auth = requireResearchAccess(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const action = String(body.action || "").trim();
+  if (!["pause", "resume"].includes(action)) {
+    json(req, res, 400, { ok: false, error: "research_discovery_subscription_action_invalid", message: "지원하는 동작은 일시정지/재개입니다." });
+    return;
+  }
+  const research = loadResearch();
+  const subscription = (research.discovery_subscriptions || []).find((item) => item.id === subscriptionId && item.user_id === auth.user.id);
+  if (!subscription) {
+    json(req, res, 404, { ok: false, error: "research_discovery_subscription_not_found" });
+    return;
+  }
+  const now = nowIso();
+  if (action === "pause") {
+    subscription.status = "paused";
+    subscription.pause_reason = "user_paused";
+  } else {
+    if (SONGI_APIFY_DISCOVERY_PLATFORMS.has(subscription.platform) && !hasUserSecret(auth.user.id, "apify")) {
+      json(req, res, 400, {
+        ok: false,
+        error: "research_apify_key_missing",
+        message: "재개하려면 설정 > AI/API 연결에서 본인 Apify 키를 먼저 저장해주세요.",
+      });
+      return;
+    }
+    subscription.status = "active";
+    subscription.pause_reason = "";
+    subscription.consecutive_failures = 0;
+    const nextRunTime = Date.parse(subscription.next_run_at || "");
+    if (!Number.isFinite(nextRunTime) || nextRunTime <= Date.now()) {
+      subscription.next_run_at = new Date(Date.now() + 60 * 1000).toISOString();
+    }
+  }
+  subscription.updated_at = now;
+  saveResearch(research);
+  json(req, res, 200, { ok: true, subscription: publicResearchDiscoverySubscription(subscription) });
+}
+
+function handleDeleteResearchDiscoverySubscription(req, res, subscriptionId) {
+  const auth = requireResearchAccess(req, res);
+  if (!auth) return;
+  const research = loadResearch();
+  const subscription = (research.discovery_subscriptions || []).find((item) => item.id === subscriptionId && item.user_id === auth.user.id);
+  if (!subscription) {
+    json(req, res, 404, { ok: false, error: "research_discovery_subscription_not_found" });
+    return;
+  }
+  research.discovery_subscriptions = research.discovery_subscriptions.filter((item) => item.id !== subscription.id);
+  saveResearch(research);
+  json(req, res, 200, { ok: true, deleted_subscription_id: subscription.id });
+}
+
+function pauseSongiDiscoverySubscription(research, subscription, reason, message) {
+  subscription.status = "paused";
+  subscription.pause_reason = reason;
+  subscription.last_run_status = "failed";
+  subscription.last_run_error = compactText(message, 300);
+  subscription.updated_at = nowIso();
+  saveResearch(research);
+}
+
+async function runSongiDiscoverySubscriptionOnce(subscriptionId) {
+  const research = loadResearch();
+  const subscription = (research.discovery_subscriptions || []).find((item) => item.id === subscriptionId);
+  if (!subscription || subscription.status !== "active") return { skipped: "not_active" };
+  const project = research.projects.find((item) => item.id === subscription.project_id && item.user_id === subscription.user_id);
+  if (!project) {
+    pruneResearchDiscovery(research);
+    saveResearch(research);
+    return { skipped: "project_missing" };
+  }
+  const userRecord = loadUsers().users.find((item) => item.id === subscription.user_id);
+  if (!userRecord || !canUseResearch(userRecord)) {
+    pauseSongiDiscoverySubscription(research, subscription, "research_access_expired", "이용 권한이 만료되거나 비활성화되어 자동수집을 일시정지했습니다.");
+    return { paused: "research_access_expired" };
+  }
+  const platform = subscription.platform || "youtube";
+  const isApify = SONGI_APIFY_DISCOVERY_PLATFORMS.has(platform);
+  let maxResults = boundedInteger(subscription.max_results, 12, 5, 25);
+  if (platform === "meta_ads") maxResults = Math.max(SONGI_META_ADS_MIN_RESULTS, maxResults);
+  let token = "";
+  let apifyConfig = null;
+  if (isApify) {
+    token = getUserSecret(subscription.user_id, "apify");
+    if (!token) {
+      pauseSongiDiscoverySubscription(research, subscription, "research_apify_key_missing", "Apify 키가 없어 자동수집을 일시정지했습니다. 설정 > AI/API 연결에서 키를 저장한 뒤 재개해주세요.");
+      return { paused: "research_apify_key_missing" };
+    }
+    apifyConfig = songiApifyDiscoveryConfig(platform, subscription.keyword, maxResults);
+    if (!apifyConfig) {
+      pauseSongiDiscoverySubscription(research, subscription, "research_discovery_keyword_invalid", "키워드로 해시태그를 만들 수 없어 자동수집을 일시정지했습니다.");
+      return { paused: "research_discovery_keyword_invalid" };
+    }
+  } else if (platform === "youtube") {
+    const serverReady = SONGI_SERVER_YTDLP_DISCOVERY_ENABLED && researchMediaToolStatus().video_download.available;
+    if (!serverReady) {
+      subscription.last_run_status = "failed";
+      subscription.last_run_error = "웹 서버 yt-dlp가 준비되지 않아 다음 주기에 다시 시도합니다.";
+      subscription.consecutive_failures = Number(subscription.consecutive_failures || 0) + 1;
+      if (subscription.consecutive_failures >= SONGI_DISCOVERY_SUBSCRIPTION_MAX_CONSECUTIVE_FAILURES) {
+        subscription.status = "paused";
+        subscription.pause_reason = "repeated_failures";
+      } else {
+        subscription.next_run_at = new Date(Date.now() + SONGI_DISCOVERY_SUBSCRIPTION_RETRY_MS).toISOString();
+      }
+      subscription.updated_at = nowIso();
+      saveResearch(research);
+      return { skipped: "server_ytdlp_unavailable" };
+    }
+  } else {
+    pauseSongiDiscoverySubscription(research, subscription, "research_discovery_platform_not_ready", "지원하지 않는 플랫폼이라 자동수집을 일시정지했습니다.");
+    return { paused: "research_discovery_platform_not_ready" };
+  }
+  const lockKey = researchPaidLockKey(subscription.user_id, "discovery_apify", subscription.project_id);
+  if (isApify && !acquireResearchPaidLock(lockKey)) return { skipped: "paid_lock_busy" };
+  try {
+    const now = nowIso();
+    // 타임아웃으로 failed 강등된 런도 apify_run_id가 있으면 재개 — 새 실행을 또 시작하면 이중 과금
+    const resumableRun = isApify
+      ? [...research.discovery_runs].reverse().find((item) => item.subscription_id === subscription.id
+        && item.source_mode === "server_apify"
+        && item.apify_run_id
+        && (item.status === "running" || (item.status === "failed" && item.error === "research_discovery_timeout")))
+      : null;
+    const run = resumableRun || {
+      id: crypto.randomUUID(),
+      user_id: subscription.user_id,
+      project_id: subscription.project_id,
+      keyword: subscription.keyword,
+      platform,
+      sort_mode: subscription.sort_mode || "top",
+      date_range_days: boundedInteger(subscription.date_range_days, 30, 1, 90),
+      max_results: maxResults,
+      status: "running",
+      source_mode: isApify ? "server_apify" : "server_ytdlp",
+      subscription_id: subscription.id,
+      quota_units_estimate: 0,
+      created_at: now,
+      updated_at: now,
+      expires_at: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    if (resumableRun) {
+      resumableRun.status = "running";
+      resumableRun.error = "";
+      resumableRun.error_detail = "";
+      resumableRun.updated_at = now;
+    } else {
+      research.discovery_runs.push(run);
+    }
+    pruneResearchDiscovery(research);
+    saveResearch(research);
+    let failureInfo = null;
+    let rows = [];
+    let chargedCount = 0;
+    let sourceVersion = "";
+    if (isApify) {
+      try {
+        const { items } = await runSongiApifyDiscovery(apifyConfig, token, maxResults, {
+          existingRunId: resumableRun ? resumableRun.apify_run_id : "",
+          onRunStarted: (apifyRunId) => {
+            const current = loadResearch();
+            const currentRun = current.discovery_runs.find((item) => item.id === run.id);
+            if (currentRun && currentRun.apify_run_id !== apifyRunId) {
+              currentRun.apify_run_id = apifyRunId;
+              currentRun.updated_at = nowIso();
+              saveResearch(current);
+            }
+          },
+        });
+        chargedCount = Array.isArray(items) ? items.length : 0;
+        rows = songiApifyDiscoveryRows(platform, subscription.keyword, items);
+      } catch (error) {
+        failureInfo = songiApifyDiscoveryErrorInfo(error, platform);
+      }
+    } else {
+      try {
+        const result = await discoverYouTubeCandidatesWithServerYtDlp({
+          keyword: subscription.keyword,
+          days: boundedInteger(subscription.date_range_days, 30, 1, 90),
+          maxResults,
+        });
+        rows = Array.isArray(result.candidates) ? result.candidates : [];
+        sourceVersion = result.source_version || "";
+      } catch (error) {
+        failureInfo = {
+          code: String(error.code || "server_ytdlp_discovery_failed"),
+          message: compactText(error.stderr || error.message || "서버 YouTube 수집에 실패했습니다.", 300),
+        };
+      }
+    }
+    const next = loadResearch();
+    const nextRun = next.discovery_runs.find((item) => item.id === run.id);
+    const nextSubscription = (next.discovery_subscriptions || []).find((item) => item.id === subscription.id);
+    if (!nextSubscription) {
+      if (nextRun && nextRun.status === "running") {
+        nextRun.status = "failed";
+        nextRun.error = "research_discovery_subscription_deleted";
+        nextRun.updated_at = nowIso();
+        saveResearch(next);
+      }
+      return { skipped: "subscription_deleted" };
+    }
+    const nowAfter = nowIso();
+    if (failureInfo) {
+      const stillRunning = failureInfo.code === "research_apify_run_still_running";
+      if (nextRun) {
+        nextRun.status = stillRunning ? "running" : "failed";
+        nextRun.error = failureInfo.code;
+        nextRun.error_detail = compactText(failureInfo.message, 500);
+        nextRun.updated_at = nowAfter;
+      }
+      // 시작은 됐는데 실패한 유료 런은 Apify 시작 수수료가 이미 과금됨 — 추정치로 계상
+      if (!stillRunning && isApify && nextRun?.apify_run_id) {
+        const startFeeUsd = Number(SONGI_APIFY_DISCOVERY_PRICING_USD[platform]?.start || 0);
+        nextRun.cost_usd = Math.round(startFeeUsd * 10000) / 10000;
+        nextSubscription.total_cost_usd = Math.round((Number(nextSubscription.total_cost_usd || 0) + startFeeUsd) * 10000) / 10000;
+      }
+      if (stillRunning) {
+        nextSubscription.still_running_checks = Number(nextSubscription.still_running_checks || 0) + 1;
+        if (nextSubscription.still_running_checks >= 12) {
+          nextSubscription.still_running_checks = 0;
+          nextSubscription.last_run_status = "failed";
+          nextSubscription.last_run_error = "Apify 실행이 1시간 넘게 끝나지 않아 다음 재시도에서 다시 확인합니다.";
+          nextSubscription.last_run_at = nowAfter;
+          nextSubscription.consecutive_failures = Number(nextSubscription.consecutive_failures || 0) + 1;
+          if (nextSubscription.consecutive_failures >= SONGI_DISCOVERY_SUBSCRIPTION_MAX_CONSECUTIVE_FAILURES) {
+            nextSubscription.status = "paused";
+            nextSubscription.pause_reason = "repeated_failures";
+          } else {
+            nextSubscription.next_run_at = new Date(Date.now() + SONGI_DISCOVERY_SUBSCRIPTION_RETRY_MS).toISOString();
+          }
+        } else {
+          nextSubscription.last_run_status = "running";
+          nextSubscription.next_run_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+        }
+      } else if (["research_apify_invalid_token", "research_apify_credit_exhausted"].includes(failureInfo.code)) {
+        nextSubscription.still_running_checks = 0;
+        nextSubscription.status = "paused";
+        nextSubscription.pause_reason = failureInfo.code;
+        nextSubscription.last_run_status = "failed";
+        nextSubscription.last_run_error = compactText(failureInfo.message, 300);
+        nextSubscription.last_run_at = nowAfter;
+      } else {
+        nextSubscription.still_running_checks = 0;
+        nextSubscription.last_run_status = "failed";
+        nextSubscription.last_run_error = compactText(failureInfo.message, 300);
+        nextSubscription.last_run_at = nowAfter;
+        nextSubscription.consecutive_failures = Number(nextSubscription.consecutive_failures || 0) + 1;
+        if (nextSubscription.consecutive_failures >= SONGI_DISCOVERY_SUBSCRIPTION_MAX_CONSECUTIVE_FAILURES) {
+          nextSubscription.status = "paused";
+          nextSubscription.pause_reason = "repeated_failures";
+        } else {
+          nextSubscription.next_run_at = new Date(Date.now() + SONGI_DISCOVERY_SUBSCRIPTION_RETRY_MS).toISOString();
+        }
+      }
+      nextSubscription.updated_at = nowAfter;
+      saveResearch(next);
+      return { failed: failureInfo.code, still_running: stillRunning };
+    }
+    const seen = new Set(Array.isArray(nextSubscription.seen_urls) ? nextSubscription.seen_urls : []);
+    let freshCandidates = [];
+    if (nextRun) {
+      const candidates = isApify
+        ? materializeSongiApifyDiscoveryCandidates(next, nextRun, subscription.user_id, rows, { sortMode: subscription.sort_mode || "top" })
+        : materializeSongiDiscoveryCandidates(next, nextRun, subscription.user_id, rows, { sourceMode: "server_ytdlp", sourceVersion });
+      freshCandidates = candidates.filter((candidate) => candidate.url && !seen.has(candidate.url));
+      const dropIds = new Set(candidates.filter((candidate) => !freshCandidates.includes(candidate)).map((candidate) => candidate.id));
+      if (dropIds.size) {
+        next.discovery_candidates = next.discovery_candidates.filter((candidate) => !dropIds.has(candidate.id));
+      }
+      nextRun.result_count = freshCandidates.length;
+      nextRun.cost_usd = Math.round(songiDiscoveryRunCostUsd(platform, chargedCount) * 10000) / 10000;
+    }
+    for (const candidate of freshCandidates) seen.add(candidate.url);
+    nextSubscription.seen_urls = Array.from(seen).slice(-SONGI_DISCOVERY_SUBSCRIPTION_SEEN_URL_LIMIT);
+    nextSubscription.last_run_at = nowAfter;
+    nextSubscription.last_run_status = "completed";
+    nextSubscription.last_run_error = "";
+    nextSubscription.last_new_count = freshCandidates.length;
+    nextSubscription.run_count = Number(nextSubscription.run_count || 0) + 1;
+    nextSubscription.total_cost_usd = Math.round((Number(nextSubscription.total_cost_usd || 0) + songiDiscoveryRunCostUsd(platform, chargedCount)) * 10000) / 10000;
+    nextSubscription.consecutive_failures = 0;
+    nextSubscription.still_running_checks = 0;
+    nextSubscription.next_run_at = new Date(Date.now() + (SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES[nextSubscription.frequency]?.interval_ms || SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES.weekly.interval_ms)).toISOString();
+    nextSubscription.updated_at = nowAfter;
+    saveResearch(next);
+    return { completed: true, new_count: freshCandidates.length };
+  } finally {
+    if (isApify) releaseResearchPaidLock(lockKey);
+  }
+}
+
+let songiDiscoverySubscriptionSweepBusy = false;
+
+async function runDueSongiDiscoverySubscriptions(referenceTime = Date.now()) {
+  if (songiDiscoverySubscriptionSweepBusy) return { ran: 0, skipped: "busy" };
+  songiDiscoverySubscriptionSweepBusy = true;
+  try {
+    const research = loadResearch();
+    const due = (research.discovery_subscriptions || [])
+      .filter((subscription) => subscription.status === "active"
+        && subscription.next_run_at
+        && Date.parse(subscription.next_run_at) <= referenceTime)
+      .sort((a, b) => String(a.next_run_at || "").localeCompare(String(b.next_run_at || "")))
+      .slice(0, SONGI_DISCOVERY_SUBSCRIPTION_MAX_PER_TICK);
+    let ran = 0;
+    for (const subscription of due) {
+      try {
+        await runSongiDiscoverySubscriptionOnce(subscription.id);
+        ran += 1;
+      } catch (error) {
+        console.warn("[songi subscription] run failed", subscription.id, error.code || error.message || "subscription_run_failed");
+      }
+    }
+    return { ran };
+  } finally {
+    songiDiscoverySubscriptionSweepBusy = false;
+  }
+}
+
+function startSongiDiscoverySubscriptionPoller() {
+  const timer = setInterval(() => {
+    runDueSongiDiscoverySubscriptions().catch((error) => {
+      console.warn("[songi subscription] sweep failed", error.code || error.message || "subscription_sweep_failed");
+    });
+  }, SONGI_DISCOVERY_SUBSCRIPTION_POLL_MS);
+  if (typeof timer.unref === "function") timer.unref();
+  return timer;
 }
 
 async function handleUpdateResearchItem(req, res, itemId) {
@@ -13259,6 +13783,22 @@ function route(req, res) {
     handleRunResearchDiscovery(req, res);
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/research/discovery/subscriptions") {
+    handleListResearchDiscoverySubscriptions(req, res, url);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/research/discovery/subscriptions") {
+    handleCreateResearchDiscoverySubscription(req, res);
+    return;
+  }
+  if (req.method === "PATCH" && url.pathname.startsWith("/api/research/discovery/subscriptions/")) {
+    handleUpdateResearchDiscoverySubscription(req, res, decodeURIComponent(url.pathname.slice("/api/research/discovery/subscriptions/".length)));
+    return;
+  }
+  if (req.method === "DELETE" && url.pathname.startsWith("/api/research/discovery/subscriptions/")) {
+    handleDeleteResearchDiscoverySubscription(req, res, decodeURIComponent(url.pathname.slice("/api/research/discovery/subscriptions/".length)));
+    return;
+  }
   if (req.method === "POST" && url.pathname.startsWith("/api/research/discovery/candidates/") && url.pathname.endsWith("/import")) {
     const candidateId = decodeURIComponent(url.pathname.slice("/api/research/discovery/candidates/".length, -"/import".length));
     handleImportResearchDiscoveryCandidate(req, res, candidateId);
@@ -13537,6 +14077,7 @@ function startServer() {
     });
   });
 
+  startSongiDiscoverySubscriptionPoller();
   server.listen(PORT, HOST, () => {
     console.log(`aimax-reports-api listening on http://${HOST}:${PORT}`);
   });
@@ -13613,6 +14154,17 @@ module.exports = {
     findHeartbeatAgent,
     imageCompletionIssue,
     requestedImageCount,
+  },
+  __songiSubscriptionTest: {
+    SONGI_DISCOVERY_SUBSCRIPTION_FREQUENCIES,
+    loadResearch,
+    saveResearch,
+    pruneResearchDiscovery,
+    publicResearchDiscoverySubscription,
+    runDueSongiDiscoverySubscriptions,
+    runSongiDiscoverySubscriptionOnce,
+    songiDiscoveryRunCostUsd,
+    songiDiscoverySubscriptionEstimates,
   },
   __yunmiTest: {
     buildYunmiGenerationPrompt,
