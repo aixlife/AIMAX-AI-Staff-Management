@@ -154,6 +154,7 @@ const ALLOWED_ORIGINS = String(process.env.AIMAX_ALLOWED_ORIGINS || "https://aim
 
 const REPORTS_DIR = path.join(DATA_DIR, "reports");
 const INDEX_PATH = path.join(DATA_DIR, "reports-index.jsonl");
+const AUTOMATION_TICKETS_PATH = path.join(DATA_DIR, "automation-tickets.jsonl");
 const USERS_PATH = path.join(DATA_DIR, "users.json");
 const SESSIONS_PATH = path.join(DATA_DIR, "sessions.json");
 const USER_SECRETS_PATH = path.join(DATA_DIR, "user-secrets.json");
@@ -9084,7 +9085,91 @@ function summaryFor(report, storedAt, dateKey) {
     user_response: support.user_response || "",
     user_response_note: support.user_response_note || "",
     user_response_updated_at: support.user_response_updated_at || "",
+    automation_ticket_id: support.automation_ticket_id || "",
   };
+}
+
+function automationTicketId(reportId, storedAt) {
+  const stamp = String(storedAt || nowIso()).replace(/[-:TZ.]/g, "").slice(0, 14);
+  const suffix = crypto.createHash("sha256").update(String(reportId || "")).digest("hex").slice(0, 8);
+  return `AIMAX-AUTO-${stamp}-${suffix}`;
+}
+
+function automationTicketCategory(summary, report) {
+  if (isFeedbackReport(summary)) return "staff_feedback";
+  const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
+  const diagnosticCode = sanitizeFailedStage(diagnostic?.code || "");
+  const stage = sanitizeFailedStage(summary.job_stage || "");
+  const worker = sanitizeFailedStage(summary.job_worker || summary.job_kind || "");
+  if (/api_key|quota|rate_limit|provider_transient|model_not_found|image_paid_required/.test(diagnosticCode)) return "user_ai_provider";
+  if (/runner|local_worker|local_ui_queue/.test(diagnosticCode) || /runner/.test(stage)) return "local_runner";
+  if (/smart_editor|publish|save|image_upload|image_insert/.test(stage)) return "naver_editor";
+  if (/yeri/.test(worker)) return "yeri";
+  if (/songi|research|youtube/.test(worker) || /research|youtube/.test(stage)) return "songi_research";
+  if (/yunmi/.test(worker)) return "yunmi";
+  return "general_error";
+}
+
+function automationTicketPriority(summary, report) {
+  if (isFeedbackReport(summary)) return summary.feedback_contact_needed ? "normal" : "low";
+  const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
+  if (diagnostic?.admin_action_required) return "high";
+  if (summary.job_status === "failed" || summary.status === "new") return "normal";
+  return "low";
+}
+
+function automationTicketNextAction(category) {
+  if (category === "local_runner") return "실행기 로그/버전/큐 처리 상태를 확인하고 재현 테스트를 준비";
+  if (category === "naver_editor") return "Smart Editor selector/저장/발행 경로를 재현하고 패치 후보 준비";
+  if (category === "user_ai_provider") return "사용자 안내로 해결 가능한 API 키/한도/제공자 일시 오류인지 분류";
+  if (category === "staff_feedback") return "직원 피드백을 개선 후보로 분류하고 필요 시 사용자 추가 정보 요청";
+  if (category === "songi_research") return "송이/리서치 작업 로그와 외부 도구 상태를 확인";
+  if (category === "yunmi") return "윤미 대본 생성 입력/AI 응답/후처리 단계를 확인";
+  if (category === "yeri") return "예리 글 생성/이미지/네이버 저장 흐름을 확인";
+  return "오류 보고 상세와 최근 job 로그를 확인해 수정 필요 여부 분류";
+}
+
+function buildAutomationTicketForReport(report, storedAt, dateKey) {
+  const summary = summaryFor(report, storedAt, dateKey);
+  const category = automationTicketCategory(summary, report);
+  return {
+    ticket_id: automationTicketId(summary.report_id, storedAt),
+    source: "admin_report",
+    status: "open",
+    priority: automationTicketPriority(summary, report),
+    category,
+    report_id: summary.report_id || "",
+    report_kind: summary.report_kind || "error",
+    created_at: storedAt,
+    updated_at: storedAt,
+    account_email: summary.account_email || "",
+    product: summary.product || "",
+    app_version: summary.app_version || "",
+    os: summary.os || "",
+    job_id: summary.job_id || "",
+    job_kind: summary.job_kind || "",
+    job_worker: summary.job_worker || "",
+    job_status: summary.job_status || "",
+    job_stage: summary.job_stage || "",
+    visible_error: compactText(summary.visible_error || summary.feedback_improve || "", 700),
+    work_context: compactText(summary.work_context || "", 500),
+    suggested_next_action: automationTicketNextAction(category),
+    admin_url: `${PUBLIC_BASE_URL}/admin#reports`,
+  };
+}
+
+function appendAutomationTicket(ticket) {
+  appendJsonLineDurable(AUTOMATION_TICKETS_PATH, ticket);
+  return ticket;
+}
+
+function loadAutomationTickets(limit = 200) {
+  if (!fs.existsSync(AUTOMATION_TICKETS_PATH)) return [];
+  return fs.readFileSync(AUTOMATION_TICKETS_PATH, "utf8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(-limit)
+    .map((line) => JSON.parse(line));
 }
 
 function loadReportIndexRows(limit = 200) {
@@ -9115,6 +9200,7 @@ function publicReportSummary(row) {
     user_response_required: status === "waiting_user" && actionChecklist.length > 0,
     user_response: row.user_response || "",
     user_response_updated_at: row.user_response_updated_at || "",
+    automation_ticket_id: row.automation_ticket_id || "",
     work_context: row.work_context || "",
     visible_error: row.visible_error || "",
     feedback_employee_code: row.feedback_employee_code || "",
@@ -9142,6 +9228,7 @@ function adminReportSummary(row) {
     product: row.product || "",
     app_version: row.app_version || "",
     os: row.os || "",
+    automation_ticket_id: row.automation_ticket_id || "",
   };
 }
 
@@ -9462,6 +9549,7 @@ function telegramReportAlertText(report, storedAt) {
       summary.feedback_good ? `좋았던 점: ${compactTelegramLine(summary.feedback_good, 700)}` : "",
       `개선 요청: ${compactTelegramLine(summary.feedback_improve || summary.visible_error, 900)}`,
       summary.feedback_contact_needed ? "확인 요청: 운영팀 답변/확인 필요" : "",
+      summary.automation_ticket_id ? `자동화 티켓: ${summary.automation_ticket_id}` : "",
       `앱/OS: ${summary.app_version || "-"} / ${summary.os || "-"}`,
       `접수: ${summary.stored_at || "-"}`,
       `관리: ${PUBLIC_BASE_URL}/admin#reports`,
@@ -9477,6 +9565,7 @@ function telegramReportAlertText(report, storedAt) {
     jobLine ? `작업 ID/단계: ${compactTelegramLine(jobLine, 700)}` : "",
     summary.media_tools_missing ? `영상 도구: 누락 ${compactTelegramLine(summary.media_tools_missing, 120)}` : "",
     `화면 오류: ${compactTelegramLine(summary.visible_error, 900)}`,
+    summary.automation_ticket_id ? `자동화 티켓: ${summary.automation_ticket_id}` : "",
     `앱/OS: ${summary.app_version || "-"} / ${summary.os || "-"}`,
     `접수: ${summary.stored_at || "-"}`,
     `관리: ${PUBLIC_BASE_URL}/admin#reports`,
@@ -9929,6 +10018,20 @@ function handleAdminListReports(req, res) {
     json(req, res, 200, { ok: true, reports: rows });
   } catch (_error) {
     json(req, res, 500, { ok: false, error: "reports_read_failed" });
+  }
+}
+
+function handleAdminListAutomationTickets(req, res, url) {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const statusFilter = String(url.searchParams.get("status") || "").trim();
+    const rows = loadAutomationTickets(500)
+      .reverse()
+      .filter((ticket) => !statusFilter || String(ticket.status || "") === statusFilter)
+      .slice(0, 100);
+    json(req, res, 200, { ok: true, tickets: rows });
+  } catch (_error) {
+    json(req, res, 500, { ok: false, error: "automation_tickets_read_failed" });
   }
 }
 
@@ -13421,8 +13524,11 @@ async function handleReport(req, res) {
   const dayDir = path.join(REPORTS_DIR, dateKey);
   fs.mkdirSync(dayDir, { recursive: true });
   const reportPath = path.join(dayDir, `${report.report_id}.json`);
+  const automationTicket = buildAutomationTicketForReport(report, storedAt, dateKey);
+  report.support.automation_ticket_id = automationTicket.ticket_id;
   writeJsonAtomic(reportPath, report);
   appendJsonLineDurable(INDEX_PATH, summaryFor(report, storedAt, dateKey));
+  appendAutomationTicket(automationTicket);
   sendTelegramReportAlert(report, storedAt).catch((error) => {
     console.warn("[telegram alert] send failed", error.code || error.message || "telegram_send_failed");
   });
@@ -13436,6 +13542,7 @@ async function handleReport(req, res) {
     public_message: supportMeta.publicMessage,
     next_update_message: supportMeta.nextUpdateMessage,
     status_updated_at: storedAt,
+    automation_ticket_id: automationTicket.ticket_id,
   });
 }
 
@@ -14068,6 +14175,10 @@ function route(req, res) {
     handleAdminTelegramTest(req, res);
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/admin/automation-tickets") {
+    handleAdminListAutomationTickets(req, res, url);
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/admin/reports") {
     handleAdminListReports(req, res);
     return;
@@ -14230,6 +14341,15 @@ module.exports = {
     shouldSendCafe24ReviewAlert,
     telegramCafe24AutoFailureAlertText,
     telegramCafe24ReviewAlertText,
+  },
+  __automationTest: {
+    AUTOMATION_TICKETS_PATH,
+    appendAutomationTicket,
+    automationTicketCategory,
+    automationTicketId,
+    buildAutomationTicketForReport,
+    loadAutomationTickets,
+    telegramReportAlertText,
   },
   __yeriHybridTest: {
     ARTIFACTS_DIR,
