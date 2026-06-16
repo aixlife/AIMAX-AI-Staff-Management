@@ -2227,6 +2227,14 @@ function buildFailureDiagnostic(input = {}) {
       ["잠시 후 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"],
     );
   }
+  if (/runner_start_timeout|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim/.test(text)) {
+    return admin(
+      "local_runner_start_timeout",
+      "로컬 실행기 시작 지연",
+      "로컬 실행기가 작업을 받았지만 내부 UI 큐 또는 작업자가 제때 시작하지 못했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.",
+      ["실행기 재시작", "오류 보고 보내기"],
+    );
+  }
   if (/server_generation_provider_transient|provider_transient|temporarily|temporary|unavailable|overloaded|timeout|timed out|일시적 오류|잠시 후/.test(text)) {
     return user(
       "provider_transient",
@@ -2259,7 +2267,7 @@ function buildFailureDiagnostic(input = {}) {
       ["이미지 없이 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"],
     );
   }
-  if (/update_required|runner_start_timeout|runner_stopped|old.*runner|version|업데이트|구버전/.test(text)) {
+  if (/update_required|runner_stopped|old.*runner|version|업데이트|구버전/.test(text)) {
     return user(
       "runner_update_required",
       "실행기 업데이트 필요",

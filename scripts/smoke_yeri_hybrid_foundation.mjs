@@ -62,6 +62,15 @@ try {
   assert(transientDiagnostic.code === "provider_transient", "provider_transient_code_missing");
   assert(transientDiagnostic.user_actionable === true, "provider_transient_should_be_user_actionable");
   assert(transientDiagnostic.admin_action_required === false, "provider_transient_should_not_require_admin");
+  const runnerTimeoutDiagnostic = __yeriHybridTest.buildFailureDiagnostic({
+    stage: "runner_start_timeout",
+    reason: "local_ui_queue_not_processed_after_claim",
+    error: "local_ui_queue_not_processed_after_claim",
+    visible_error: "로컬 실행기가 작업을 받았지만 내부 UI 큐가 작업 시작을 처리하지 못했습니다.",
+  });
+  assert(runnerTimeoutDiagnostic.code === "local_runner_start_timeout", "runner_timeout_should_not_be_provider_transient");
+  assert(runnerTimeoutDiagnostic.admin_action_required === true, "runner_timeout_should_require_admin_or_runner_action");
+  assert(runnerTimeoutDiagnostic.user_actionable === false, "runner_timeout_should_not_be_ai_user_actionable");
 
   const job = {
     id: "job-yeri-hybrid-1",
