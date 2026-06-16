@@ -33,7 +33,11 @@ _CONFIRM_BTN_SELECTORS = [
     CONFIRM_BUTTON,
     ".btn_ok",
     "button.confirm",
-    # '.layer_btn_group button:last-child' 는 취소 옆 버튼을 오클릭할 위험이 있어 제거했다.
+    ".layer_btn_group button:last-child",
+    ".se-popup-button-confirm",
+    "[class*='confirm'] button",
+    "[class*='publish'] button",
+    # 넓은 후보는 _find_publish_confirm_button 의 레이어/텍스트 스코어링 fallback 으로 한 번 더 검증한다.
 ]
 _SAVE_BTN_SELECTORS = [
     SAVE_BUTTON,
@@ -53,7 +57,7 @@ _PUBLISH_OPEN_TEXTS = ["발행", "Publish"]
 # 발행 레이어 감지(어떤 확정 버튼이든 보이면 레이어가 열린 것)용 — 넓게 잡는다.
 _CONFIRM_TEXTS = ["예약 발행", "발행", "예약", "확인", "완료"]
 # 즉시/예약 확정 버튼을 분리해 오클릭을 막는다. 'includes' 매칭이므로 더 구체적인 텍스트를 앞에 둔다.
-_CONFIRM_TEXTS_NOW = ["발행", "확인", "완료"]
+_CONFIRM_TEXTS_NOW = ["공개 발행", "발행", "게시", "등록", "확인", "완료"]
 _CONFIRM_TEXTS_SCHEDULE = ["예약 발행", "예약", "확인", "완료"]
 
 
@@ -203,6 +207,51 @@ def _find_any(driver, selectors, text_candidates=None):
                 return el
 
     raise Exception(f"요소를 찾을 수 없음: {selectors} / texts={text_candidates}")
+
+
+def _find_publish_confirm_button(driver, text_candidates):
+    try:
+        return _find_any(driver, _CONFIRM_BTN_SELECTORS, text_candidates=text_candidates)
+    except Exception:
+        pass
+
+    element = driver.execute_script("""
+        function visible(el) {
+            if (!el) return false;
+            const rect = el.getBoundingClientRect();
+            const style = window.getComputedStyle(el);
+            return rect.width > 0 && rect.height > 0 &&
+                   style.visibility !== 'hidden' &&
+                   style.display !== 'none' &&
+                   !el.disabled;
+        }
+        const nodes = Array.from(document.querySelectorAll(
+            '[role="dialog"] button, [class*="layer"] button, [class*="popup"] button, button'
+        )).filter(visible);
+        const scored = [];
+        for (const el of nodes) {
+            const text = `${el.innerText || ''} ${el.textContent || ''} ${el.value || ''} ${el.getAttribute('aria-label') || ''}`.replace(/\\s+/g, ' ').trim();
+            const cls = String(el.className || '');
+            if (/취소|닫기|cancel|close/i.test(text + ' ' + cls)) continue;
+            let score = 0;
+            if (/공개\\s*발행|예약\\s*발행|발행|게시|등록|확인|완료/.test(text)) score += 20;
+            if (/confirm|ok|submit|publish|primary/i.test(cls)) score += 8;
+            let cur = el.parentElement;
+            while (cur) {
+                const curCls = String(cur.className || '');
+                const role = cur.getAttribute ? cur.getAttribute('role') : '';
+                if (role === 'dialog') score += 6;
+                if (/layer|popup|dialog|modal|publish|confirm/i.test(curCls)) score += 4;
+                cur = cur.parentElement;
+            }
+            if (score > 0) scored.push({ el, score, x: el.getBoundingClientRect().x });
+        }
+        scored.sort((a, b) => (b.score - a.score) || (b.x - a.x));
+        return scored.length ? scored[0].el : null;
+    """)
+    if element:
+        return element
+    raise Exception(f"발행 확인 버튼을 찾을 수 없음: {_CONFIRM_BTN_SELECTORS} / texts={text_candidates}")
 
 
 def _find_all(driver, selector):
@@ -453,7 +502,7 @@ def publish_now(driver, category=None):
         set_category(driver, category)
 
     try:
-        confirm_btn = _find_any(driver, _CONFIRM_BTN_SELECTORS, text_candidates=_CONFIRM_TEXTS_NOW)
+        confirm_btn = _find_publish_confirm_button(driver, _CONFIRM_TEXTS_NOW)
         human_click(driver, confirm_btn)
     except Exception:
         _save_publish_debug(driver, "confirm_missing")
@@ -549,7 +598,7 @@ def schedule_publish(driver, target_date=None, hour=None, category=None):
 
     # 최종 발행 확인
     try:
-        confirm_btn = _find_any(driver, _CONFIRM_BTN_SELECTORS, text_candidates=_CONFIRM_TEXTS_SCHEDULE)
+        confirm_btn = _find_publish_confirm_button(driver, _CONFIRM_TEXTS_SCHEDULE)
         human_click(driver, confirm_btn)
     except Exception:
         _save_publish_debug(driver, "schedule_confirm_missing")
