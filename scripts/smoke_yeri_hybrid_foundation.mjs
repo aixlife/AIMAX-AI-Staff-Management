@@ -23,6 +23,45 @@ try {
   assert(__yeriHybridTest.JOB_STATUSES.has("generating"), "generating_status_missing");
   assert(__yeriHybridTest.JOB_STATUSES.has("ready_for_publish"), "ready_for_publish_status_missing");
   assert(__yeriHybridTest.sanitizeFailedStage("Smart Editor Open!") === "smart_editor_open", "failed_stage_sanitize_failed");
+  const genericVersion = __yeriHybridTest.versionPayload("v1.0.2");
+  assert(genericVersion.latest_version === "v1.0.51", "generic_latest_version_should_follow_platform_latest");
+  assert(genericVersion.min_version === "v1.0.44", "generic_min_version_should_not_fall_back_to_legacy_global_min");
+  assert(genericVersion.update_required === true, "generic_legacy_version_should_require_update");
+  const macVersion = __yeriHybridTest.versionPayload("v1.0.36", "macos");
+  assert(macVersion.latest_version === "v1.0.51", "macos_latest_version_mismatch");
+  assert(macVersion.min_version === "v1.0.36", "macos_min_version_mismatch");
+  assert(macVersion.update_required === false, "macos_min_version_should_remain_supported");
+  const bunchedImages = __yeriHybridTest.sanitizeYeriGeneratedArtifact({
+    title: "이미지 분산 테스트",
+    content_markdown: [
+      "# 이미지 분산 테스트",
+      "",
+      "## 첫 문단",
+      "본문 1",
+      "",
+      "## 둘째 문단",
+      "본문 2",
+      "",
+      "[이미지] 첫 이미지",
+      "",
+      "[이미지] 둘째 이미지",
+      "",
+      "[이미지] 셋째 이미지",
+      "",
+      "## 마무리",
+      "본문 3",
+    ].join("\\n"),
+  }, { keywords: ["이미지 분산 테스트"], image_count: 3 }, "mock-no-paid");
+  assert(!/\\[이미지\\][^\\n]*\\n\\n\\[이미지\\]/.test(bunchedImages.content_markdown), "bunched_image_lines_should_be_redistributed");
+  const transientDiagnostic = __yeriHybridTest.buildFailureDiagnostic({
+    stage: "content_generation",
+    reason: "server_generation_provider_transient",
+    error: "server_generation_provider_transient",
+    visible_error: "Gemini 일시적 오류 - 잠시 후 다시 시도해주세요.",
+  });
+  assert(transientDiagnostic.code === "provider_transient", "provider_transient_code_missing");
+  assert(transientDiagnostic.user_actionable === true, "provider_transient_should_be_user_actionable");
+  assert(transientDiagnostic.admin_action_required === false, "provider_transient_should_not_require_admin");
 
   const job = {
     id: "job-yeri-hybrid-1",
