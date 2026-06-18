@@ -1,0 +1,12 @@
+[Unit]
+Description=Run AIMAX user-facing report guidance updater every 15 minutes
+
+[Timer]
+OnBootSec=4min
+OnActiveSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=aimax-report-auto-guidance.service
+
+[Install]
+WantedBy=timers.target
