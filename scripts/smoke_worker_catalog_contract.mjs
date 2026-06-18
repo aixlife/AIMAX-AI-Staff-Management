@@ -154,6 +154,23 @@ __catalogTest.grantProductToUser(bundleUser, "sangsu", "2026-06-01T00:00:00.000Z
 assert(bundleUser.entitlements.product === "bundle", "grant_sangsu_should_keep_bundle_primary");
 assert(bundleUser.entitlements.products.includes("bundle"), "grant_sangsu_should_keep_bundle");
 assert(bundleUser.entitlements.products.includes("sangsu"), "grant_sangsu_should_add_sangsu");
+const yeriExistingUser = {
+  email: "merge-existing@example.com",
+  status: "active",
+  entitlements: { product: "yeri", products: ["yeri"], status: "active", source: "test" },
+};
+const provisionUsers = { users: [yeriExistingUser] };
+const provisionResult = __catalogTest.provisionAdminUser(provisionUsers, {
+  email: yeriExistingUser.email,
+  product: "hyunju",
+  source: "test_existing_merge",
+  reset_password: false,
+  temporary_password: "",
+}, "2026-06-18T00:00:00.000Z");
+assert(!provisionResult.error, "existing_user_provision_should_succeed");
+assert(yeriExistingUser.entitlements.products.includes("yeri"), "existing_user_provision_should_keep_yeri");
+assert(yeriExistingUser.entitlements.products.includes("hyunju"), "existing_user_provision_should_add_hyunju");
+assert(yeriExistingUser.entitlements.product === "yeri", "existing_user_provision_should_keep_primary_product");
 const jieun = publicWorkers.find((worker) => worker.staff_code === "jieun");
 assert(jieun?.name === "지은", "jieun_worker_name_missing");
 assert(jieun?.role === "AI 오피스 지원", "jieun_worker_role_missing");

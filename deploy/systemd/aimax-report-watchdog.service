@@ -1,0 +1,7 @@
+[Unit]
+Description=AIMAX report and automation ticket watchdog
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management
+ExecStart=/usr/bin/python3 /home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management/scripts/aimax_report_watchdog.py --send --stale-minutes 60
