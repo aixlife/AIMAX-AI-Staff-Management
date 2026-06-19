@@ -144,11 +144,16 @@ def open_tickets(
     now: datetime,
     stale_after: timedelta,
     lookback: timedelta,
+    report_status_by_id: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     latest = latest_rows_by_id(rows, "ticket_id").values()
     candidates: list[dict[str, Any]] = []
     for row in latest:
         if str(row.get("status") or "open") not in {"open", "new", "working"}:
+            continue
+        linked_report_id = str(row.get("report_id") or "")
+        linked_report_status = (report_status_by_id or {}).get(linked_report_id, "")
+        if linked_report_status in {"done", "waiting_user"}:
             continue
         updated_at = parse_time(str(row.get("updated_at") or row.get("created_at") or ""))
         if not updated_at:
@@ -256,8 +261,19 @@ def main(argv: list[str]) -> int:
     lookback = timedelta(days=max(1, args.lookback_days))
     repeat_after = timedelta(hours=max(1, args.repeat_hours))
     data_dir = args.data_dir
-    reports = stale_reports(read_jsonl(data_dir / "reports-index.jsonl"), now, stale_after, lookback)
-    tickets = open_tickets(read_jsonl(data_dir / "automation-tickets.jsonl"), now, stale_after, lookback)
+    report_rows = read_jsonl(data_dir / "reports-index.jsonl")
+    report_status_by_id = {
+        str(row.get("report_id") or ""): str(row.get("status") or "new")
+        for row in latest_rows_by_id(report_rows, "report_id").values()
+    }
+    reports = stale_reports(report_rows, now, stale_after, lookback)
+    tickets = open_tickets(
+        read_jsonl(data_dir / "automation-tickets.jsonl"),
+        now,
+        stale_after,
+        lookback,
+        report_status_by_id,
+    )
     public_base_url = os.environ.get("AIMAX_PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
     message = build_message(reports, tickets, public_base_url=public_base_url, now=now, limit=args.limit)
     state_file = args.state_file or data_dir / "report-watchdog-state.json"
