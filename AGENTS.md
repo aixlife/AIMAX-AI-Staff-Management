@@ -25,6 +25,24 @@
 - Record model, provider, request id when available, token/image usage, estimated cost, and whether publishing was skipped in the evidence/report.
 - Never place `.env`, API keys, Naver credentials, cookies, sessions, auth headers, or private settings in Syncthing/shared outputs.
 
+## Semi-Automatic Error Automation
+
+- AIMAX 오류 보고 자동화의 운영 원칙은 `오류 보고 접수 -> Codex가 원인 확인/코드 수정/검증 준비 -> 배포 전 사용자 승인 요청 -> "배포하자" 승인 후 배포 -> 완료 보고` 순서다.
+- Do not deploy report-driven fixes automatically. Prepare the patch, run safe verification, summarize expected impact, and ask the user before production deployment or installer/version rollout.
+- `AIMAX-AUTO-*` tickets are operational triage records, not proof that a code fix or deployment has completed. Treat each open ticket as a work queue item that still needs inspection, patching, verification, and owner approval before release.
+- If a report includes strong user language such as "한 번도 발행 안 됨", "단 한번도 발행이 된 적 없음", or equivalent, raise priority and do not close it as a simple transient provider issue without checking related job/log evidence.
+- Error reports must retain enough sanitized job context for triage. When changing report payloads or summaries, verify that recent job id/kind/worker/status/stage survives into admin summaries and automation tickets.
+
+## GitHub Push Fallback
+
+- For AIMAX repos, local `git push` may fail because remotes are HTTPS and no interactive GitHub credential is available in this environment.
+- Before retrying the same failing push, check `git remote -v`, `git ls-remote`, and available GitHub connector state.
+- If local push fails with `could not read Username for 'https://github.com': No such device or address`, use the GitHub connector workflow instead of repeatedly retrying local push:
+  - create/update the target branch through the connector when possible;
+  - update the changed text files through the connector contents API;
+  - verify remote branch/file contents after writing.
+- Record in the final/Telegram report whether remote GitHub sync was done by local git or by connector fallback.
+
 ## Employee Launch Checklist
 
 - For any new AI employee or employee-facing workflow, read `docs/runbooks/aimax-employee-release.md` and follow the sequence before final reporting.
