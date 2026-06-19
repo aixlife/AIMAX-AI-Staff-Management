@@ -29,6 +29,7 @@
 
 - AIMAX 오류 보고 자동화의 운영 원칙은 `오류 보고 접수 -> Codex가 원인 확인/코드 수정/검증 준비 -> 배포 전 사용자 승인 요청 -> "배포하자" 승인 후 배포 -> 완료 보고` 순서다.
 - Do not deploy report-driven fixes automatically. Prepare the patch, run safe verification, summarize expected impact, and ask the user before production deployment or installer/version rollout.
+- `aimax-report-watchdog.timer` is only the detector/alerter. `aimax-error-repair-agent.timer` is the repair handoff: it should launch a Codex repair pass when watchdog output contains stale reports or open tickets, complete code changes when feasible, run verification, and notify the user before deployment.
 - `AIMAX-AUTO-*` tickets are operational triage records, not proof that a code fix or deployment has completed. Treat each open ticket as a work queue item that still needs inspection, patching, verification, and owner approval before release.
 - If a report includes strong user language such as "한 번도 발행 안 됨", "단 한번도 발행이 된 적 없음", or equivalent, raise priority and do not close it as a simple transient provider issue without checking related job/log evidence.
 - Error reports must retain enough sanitized job context for triage. When changing report payloads or summaries, verify that recent job id/kind/worker/status/stage survives into admin summaries and automation tickets.

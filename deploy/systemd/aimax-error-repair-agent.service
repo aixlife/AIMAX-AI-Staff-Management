@@ -1,0 +1,7 @@
+[Unit]
+Description=AIMAX error repair Codex agent
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management
+ExecStart=/home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management/scripts/aimax_error_repair_agent.sh
