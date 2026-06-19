@@ -186,6 +186,25 @@ def append_ticket_status_update(data_dir: Path, ticket_id: str, report_id: str, 
         handle.write(f"{json.dumps(row, ensure_ascii=False)}\n")
 
 
+def ticket_status_for_report_status(status: str) -> str:
+    if status == "done":
+        return "done"
+    if status == "waiting_user":
+        return "waiting_user"
+    if status == "working":
+        return "working"
+    return "open"
+
+
+def latest_ticket_statuses(data_dir: Path) -> dict[str, str]:
+    latest: dict[str, str] = {}
+    for row in read_rows(data_dir / "automation-tickets.jsonl"):
+        ticket_id = str(row.get("ticket_id") or "")
+        if ticket_id:
+            latest[ticket_id] = str(row.get("status") or "open")
+    return latest
+
+
 def backup(path: Path, suffix: str, backups: list[str], dry_run: bool) -> None:
     if dry_run or not path.exists():
         return
@@ -317,6 +336,8 @@ def main(argv: list[str]) -> int:
     suffix = f".bak-{updated_at.replace('-', '').replace(':', '').replace('.', '').replace('Z', '')[:14]}-auto-guidance"
     backups: list[str] = []
     touched: list[dict[str, Any]] = []
+    synced_tickets: list[dict[str, Any]] = []
+    latest_tickets = latest_ticket_statuses(data_dir)
 
     backup(index_path, suffix, backups, args.dry_run)
     for row in rows:
@@ -324,6 +345,28 @@ def main(argv: list[str]) -> int:
         if stored_at and now - stored_at > lookback:
             continue
         status = str(row.get("status") or "")
+        ticket_id = str(row.get("automation_ticket_id") or "")
+        if status in {"done", "waiting_user", "working"} and ticket_id:
+            expected_ticket_status = ticket_status_for_report_status(status)
+            current_ticket_status = latest_tickets.get(ticket_id, "")
+            if current_ticket_status in {"open", "new", "working"} and current_ticket_status != expected_ticket_status:
+                append_ticket_status_update(
+                    data_dir,
+                    ticket_id,
+                    str(row.get("report_id") or ""),
+                    status,
+                    updated_at,
+                    args.dry_run,
+                )
+                latest_tickets[ticket_id] = expected_ticket_status
+                synced_tickets.append(
+                    {
+                        "ticket_id": ticket_id,
+                        "report_id": row.get("report_id"),
+                        "previous_status": current_ticket_status,
+                        "next_status": expected_ticket_status,
+                    }
+                )
         if status not in {"new", "reviewing", "working"}:
             continue
         path = report_path(data_dir, row)
@@ -380,6 +423,8 @@ def main(argv: list[str]) -> int:
                 "updated_at": updated_at,
                 "touched_count": len(touched),
                 "touched": touched,
+                "synced_ticket_count": len(synced_tickets),
+                "synced_tickets": synced_tickets,
                 "backups": backups,
             },
             ensure_ascii=False,
