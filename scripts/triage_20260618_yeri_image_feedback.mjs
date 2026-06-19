@@ -6,6 +6,7 @@ import path from "node:path";
 const DATA_DIR = process.env.AIMAX_REPORT_DATA_DIR || "/home/ubuntu/aimax-reports/data";
 const REPORTS_DIR = path.join(DATA_DIR, "reports");
 const INDEX_PATH = path.join(DATA_DIR, "reports-index.jsonl");
+const AUTOMATION_TICKETS_PATH = path.join(DATA_DIR, "automation-tickets.jsonl");
 const DRY_RUN = process.env.DRY_RUN === "1" || process.argv.includes("--dry-run");
 const REPORT_ID = "AIMAX-RPT-20260618073506-ef878983";
 
@@ -34,6 +35,19 @@ function writeRows(rows) {
   const tmpPath = `${INDEX_PATH}.tmp-${process.pid}`;
   fs.writeFileSync(tmpPath, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`, "utf8");
   fs.renameSync(tmpPath, INDEX_PATH);
+}
+
+function appendTicketStatusUpdate(ticketId, reportId, status, updatedAt) {
+  if (!ticketId || DRY_RUN) return null;
+  const row = {
+    ticket_id: String(ticketId),
+    source: "triage_20260618_yeri_image_feedback",
+    status,
+    report_id: reportId,
+    updated_at: updatedAt,
+  };
+  fs.appendFileSync(AUTOMATION_TICKETS_PATH, `${JSON.stringify(row)}\n`, "utf8");
+  return row;
 }
 
 function reportPath(row) {
@@ -69,9 +83,11 @@ function main() {
     const previousStatus = row.status || "";
     Object.assign(row, UPDATE, { status_updated_at: updatedAt });
     const filePath = reportPath(row);
+    const ticketId = row.automation_ticket_id || "";
     backup(filePath, suffix, backups);
     if (!DRY_RUN && filePath && fs.existsSync(filePath)) {
       const report = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      const reportTicketId = report.support?.automation_ticket_id || ticketId;
       report.support = {
         ...(report.support || {}),
         ...UPDATE,
@@ -80,6 +96,7 @@ function main() {
       const tmpPath = `${filePath}.tmp-${process.pid}`;
       fs.writeFileSync(tmpPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
       fs.renameSync(tmpPath, filePath);
+      appendTicketStatusUpdate(reportTicketId, REPORT_ID, UPDATE.status, updatedAt);
     }
     touched = {
       report_id: REPORT_ID,

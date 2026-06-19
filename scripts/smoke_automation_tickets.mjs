@@ -77,6 +77,10 @@ try {
   assert(guided.support.public_message.includes("이미지 생성"), "auto_guidance_public_message_mismatch");
   const guidedTicket = __automationTest.buildAutomationTicketForReport(guided, storedAt, storedAt.slice(0, 10));
   assert(guidedTicket.category === "user_ai_provider", "guided_ticket_category_mismatch");
+  assert(guidedTicket.status === "waiting_user", "guided_ticket_status_mismatch");
+  const ticketUpdate = __automationTest.appendAutomationTicketStatusUpdate(guidedTicket.ticket_id, guided.report_id, guided.support.status, storedAt);
+  assert(ticketUpdate.status === "waiting_user", "ticket_update_status_mismatch");
+  assert(__automationTest.latestAutomationTickets().find((item) => item.ticket_id === guidedTicket.ticket_id)?.status === "waiting_user", "latest_ticket_status_mismatch");
 
   const transientReport = {
     report_id: "AIMAX-RPT-20260618122443-d8ccac1e",
