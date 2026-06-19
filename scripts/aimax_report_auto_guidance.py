@@ -172,6 +172,20 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
     tmp_path.replace(path)
 
 
+def append_ticket_status_update(data_dir: Path, ticket_id: str, report_id: str, status: str, updated_at: str, dry_run: bool) -> None:
+    if not ticket_id or dry_run:
+        return
+    row = {
+        "ticket_id": str(ticket_id),
+        "source": "aimax_report_auto_guidance",
+        "status": status,
+        "report_id": str(report_id or ""),
+        "updated_at": updated_at,
+    }
+    with (data_dir / "automation-tickets.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(f"{json.dumps(row, ensure_ascii=False)}\n")
+
+
 def backup(path: Path, suffix: str, backups: list[str], dry_run: bool) -> None:
     if dry_run or not path.exists():
         return
@@ -237,7 +251,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
 
     rules: list[tuple[str, str]] = [
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
-        ("api_key_missing", r"api[_ -]?key.*missing|key_missing|키가.*없|키.*저장.*필요|api.*저장.*안"),
+        ("api_key_missing", r"api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안"),
         ("api_key_invalid", r"api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized"),
         ("quota_exceeded", r"quota_exceeded|insufficient_quota|billing|payment|credit|balance|크레딧|결제|요금제 한도|한도 초과"),
         ("rate_limited", r"rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일 한도"),
@@ -339,6 +353,14 @@ def main(argv: list[str]) -> int:
             apply_guidance_to_report(detail, guidance, updated_at)
             if not args.dry_run:
                 write_json(path, detail)
+        append_ticket_status_update(
+            data_dir,
+            str(row.get("automation_ticket_id") or (detail or {}).get("support", {}).get("automation_ticket_id") or ""),
+            str(row.get("report_id") or ""),
+            guidance.status,
+            updated_at,
+            args.dry_run,
+        )
         touched.append(
             {
                 "report_id": row.get("report_id"),

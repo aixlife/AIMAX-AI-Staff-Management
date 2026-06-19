@@ -1584,6 +1584,12 @@ function yeriServerGenerationTextModel(payload = {}) {
   return normalizeYeriGeminiModel(selected);
 }
 
+function yeriGeminiFallbackModel(model) {
+  const primary = String(model || "").trim();
+  const fallback = String(YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash").trim() || "gemini-2.5-flash";
+  return primary && primary !== fallback ? fallback : "";
+}
+
 function canUseYeriServerGeneration(user) {
   if (!YERI_SERVER_GENERATION_ALLOWED_USER_IDENTIFIERS.size) return true;
   if (userAccessIdentifierVariants(user).some((identifier) => (
@@ -2014,8 +2020,9 @@ async function generateYeriGeminiArtifact(job, userId) {
     throw error;
   }
   const model = yeriServerGenerationTextModel(job.payload || {});
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const response = await requestYeriProviderJson("gemini", endpoint, {
+  let response;
+  let usedModel = model;
+  const requestGemini = (targetModel) => requestYeriProviderJson("gemini", `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey },
     body: {
@@ -2041,9 +2048,25 @@ async function generateYeriGeminiArtifact(job, userId) {
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
   });
+  try {
+    response = await requestGemini(model);
+  } catch (error) {
+    const fallbackModel = yeriGeminiFallbackModel(model);
+    if (!fallbackModel || !["server_generation_provider_transient", "server_generation_model_not_found"].includes(String(error?.code || ""))) {
+      throw error;
+    }
+    console.warn("[yeri-hybrid] gemini fallback", {
+      primary_model: model,
+      fallback_model: fallbackModel,
+      code: error.code || "",
+      status: Number(error.status || 0),
+    });
+    usedModel = fallbackModel;
+    response = await requestGemini(fallbackModel);
+  }
   const text = extractGeminiText(response.json);
   const parsed = parseYeriGeneratedJson(text, "yeri_gemini");
-  return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, model, yeriGeminiUsage(response.json?.usageMetadata));
+  return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, usedModel, yeriGeminiUsage(response.json?.usageMetadata));
 }
 
 async function generateYeriOpenAiArtifact(job, userId) {
@@ -2204,7 +2227,7 @@ function buildFailureDiagnostic(input = {}) {
     reason,
   });
 
-  if (/yeri_(gemini|openai|claude)_key_missing|key_missing|api_key_missing|no api key|api key.*missing|키가.*없|키.*저장/.test(text)) {
+  if (/yeri_(gemini|openai|claude)_key_missing|key_missing|api_key_missing|no api key|api key.*missing|no api key was provided|키가.*없|키.*저장/.test(text)) {
     return user(
       "api_key_missing",
       "AI/API 키 등록 필요",
@@ -9023,7 +9046,7 @@ function classifyReportAutoGuidance(report) {
     ["image_paid_required", /image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델/],
     ["model_not_found", /model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가/],
     ["runner_update_required", /update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트/],
-    ["api_key_missing", /api[_ -]?key.*missing|key_missing|키가.*없|키.*저장.*필요|api.*저장.*안/],
+    ["api_key_missing", /api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안/],
     ["api_key_invalid", /api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized/],
     ["quota_exceeded", /quota_exceeded|insufficient_quota|billing|payment|credit|balance|크레딧|결제|요금제 한도|한도 초과/],
     ["rate_limited", /rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일 한도/],
@@ -9275,7 +9298,7 @@ function buildAutomationTicketForReport(report, storedAt, dateKey) {
   return {
     ticket_id: automationTicketId(summary.report_id, storedAt),
     source: "admin_report",
-    status: "open",
+    status: automationTicketStatusForReportStatus(summary.status),
     priority: automationTicketPriority(summary, report),
     category,
     report_id: summary.report_id || "",
@@ -9299,8 +9322,30 @@ function buildAutomationTicketForReport(report, storedAt, dateKey) {
   };
 }
 
+function automationTicketStatusForReportStatus(status) {
+  const value = normalizeReportStatus(status || "new");
+  if (value === "done") return "done";
+  if (value === "waiting_user") return "waiting_user";
+  if (value === "working") return "working";
+  return "open";
+}
+
 function appendAutomationTicket(ticket) {
   appendJsonLineDurable(AUTOMATION_TICKETS_PATH, ticket);
+  return ticket;
+}
+
+function appendAutomationTicketStatusUpdate(ticketId, reportId, status, updatedAt = nowIso()) {
+  const cleanTicketId = String(ticketId || "").trim();
+  if (!cleanTicketId) return null;
+  const ticket = {
+    ticket_id: cleanTicketId,
+    source: "admin_report",
+    status: automationTicketStatusForReportStatus(status),
+    report_id: String(reportId || "").trim(),
+    updated_at: updatedAt,
+  };
+  appendAutomationTicket(ticket);
   return ticket;
 }
 
@@ -9311,6 +9356,16 @@ function loadAutomationTickets(limit = 200) {
     .filter(Boolean)
     .slice(-limit)
     .map((line) => JSON.parse(line));
+}
+
+function latestAutomationTickets(limit = 200) {
+  const latest = new Map();
+  for (const ticket of loadAutomationTickets(limit)) {
+    const ticketId = String(ticket.ticket_id || "");
+    if (!ticketId) continue;
+    latest.set(ticketId, { ...(latest.get(ticketId) || {}), ...ticket });
+  }
+  return [...latest.values()];
 }
 
 function loadReportIndexRows(limit = 200) {
@@ -10167,7 +10222,7 @@ function handleAdminListAutomationTickets(req, res, url) {
   if (!requireAdmin(req, res)) return;
   try {
     const statusFilter = String(url.searchParams.get("status") || "").trim();
-    const rows = loadAutomationTickets(500)
+    const rows = latestAutomationTickets(500)
       .reverse()
       .filter((ticket) => !statusFilter || String(ticket.status || "") === statusFilter)
       .slice(0, 100);
@@ -10261,6 +10316,9 @@ async function handleAdminUpdateReportStatus(req, res, reportId) {
     if (!updatedRow) {
       json(req, res, 404, { ok: false, error: "report_not_found" });
       return;
+    }
+    if (updatedRow.automation_ticket_id) {
+      appendAutomationTicketStatusUpdate(updatedRow.automation_ticket_id, reportId, status, updatedAt);
     }
     json(req, res, 200, { ok: true, report: adminReportSummary(updatedRow) });
   } catch (_error) {
@@ -14500,9 +14558,12 @@ module.exports = {
     AUTOMATION_TICKETS_PATH,
     applyReportAutoGuidance,
     appendAutomationTicket,
+    appendAutomationTicketStatusUpdate,
     automationTicketCategory,
     automationTicketId,
+    automationTicketStatusForReportStatus,
     buildAutomationTicketForReport,
+    latestAutomationTickets,
     loadAutomationTickets,
     telegramReportAlertText,
   },
@@ -14527,6 +14588,7 @@ module.exports = {
     saveYeriArtifact,
     AGENT_CLAIMABLE_JOB_STATUSES,
     yeriServerGenerationMode,
+    yeriGeminiFallbackModel,
     markRunnerStartTimeouts,
     failStaleRunningJobs,
     findHeartbeatAgent,

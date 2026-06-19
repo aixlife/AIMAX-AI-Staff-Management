@@ -23,6 +23,8 @@ try {
   assert(__yeriHybridTest.JOB_STATUSES.has("generating"), "generating_status_missing");
   assert(__yeriHybridTest.JOB_STATUSES.has("ready_for_publish"), "ready_for_publish_status_missing");
   assert(__yeriHybridTest.sanitizeFailedStage("Smart Editor Open!") === "smart_editor_open", "failed_stage_sanitize_failed");
+  assert(__yeriHybridTest.yeriGeminiFallbackModel("gemini-3.5-flash") === "gemini-2.5-flash", "gemini_advanced_model_fallback_missing");
+  assert(__yeriHybridTest.yeriGeminiFallbackModel("gemini-2.5-flash") === "", "gemini_default_model_should_not_fallback_to_itself");
   const genericVersion = __yeriHybridTest.versionPayload("v1.0.2");
   assert(genericVersion.latest_version === "v1.0.51", "generic_latest_version_should_follow_platform_latest");
   assert(genericVersion.min_version === "v1.0.44", "generic_min_version_should_not_fall_back_to_legacy_global_min");
