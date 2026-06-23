@@ -143,6 +143,13 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
         next_update_message="웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
     ),
+    "browser_driver_policy_blocked": Guidance(
+        category="browser_driver_policy_blocked",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message="Windows 보안 또는 회사 보안 정책이 브라우저 드라이버 실행을 차단해 네이버 글쓰기 브라우저를 시작하지 못했습니다.",
+        next_update_message="Windows 보안 > 보호 기록 또는 사용 중인 보안 프로그램에서 chromedriver/undetected_chromedriver/AIMAX 차단 내역을 허용 또는 복원한 뒤, AIMAX와 Chrome을 모두 닫고 새 작업 1건만 다시 시도해주세요.",
+    ),
     "v1052_update_verify": Guidance(
         category="v1052_update_verify",
         status="waiting_user",
@@ -362,11 +369,20 @@ def still_failing_guidance(row: dict[str, Any]) -> Guidance | None:
         return None
     category = str(row.get("auto_guidance_category") or "")
     text = report_issue_text(row)
+    if is_browser_driver_policy_blocked(text):
+        return GUIDANCE["browser_driver_policy_blocked"]
     if category == "web_login_failed" or re.search(r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지", text, re.I):
         return GUIDANCE["web_login_failed_still_failing"]
     if category == "naver_login_required" or re.search(r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리", text, re.I):
         return GUIDANCE["naver_login_required_still_failing"]
     return None
+
+
+def is_browser_driver_policy_blocked(text: str) -> bool:
+    return bool(
+        re.search(r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551", text, re.I)
+        and re.search(r"차단|blocked|정책|policy|chromedriver|driver", text, re.I)
+    )
 
 
 def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | None:
@@ -386,6 +402,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
         return GUIDANCE["v1052_update_verify"]
 
     row_first_rules: list[tuple[str, str]] = [
+        ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
         ("web_login_failed", r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지"),
         ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
         ("mac_gatekeeper", r"macos|개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응"),
@@ -398,6 +415,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
             return GUIDANCE[key]
 
     rules: list[tuple[str, str]] = [
+        ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
         ("api_key_missing", r"api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안"),
         ("api_key_invalid", r"api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized"),
