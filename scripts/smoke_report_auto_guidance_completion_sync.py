@@ -171,3 +171,65 @@ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-yunmi-fallback-")
     assert guidance.latest_ticket_statuses(data_dir)[yunmi_ticket_id] == "done"
 
 print("REPORT_AUTO_GUIDANCE_YUNMI_FALLBACK_SMOKE_OK")
+
+
+still_failing_rows = [
+    {
+        "report_id": "AIMAX-RPT-SMOKE-WEB-LOGIN-STILL-FAILING",
+        "stored_at": stored_at,
+        "date": stored_at[:10],
+        "status": "reviewing",
+        "status_updated_at": stored_at,
+        "work_context": "웹앱 연결",
+        "visible_error": "로그인 실패 : 웹앱 이메일 또는 비밀번호가 맞지 않습니다.",
+        "user_response": "still_failing",
+        "auto_guidance_category": "web_login_failed",
+    },
+    {
+        "report_id": "AIMAX-RPT-SMOKE-NAVER-STILL-FAILING",
+        "stored_at": stored_at,
+        "date": stored_at[:10],
+        "status": "reviewing",
+        "status_updated_at": stored_at,
+        "work_context": "블로그 글쓰기",
+        "visible_error": "네이버ID 정보 화면에서 멈춤 2단계 인증을 해도 안됨",
+        "user_response": "still_failing",
+        "auto_guidance_category": "naver_login_required",
+    },
+]
+
+with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-still-failing-") as tmp:
+    data_dir = Path(tmp)
+    report_dir = data_dir / "reports" / stored_at[:10]
+    report_dir.mkdir(parents=True)
+    (data_dir / "reports-index.jsonl").write_text(
+        "".join(f"{json.dumps(row, ensure_ascii=False)}\n" for row in still_failing_rows),
+        encoding="utf-8",
+    )
+    (data_dir / "automation-tickets.jsonl").write_text("", encoding="utf-8")
+    (data_dir / "jobs.json").write_text(f"{json.dumps({'jobs': []})}\n", encoding="utf-8")
+    for row in still_failing_rows:
+        detail = {"server_received_at": stored_at, "support": {}}
+        (report_dir / f"{row['report_id']}.json").write_text(f"{json.dumps(detail)}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
+            "--data-dir",
+            str(data_dir),
+            "--min-age-minutes",
+            "0",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["touched_count"] == 2, payload
+    categories = {item["category"] for item in payload["touched"]}
+    assert categories == {"web_login_failed_still_failing", "naver_login_required_still_failing"}, payload
+    rows = guidance.read_rows(data_dir / "reports-index.jsonl")
+    assert {row["status"] for row in rows} == {"waiting_user"}, rows
+
+print("REPORT_AUTO_GUIDANCE_STILL_FAILING_SMOKE_OK")
