@@ -108,12 +108,26 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="웹앱 로그인 이메일 또는 비밀번호가 맞지 않아 연결이 실패했습니다.",
         next_update_message="이메일 대소문자/공백을 확인하고 비밀번호를 다시 입력해주세요. 계속 실패하면 비밀번호 재설정 또는 운영팀 확인이 필요합니다.",
     ),
+    "web_login_failed_still_failing": Guidance(
+        category="web_login_failed_still_failing",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message="웹앱 계정은 활성 상태지만 입력한 비밀번호가 서버 검증과 계속 맞지 않는 상태로 확인됩니다.",
+        next_update_message="비밀번호 재설정이 필요할 수 있습니다. 운영팀이 재설정 안내를 보낸 뒤 새 비밀번호로 로그인하고, 실행기 연결을 다시 눌러주세요.",
+    ),
     "naver_login_required": Guidance(
         category="naver_login_required",
         status="waiting_user",
         status_label="사용자 확인 필요",
         public_message="네이버 로그인 또는 2단계 인증/보안 확인 화면에서 다음 단계로 넘어가지 못한 상태입니다. 네이버 계정 보안 확인이 먼저 필요합니다.",
         next_update_message="실행기에서 열린 브라우저에서 네이버 로그인, 2단계 인증, 새 기기 등록을 완료한 뒤 AIMAX 웹앱을 새로고침하고 새 작업 1건만 다시 시도해주세요.",
+    ),
+    "naver_login_required_still_failing": Guidance(
+        category="naver_login_required_still_failing",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message="로컬 실행기가 작업을 시작했지만 네이버 로그인/보안 확인 단계에서 제한 시간 안에 완료되지 않아 멈춘 것으로 확인됩니다.",
+        next_update_message="AIMAX가 연 브라우저에서 네이버 로그인, 2단계 인증, 새 기기 등록을 끝낸 뒤 브라우저와 AIMAX를 모두 닫고 다시 연결해주세요. 같은 화면에 계속 멈추면 해당 네이버 보안 화면 캡처를 운영팀에 보내주세요.",
     ),
     "mac_gatekeeper": Guidance(
         category="mac_gatekeeper",
@@ -341,6 +355,20 @@ def completion_guidance(row: dict[str, Any], detail: dict[str, Any] | None, jobs
     return None
 
 
+def still_failing_guidance(row: dict[str, Any]) -> Guidance | None:
+    if str(row.get("status") or "") != "reviewing":
+        return None
+    if str(row.get("user_response") or "") != "still_failing":
+        return None
+    category = str(row.get("auto_guidance_category") or "")
+    text = report_issue_text(row)
+    if category == "web_login_failed" or re.search(r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지", text, re.I):
+        return GUIDANCE["web_login_failed_still_failing"]
+    if category == "naver_login_required" or re.search(r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리", text, re.I):
+        return GUIDANCE["naver_login_required_still_failing"]
+    return None
+
+
 def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | None:
     row_text = " ".join(
         str(row.get(key) or "")
@@ -478,7 +506,7 @@ def main(argv: list[str]) -> int:
                 detail = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             except json.JSONDecodeError:
                 detail = None
-        guidance = completion_guidance(row, detail, jobs_by_id) or classify(row, detail)
+        guidance = completion_guidance(row, detail, jobs_by_id) or still_failing_guidance(row) or classify(row, detail)
         if not guidance or not should_touch(row, guidance, min_age):
             continue
 
