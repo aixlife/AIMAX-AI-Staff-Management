@@ -32,6 +32,20 @@ class Guidance:
 
 
 GUIDANCE: dict[str, Guidance] = {
+    "job_completed_after_report": Guidance(
+        category="job_completed_after_report",
+        status="done",
+        status_label="완료",
+        public_message="오류 보고 뒤 같은 작업이 정상 완료된 것을 확인했습니다.",
+        next_update_message="같은 문제가 다시 생기면 이 접수 ID와 함께 알려주세요.",
+    ),
+    "yunmi_fallback_completed_after_report": Guidance(
+        category="yunmi_fallback_completed_after_report",
+        status="done",
+        status_label="완료",
+        public_message="윤미 유료 AI 응답 해석 오류 뒤 무과금 대체 생성으로 스크립트 생성이 완료된 것을 확인했습니다.",
+        next_update_message="결과물이 비어 있거나 같은 오류가 반복되면 이 접수 ID와 함께 다시 알려주세요.",
+    ),
     "image_paid_required": Guidance(
         category="image_paid_required",
         status="waiting_user",
@@ -220,6 +234,20 @@ def report_path(data_dir: Path, row: dict[str, Any]) -> Path | None:
     return data_dir / "reports" / date / f"{row.get('report_id')}.json"
 
 
+def load_jobs_by_id(data_dir: Path) -> dict[str, dict[str, Any]]:
+    jobs_path = data_dir / "jobs.json"
+    if not jobs_path.exists():
+        return {}
+    try:
+        payload = json.loads(jobs_path.read_text(encoding="utf-8", errors="replace"))
+    except json.JSONDecodeError:
+        return {}
+    jobs = payload.get("jobs") if isinstance(payload, dict) else None
+    if not isinstance(jobs, list):
+        return {}
+    return {str(job.get("id") or ""): job for job in jobs if isinstance(job, dict) and job.get("id")}
+
+
 def combined_text(row: dict[str, Any], detail: dict[str, Any] | None) -> str:
     parts = [
         row.get("work_context"),
@@ -238,6 +266,79 @@ def combined_text(row: dict[str, Any], detail: dict[str, Any] | None) -> str:
             json.dumps(detail.get("system", {}).get("jobs_recent", []), ensure_ascii=False),
         ]
     return " ".join(str(item or "") for item in parts).lower()
+
+
+def report_issue_text(row: dict[str, Any]) -> str:
+    return " ".join(
+        str(row.get(key) or "")
+        for key in ("work_context", "visible_error", "feedback_improve", "job_stage", "job_failed_keyword")
+    ).lower()
+
+
+def images_completed(job: dict[str, Any]) -> bool:
+    images = (job.get("result") or {}).get("images") or {}
+    attempted = int(images.get("attempted") or 0)
+    inserted = int(images.get("inserted") or 0)
+    generated = int(images.get("generated") or 0)
+    failures = int(images.get("failure_count") or 0)
+    return attempted > 0 and generated >= attempted and inserted >= attempted and failures == 0
+
+
+def job_user_matches_report(job: dict[str, Any], row: dict[str, Any]) -> bool:
+    report_user_id = str(row.get("account_user_id") or "")
+    if not report_user_id:
+        return True
+    return str(job.get("user_id") or "") == report_user_id
+
+
+def successful_yunmi_fallback_job(job: dict[str, Any], row: dict[str, Any], report_time: datetime, max_age: timedelta) -> bool:
+    if str(job.get("kind") or "") != "yunmi_script" or str(job.get("status") or "") != "done":
+        return False
+    if not job_user_matches_report(job, row):
+        return False
+    result = job.get("result") or {}
+    payload = job.get("payload") or {}
+    if result.get("ok") is not True:
+        return False
+    if str(result.get("mode") or payload.get("mode") or "") != "no_paid_alpha":
+        return False
+    finished = parse_time(str(job.get("finished_at") or job.get("updated_at") or ""))
+    return bool(finished and report_time <= finished <= report_time + max_age)
+
+
+def successful_yunmi_fallback_after_report(
+    row: dict[str, Any],
+    detail: dict[str, Any] | None,
+    jobs_by_id: dict[str, dict[str, Any]],
+) -> bool:
+    if "yunmi_ai_invalid_json" not in combined_text(row, detail):
+        return False
+    report_time = parse_time(str(row.get("stored_at") or row.get("server_received_at") or ""))
+    if not report_time:
+        return False
+    max_age = timedelta(minutes=15)
+    for job in (detail or {}).get("system", {}).get("jobs_recent") or []:
+        if not isinstance(job, dict):
+            continue
+        if successful_yunmi_fallback_job(job, row, report_time, max_age):
+            return True
+    for job in jobs_by_id.values():
+        if successful_yunmi_fallback_job(job, row, report_time, max_age):
+            return True
+    return False
+
+
+def completion_guidance(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dict[str, dict[str, Any]]) -> Guidance | None:
+    if str(row.get("status") or "") in {"done"}:
+        return None
+    if successful_yunmi_fallback_after_report(row, detail, jobs_by_id):
+        return GUIDANCE["yunmi_fallback_completed_after_report"]
+    job_id = str(row.get("job_id") or "")
+    job = jobs_by_id.get(job_id) if job_id else None
+    if job and str(job.get("status") or "") == "done" and (job.get("result") or {}).get("ok") is True:
+        if re.search(r"그림|이미지|image", report_issue_text(row), re.I) and images_completed(job):
+            return GUIDANCE["job_completed_after_report"]
+    return None
 
 
 def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | None:
@@ -338,6 +439,7 @@ def main(argv: list[str]) -> int:
     touched: list[dict[str, Any]] = []
     synced_tickets: list[dict[str, Any]] = []
     latest_tickets = latest_ticket_statuses(data_dir)
+    jobs_by_id = load_jobs_by_id(data_dir)
 
     backup(index_path, suffix, backups, args.dry_run)
     for row in rows:
@@ -376,7 +478,7 @@ def main(argv: list[str]) -> int:
                 detail = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             except json.JSONDecodeError:
                 detail = None
-        guidance = classify(row, detail)
+        guidance = completion_guidance(row, detail, jobs_by_id) or classify(row, detail)
         if not guidance or not should_touch(row, guidance, min_age):
             continue
 
