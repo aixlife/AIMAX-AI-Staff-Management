@@ -233,3 +233,77 @@ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-still-failing-") 
     assert {row["status"] for row in rows} == {"waiting_user"}, rows
 
 print("REPORT_AUTO_GUIDANCE_STILL_FAILING_SMOKE_OK")
+
+
+driver_block_report_id = "AIMAX-RPT-SMOKE-BROWSER-DRIVER-BLOCKED"
+driver_block_ticket_id = "AIMAX-AUTO-SMOKE-BROWSER-DRIVER-BLOCKED"
+
+with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-driver-block-") as tmp:
+    data_dir = Path(tmp)
+    report_dir = data_dir / "reports" / stored_at[:10]
+    report_dir.mkdir(parents=True)
+    index_row = {
+        "report_id": driver_block_report_id,
+        "stored_at": stored_at,
+        "date": stored_at[:10],
+        "status": "reviewing",
+        "status_updated_at": stored_at,
+        "work_context": "블로그 글쓰기",
+        "visible_error": (
+            "AIMAX 관리자 조치 필요\n"
+            "단계: 브라우저 시작\n"
+            "기술 정보 보기\n"
+            "단계: browser_start\n"
+            "Windows 애플리케이션 제어 정책이 브라우저 드라이버 실행을 차단했습니다. "
+            "config.yaml의 browser.driver_mode를 \"selenium\"으로 두고 chromedriver.exe를 지정해 주세요."
+        ),
+        "feedback_improve": "Windows 애플리케이션 제어 정책이 브라우저 드라이버 실행을 차단했습니다.",
+        "job_stage": "browser_start",
+        "user_response": "still_failing",
+        "auto_guidance_category": "api_key_invalid",
+        "automation_ticket_id": driver_block_ticket_id,
+    }
+    detail = {
+        "server_received_at": stored_at,
+        "support": {"automation_ticket_id": driver_block_ticket_id},
+        "system": {
+            "jobs_recent": [
+                {
+                    "id": "previous-api-failure",
+                    "kind": "yeri_write",
+                    "status": "failed",
+                    "result": {"error": "server_generation_auth_failed"},
+                    "logs": [{"message": "Claude API 키 인증 실패"}],
+                }
+            ]
+        },
+    }
+    (data_dir / "reports-index.jsonl").write_text(f"{json.dumps(index_row, ensure_ascii=False)}\n", encoding="utf-8")
+    (data_dir / "automation-tickets.jsonl").write_text(
+        f"{json.dumps({'ticket_id': driver_block_ticket_id, 'status': 'open', 'report_id': driver_block_report_id, 'updated_at': stored_at})}\n",
+        encoding="utf-8",
+    )
+    (data_dir / "jobs.json").write_text(f"{json.dumps({'jobs': []})}\n", encoding="utf-8")
+    (report_dir / f"{driver_block_report_id}.json").write_text(f"{json.dumps(detail, ensure_ascii=False)}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
+            "--data-dir",
+            str(data_dir),
+            "--min-age-minutes",
+            "0",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["touched_count"] == 1, payload
+    assert payload["touched"][0]["category"] == "browser_driver_policy_blocked", payload
+    rows = guidance.read_rows(data_dir / "reports-index.jsonl")
+    assert rows[0]["status"] == "waiting_user", rows[0]
+    assert guidance.latest_ticket_statuses(data_dir)[driver_block_ticket_id] == "waiting_user"
+
+print("REPORT_AUTO_GUIDANCE_DRIVER_BLOCK_SMOKE_OK")
