@@ -1,0 +1,815 @@
+Total output lines: 816
+
+diff --git a/app.py b/app.py
+index 3d22670..361d8b0 100644
+--- a/app.py
++++ b/app.py
+@@ -187,8 +187,16 @@ API_KEY_GUIDE_URL = os.environ.get(
+ _KEYCHAIN_READ_UNAVAILABLE = False
+ _USD_KRW_RATE = 1476
+ _USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot"
+-_GEMINI_IMAGE_PRICE_USD = 0.067
+-_OPENAI_IMAGE_PRICE_USD = 0.042
++_DEFAULT_IMAGE_MODEL = "gpt-image-1"
++_IMAGE_MODEL_PRICE_USD = {
++    "gpt-image-1": {"provider": "openai", "label": "OpenAI GPT Image 1", "per_image": 0.042},
++    "gpt-image-2": {"provider": "openai", "label": "OpenAI GPT Image 2", "per_image": 0.053},
++    "gemini-2.5-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana", "per_image": 0.039},
++    "gemini-3.1-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana 2", "per_image": 0.067},
++    "gemini-3-pro-image": {"provider": "gemini", "label": "Gemini Nano Banana Pro", "per_image": 0.134},
++}
++_GEMINI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gemini-3.1-flash-image"]["per_image"]
++_OPENAI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gpt-image-1"]["per_image"]
+ _AI_TEXT_PRICE_USD_PER_1M = {
+     # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
+     "gemini-3.5-flash": {"input": 1.50, "output": 9.00, "label": "Gemini 3.5 Flash"},
+@@ -242,6 +250,30 @@ def _is_openai_model(value):
+     return str(value or "").startswith("gpt-")
+ 
+ 
++def _normalize_image_model(value, ai_model=None):
++    value = str(value or "").strip()
++    if not value:
++        return "gpt-image-1" if _is_openai_model(ai_model) else "gemini-3.1-flash-image"
++    aliases = {
++        "openai": "gpt-image-1",
++        "gpt-image": "gpt-image-1",
++        "gemini": "gemini-3.1-flash-image",
++        "nano-banana": "gemini-2.5-flash-image",
++        "nano-banana-pro": "gemini-3-pro-image",
++    }
++    value = aliases.get(value, value)
++    if value in _IMAGE_MODEL_PRICE_USD:
++        return value
++    if _is_openai_model(ai_model):
++        return "gpt-image-1"
++    return _DEFAULT_IMAGE_MODEL
++
++
++def _image_provider_for_model(image_model):
++    model = _normalize_image_model(image_model)
++    return _IMAGE_MODEL_PRICE_USD.get(model, {}).get("provider", "openai")
++
++
+ def _persist_generated_markdown(source, markdown):
+     """AI가 생성한(과금된) 원고를 네이버 입력 전에 파일로 보관한다.
+ 
+@@ -424,7 +456,7 @@ def _safe_image_failures(raw, limit=20):
+ 
+ def _image_failure_stage(failures):
+     stages = [str(item.get("stage") or "").strip() for item in failures if isinstance(item, dict)]
+-    for stage in ("image_generation", "image_upload", "image_insert_exception", "image_prompt_empty"):
++    for stage in ("image_generation", "image_upload", "image_insert_verification", "image_insert_exception", "image_prompt_empty"):
+         if stage in stages:
+             return stage
+     return "image_completion"
+@@ -435,6 +467,7 @@ def _image_failure_message(requested, inserted, failures):
+     stage_labels = {
+         "image_generation": "이미지 생성 실패",
+         "image_upload": "네이버 이미지 업로드 실패",
++        "image_insert_verification": "네이버 편집기 이미지 반영 확인 실패",
+         "image_insert_exception": "이미지 삽입 중 예외 발생",
+         "image_prompt_empty": "이미지 프롬프트 누락",
+         "image_completion": "이미지 첨부 완료 확인 실패",
+@@ -498,7 +531,7 @@ def _diagnose_local_failure(stage, error):
+             "네이버 로그인 필요",
+             "네이버 로그인 또는 추가 인증 화면에서 자동 진행이 막혔습니다.\n네이버 재로그인 후 다시 시도해주세요.",
+         )
+-    if stage in {"smart_editor_input", "smart_editor_open", "image_upload", "image_insert_exception", "browser_start"}:
++    if stage in {"smart_editor_input", "smart_editor_open", "image_upload", "image_insert_verification", "image_insert_exception", "browser_start"}:
+         return (
+             "AIMAX 관리자 조치 필요",
+             "사용자가 설정으로 해결하기 어려운 실행기/네이버 에디터 처리 오류입니다.\n오류 보고를 보내주시면 AIMAX 관리자가 확인합니다.",
+@@ -513,13 +546,14 @@ def _won_from_usd(usd):
+     return int(math.ceil(max(0.0, float(usd or 0)) * _USD_KRW_RATE))
+ 
+ 
+-def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_provider_counts=None):
++def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_provider_counts=None, image_model_counts=None):
+     model = _normalize_ai_model(ai_model)
+     price = _AI_TEXT_PRICE_USD_PER_1M.get(model)
+     input_tokens = _usage_number((usage_totals or {}).get("input_tokens"))
+     output_tokens = _usage_number((usage_totals or {}).get("billable_output_tokens")) or _usage_number((usage_totals or {}).get("output_tokens"))
+     image_generated = max(0, int(image_generated or 0))
+     provider_counts = image_provider_counts if isinstance(image_provider_counts, dict) else {}
++    model_counts = image_model_counts if isinstance(image_model_counts, dict) else {}
+     gemini_images = max(0, _usage_number(provider_counts.get("gemini")))
+     openai_images = max(0, _usage_number(provider_counts.get("openai")))
+     unattributed_images = max(0, image_generated - gemini_images - openai_images)
+@@ -532,7 +566,29 @@ def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_pr
+             input_tokens * price["input"] / 1_000_000
+             + output_tokens * price["output"] / 1_000_000
+         )
+-    image_usd = gemini_images * _GEMINI_IMAGE_PRICE_USD + openai_images * _OPENAI_IMAGE_PRICE_USD
++    image_usd = 0.0
++    attributed_by_model = 0
++    image_model_costs = {}
++    for raw_model, raw_count in model_counts.items():
++        image_model = _normalize_image_model(raw_model)
++        count = max(0, _usage_number(raw_count))
++        if not count:
++            continue
++        unit = _IMAGE_MODEL_PRICE_USD.get(image_model, _IMAGE_MODEL_PRICE_USD[_DEFAULT_IMAGE_MODEL])
++        model_usd = count * unit["per_image"]
++        image_usd += model_usd
++        attributed_by_model += count
++        image_model_costs[image_model] = {
++            "count": count,
++            "provider": unit["provider"],
++            "label": unit["label"],
++            "per_image_usd": unit["per_image"],
++            "won": _won_from_usd(model_usd),
++        }
++    if attributed_by_model < image_generated:
++        remaining_openai = max(0, openai_images - sum(v["count"] for v in image_model_costs.values() if v["provider"] == "openai"))
++        remaining_gemini = max(0, gemini_images - sum(v["count"] for v in image_model_costs.values() if v["provider"] == "gemini"))
++        image_usd += remaining_gemini * _GEMINI_IMAGE_PRICE_USD + remaining_openai * _OPENAI_IMAGE_PRICE_USD
+     total_usd = text_usd + image_usd
+     return {
+         "currency": "KRW",
+@@ -550,6 +606,8 @@ def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_pr
+             "gemini": gemini_images,
+             "openai": openai_images,
+         },
++        "image_model_counts": model_counts,
++        "image_model_costs": image_model_costs,
+         "text_won": _won_from_usd(text_usd),
+         "image_won": _won_from_usd(image_usd),
+         "total_won": _won_from_usd(total_usd),
+@@ -588,6 +646,7 @@ def _build_write_result(
+             "generated": _usage_number(image_totals.get("generated")),
+             "inserted": _usage_number(image_totals.get("inserted")),
+             "provider_counts": image_totals.get("providers") if isinstance(image_totals.get("providers"), dict) else {},
++            "model_counts": image_totals.get("models") if isinstance(image_totals.get("models"), dict) else {},
+             "failure_count": len(_safe_image_failures(image_totals.get("failures"))),
+             "failures": _safe_image_failures(image_totals.get("failures")),
+             "shortfall_accepted": bool(image_totals.get("shortfall_accepted")),
+@@ -609,6 +668,7 @@ def _build_write_result(
+         result["usage"],
+         result["images"]["generated"],
+         result["images"].get("provider_counts"),
++        result["images"].get("model_counts"),
+     )
+     if error:
+         result["error"] = str(error)[:500]
+@@ -3255,6 +3315,7 @@ class NaverBlogApp:
+             "image_count": _payload_image_count(payload),
+             "font_name": str(payload.get("font_name") or "").strip() or None,
+             "ai_model": _normalize_ai_model(payload.get("ai_model") or payload.get("model") or self.ai_model_var.get()),
++            "image_model": _normalize_image_model(payload.get("image_model"), payload.get("ai_model") or payload.get("model") or self.ai_model_var.get()),
+             "seo_brief": payload.get("seo_brief") if isinstance(payload.get("seo_brief"), dict) else None,
+             "artifact": artifact if isinstance(artifact, dict) else None,
+         }
+@@ -5598,14 +5659,14 @@ class NaverBlogApp:
+ 
+         self._start_worker(self._worker_write, keywords=keywords, md_file=md_file, mode=mode, style_id=style_id, category=category, cta_link=cta_link, cta_text=cta_text, schedule_date=schedule_date, schedule_hour=schedule_hour, schedule_interval=schedule_interval, word_count=word_count, font_name=font_name)
+ 
+-    def _worker_write(self, keywords, md_file, mode, style_id="info", category=None, cta_link=None, cta_text=None, schedule_date=None, schedule_hour=None, schedule_interval=None, word_count=1500, image_count=3, font_name=None, ai_model=None, seo_brief=None, artifact=None):
++    def _worker_write(self, keywords, md_file, mode, style_id="info", category=None, cta_link=None, cta_text=None, schedule_date=None, schedule_hour=None, schedule_interval=None, word_count=1500, image_count=3, font_name=None, ai_model=None, image_model=None, seo_brief=None, artifact=None):
+         success = 0
+         total = 0
+         last_error = None
+         stage = "init"
+         failed_keyword = ""
+         usage_totals = {}
+-        image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "failures": []}
++        image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "models": {}, "failures": []}
+         post_results = []
+         failed_posts = []
+         try:
+@@ -5622,6 +5683,7 @@ class NaverBlogApp:
+             nid = self.naver_id_var.get()
+             npw = self.naver_pw_var.get()
+             ai_model = _normalize_ai_model(ai_model or self.ai_model_var.get())
++            image_model = _normalize_image_model(image_model, ai_model)
+             image_count = _normalize_image_count(image_count)
+             gemini_key = self.api_key_var.get()
+             claude_key = self.claude_key_var.get()
+@@ -5633,10 +5695,7 @@ class NaverBlogApp:
+                 text_api_key = openai_key
+             else:
+                 text_api_key = gemini_key
+-            if artifact_mode and openai_key:
+-                image_provider = "openai"
+-            else:
+-                image_provider = "openai" if _is_openai_model(ai_model) and openai_key else "gemini"
++            image_provider = _image_provider_for_model(image_model)
+             image_api_key = openai_key if image_provider == "openai" else gemini_key
+             fallback_image_api_key = gemini_key if image_provider == "openai" else openai_key
+ 
+@@ -5659,7 +5718,7 @@ class NaverBlogApp:
+                 self._log(f"다중 키워드 모드: {total}개 글 작성 예정")
+ 
+             usage_totals = {}
+-            image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "failures": []}
++            image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "models": {}, "failures": []}
+             post_results = []
+             failed_posts = []
+             force_save_due_to_image_skip = False
+@@ -5880,6 +5939,7 @@ class NaverBlogApp:
+                                 image_api_key,
+                                 image_provider=image_provider,
+                                 fallback_api_key=fallback_image_api_key,
++                                image_model=image_model,
+                             ) or {}
+                             image_attempted = _usage_number(input_stats.get("image_attempted")) or image_block_count
+                             image_generated = _usage_number(input_stats.get("image_generated"))
+@@ -5890,6 +5950,10 @@ class NaverBlogApp:
+                             for provider, count in (input_stats.get("image_providers") or {}).items():
+                                 if provider in image_totals["providers"]:
+                                     image_totals["providers"][provider] += _usage_number(count)
++                            for model_name, count in (input_stats.get("image_models") or {}).items():
++                                model_name = str(model_name or "").strip()
++                                if model_name:
++                                    image_totals["models"][model_name] = image_totals["models"].get(model_name, 0) + _usage_number(count)
+                             image_failures = _safe_image_failures(input_stats.get("image_failures"))
+                             if image_failures:
+                                 image_totals["failures"].extend(image_failures)
+diff --git a/content/gemini_image.py b/content/gemini_image.py
+index ebe2e42..fc70265 100644
+--- a/content/gemini_image.py
++++ b/content/gemini_image.py
+@@ -112,7 +112,7 @@ def _generate_content_with_timeout(client, *, model, contents, config):
+         executor.shutdown(wait=False, cancel_futures=True)
+ 
+ 
+-def generate_image(prompt, api_key, max_retries=3):
++def generate_image(prompt, api_key, max_retries=3, model=None):
+     """Gemini로 이미지 생성 후 임시 파일 경로 반환.
+ 
+     간헐적으로 텍스트만 반환하는 케이스가 있어, 짧은 재시도와
+@@ -126,6 +126,7 @@ def generate_image(prompt, api_key, max_retries=3):
+         logger.error("이미지 생성 실패: Gemini API 키가 없습니다. 이미지 없이 본문 입력을 계속합니다.")
+         return None
+ 
++    image_model = (model or GEMINI_IMAGE_MODEL).strip() or GEMINI_IMAGE_MODEL
+     client = genai.Client(api_key=api_key)
+     last_error = None
+ 
+@@ -141,7 +142,7 @@ def generate_image(prompt, api_key, max_retries=3):
+             logger.info(f"이미지 생성 중 ({attempt}/{max_retries}): {prompt[:50]}...")
+             response = _generate_content_with_timeout(
+                 client,
+-                model=GEMINI_IMAGE_MODEL,
++                model=image_model,
+                 contents=attempt_prompt,
+                 config=types.GenerateContentConfig(
+                     response_modalities=["TEXT", "IMAGE"]
+diff --git a/content/openai_image.py b/content/openai_image.py
+index 28e0c55..e52388d 100644
+--- a/content/openai_image.py
++++ b/content/openai_image.py
+@@ -34,7 +34,7 @@ def _download_image(url):
+     return _save_image_bytes(response.content)
+ 
+ 
+-def generate_image(prompt, api_key, max_retries=2):
++def generate_image(prompt, api_key, max_retries=2, model=None):
+     """OpenAI Image API로 이미지 생성 후 임시 파일 경로 반환."""
+     prompt = _normalize_prompt(prompt)
+     if not prompt:
+@@ -44,7 +44,7 @@ def generate_image(prompt, api_key, max_retries=2):
+         logger.error("OpenAI 이미지 생성 실패: API Key 없음")
+         return None
+ 
+-    model = os.environ.get("AIMAX_OPENAI_IMAGE_MODEL", "gpt-image-1").strip() or "gpt-image-1"
++    model = (model or os.environ.get("AIMAX_OPENAI_IMAGE_MODEL", "gpt-image-1")).strip() or "gpt-image-1"
+     quality = os.environ.get("AIMAX_OPENAI_IMAGE_QUALITY", "medium").strip() or "medium"
+     size = os.environ.get("AIMAX_OPENAI_IMAGE_SIZE", "1024x1024").strip() or "1024x1024"
+     last_error = None
+diff --git a/oracle/aimax-reports-api/static/app.html b/oracle/aimax-reports-api/static/app.html
+index 387b494..2110d32 100644
+--- a/oracle/aimax-reports-api/static/app.html
++++ b/oracle/aimax-reports-api/static/app.html
+@@ -3994,9 +3994,13 @@
+                         </select>
+                       </div>
+                       <div class="field">
+-                        <label for="yeriAiModel">AI 모델</label>
++                        <label for="yeriAiModel">글쓰기 모델</label>
+                         <select id="yeriAiModel"></select>
+                       </div>
++                      <div class="field">
++                        <label for="yeriImageModel">이미지 모델</label>
++                        <select id="yeriImageModel"></select>
++                      </div>
+                       <div class="field">
+                         <label for="yeriWordCount">분량</label>
+                         <select id="yeriWordCount">
+@@ -4983,11 +4987,10 @@
+     const SIDEBAR_COLLAPSED_KEY = "aimax_sidebar_collapsed";
+     const NEW_SONGI_PROJECT_VALUE = "__new_project__";
+     const DEFAULT_AI_MODEL = "gemini-2.5-flash";
++    const DEFAULT_IMAGE_MODEL = "gpt-image-1";
+     const SONGI_DEFAULT_AI_MODEL = "gemini-2.5-flash";
+     const USD_KRW_RATE = 1476;
+-    const USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot";
+-    const GEMINI_IMAGE_PRICE_USD = 0.067;
+-    const OPENAI_IMAGE_PRICE_USD = 0.042;
++    const USD_KRW_RATE_LABEL = "2026-06-24 official model pricing check";
+     const SONGI_APIFY_PRICES_USD = {
+       Instagram: 0.0026,
+       InstagramProfile: 0.0016,
+@@ -5015,6 +5018,20 @@
+       ["gpt-5-mini", "GPT-5 mini"],
+       ["claude", "Claude"],
+     ];
++    const IMAGE_MODEL_OPTIONS = [
++      ["gpt-image-1", "OpenAI gpt-image-1"],
++      ["gpt-image-2", "OpenAI gpt-image-2"],
++      ["gemini-2.5-flash-image", "Gemini Nano Banana"],
++      ["gemini-3.1-flash-image", "Gemini Nano Banana 2"],
++      ["gemini-3-pro-image", "Gemini Nano Banana Pro"],
++    ];
++    const IMAGE_MODEL_PRICES = {
++      "gpt-image-1": { provider: "OpenAI", label: "OpenAI gpt-image-1", perImageUsd: 0.042 },
++      "gpt-image-2": { provider: "OpenAI", label: "OpenAI gpt-image-2", perImageUsd: 0.053 },
++      "gemini-2.5-flash-image": { provider: "Gemini", label: "Gemini Nano Banana", perImageUsd: 0.039 },
++      "gemini-3.1-flash-image": { provider: "Gemini", label: "Gemini Nano Banana 2", perImageUsd: 0.067 },
++      "gemini-3-pro-image": { provider: "Gemini", label: "Gemini Nano Banana Pro", perImageUsd: 0.134 },
++    };
+     const YUNMI_AI_MODEL_OPTIONS = [
+       ["gemini-3.5-flash", "Gemini 3.5 Flash"],
+       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
+@@ -5139,6 +5156,7 @@
+       downloadReleaseTimer: null,
+       agentWatchTimer: null,
+       agentWatchUntil: 0,
++      jobWatchTimer: null,
+       requiredUpdatePromptKey: "",
+       serviceNoticeDismissed: storageGet("localStorage", SERVICE_NOTICE_KEY) === "1",
+       reportAttentionPromptKey: "",
+@@ -5894,11 +5912,29 @@
+       return AI_MODEL_OPTIONS.some(([id]) => id === model) ? model : DEFAULT_AI_MODEL;
+     }
+ 
++    function normalizeImageModel(value) {
++      const model = String(value || "").trim();
++      const aliases = {
++        openai: "gpt-image-1",
++        "gpt-image": "gpt-image-1",
++        gemini: "gemini-3.1-flash-image",
++        "nano-banana": "gemini-2.5-flash-image",
++        "nano-banana-pro": "gemini-3-pro-image",
++      };
++      const normalized = aliases[model] || model;
++      return IMAGE_MODEL_OPTIONS.some(([id]) => id === normalized) ? normalized : DEFAULT_IMAGE_MODEL;
++    }
++
+     function aiModelLabel(value) {
+       const model = normalizeAiModel(value);
+       return AI_MODEL_OPTIONS.find(([id]) => id === model)?.[1] || model;
+     }
+ 
++    function imageModelLabel(value) {
++      const model = normalizeImageModel(value);
++      return IMAGE_MODEL_PRICES[model]?.label || model;
++    }
++
+     function normalizeYunmiAiModel(value) {
+       const model = String…28 tokens truncated…th("gpt-");
+     }
+ 
+-    function estimateImageCostWon(imageCount, model = selectedAiModel()) {
++    function estimateImageCostWon(imageCount, model = selectedYeriImageModel()) {
+       const count = normalizeImageCount(imageCount);
+-      const perImageUsd = isOpenAiModel(model) ? OPENAI_IMAGE_PRICE_USD : GEMINI_IMAGE_PRICE_USD;
+-      const provider = isOpenAiModel(model) ? "OpenAI" : "Gemini";
++      const imageModel = normalizeImageModel(model);
++      const price = IMAGE_MODEL_PRICES[imageModel] || IMAGE_MODEL_PRICES[DEFAULT_IMAGE_MODEL];
++      const perImageUsd = price.perImageUsd;
++      const provider = price.provider;
+       const usd = count * perImageUsd;
+       return {
+         usd,
+         won: wonFromUsd(usd),
+         count,
+         provider,
++        model: imageModel,
++        modelLabel: price.label,
++        perImageUsd,
+       };
+     }
+ 
+@@ -6098,6 +6139,7 @@
+       const target = $("#yeriCostEstimate");
+       if (!target) return;
+       const model = normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel());
++      const imageModel = normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel());
+       const wordCount = Number($("#yeriWordCount")?.value || 1500);
+       const imageCount = normalizeImageCount($("#yeriImageCount")?.value || 3);
+       const fallback = yeriServerGenerationFallbackState(model);
+@@ -6114,12 +6156,13 @@
+         return;
+       }
+       const text = estimateTextCostWon(model, wordCount);
+-      const images = estimateImageCostWon(imageCount, model);
++      const images = estimateImageCostWon(imageCount, imageModel);
+       const totalWon = text.won + images.won;
+       const gptMini = estimateTextCostWon("gpt-5.4-mini", wordCount);
+       target.innerHTML = [
+         `예상 원가 약 ${wonLabel(totalWon)}`,
+-        `글 ${wonLabel(text.won)} + ${images.provider} 이미지 ${imageCount}장 ${wonLabel(images.won)}`,
++        `글 ${wonLabel(text.won)} + ${images.modelLabel} 이미지 ${imageCount}장 ${wonLabel(images.won)}`,
++        `이미지 단가: 장당 약 ${wonLabel(wonFromUsd(images.perImageUsd))}`,
+         `환율 ${USD_KRW_RATE.toLocaleString("ko-KR")}원/USD (${USD_KRW_RATE_LABEL})`,
+         `참고 GPT-5.4 mini 글 비용 ${wonLabel(gptMini.won)} 수준`,
+       ].map(escapeHtml).join("<br>");
+@@ -6652,6 +6695,14 @@
+         .sort((a, b) => String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || "")));
+     }
+ 
++    function isLiveJobStatus(status) {
++      return ["queued", "generating", "ready_for_publish", "running"].includes(String(status || "").toLowerCase());
++    }
++
++    function hasLiveJobs() {
++      return (state.jobs || []).some((job) => isLiveJobStatus(job?.status));
++    }
++
+     function jobLabelHtml(job) {
+       if (job?.kind === "songi_research" && job.research_item) {
+         return `<button class="link-button songi-job-link" type="button" data-songi-table-item="${escapeHtml(job.research_item.id)}">${escapeHtml(job.label)}</button>`;
+@@ -6676,6 +6727,7 @@
+     function defaultWebSettings() {
+       return {
+         ai_model: DEFAULT_AI_MODEL,
++        image_model: DEFAULT_IMAGE_MODEL,
+         blog_profile: "",
+         neighbor_messages: [],
+       };
+@@ -6685,6 +6737,7 @@
+       const data = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+       return {
+         ai_model: normalizeAiModel(data.ai_model),
++        image_model: normalizeImageModel(data.image_model),
+         blog_profile: String(data.blog_profile || "").slice(0, 4000),
+         neighbor_messages: sanitizeMessageList(data.neighbor_messages),
+       };
+@@ -6709,6 +6762,10 @@
+       return normalizeAiModel(state.webSettings?.ai_model);
+     }
+ 
++    function selectedYeriImageModel() {
++      return normalizeImageModel(state.webSettings?.image_model);
++    }
++
+     function hasExplicitAiModelSetting() {
+       try {
+         const data = JSON.parse(storageGet("localStorage", WEB_SETTINGS_STORAGE_KEY) || "{}");
+@@ -6742,6 +6799,20 @@
+       }
+     }
+ 
++    function renderImageModelSelect(selector, selected) {
++      const select = $(selector);
++      if (!select) return;
++      const current = normalizeImageModel(selected);
++      select.innerHTML = "";
++      for (const [id, label] of IMAGE_MODEL_OPTIONS) {
++        const option = document.createElement("option");
++        option.value = id;
++        option.textContent = label;
++        option.selected = id === current;
++        select.appendChild(option);
++      }
++    }
++
+     function renderYunmiModelSelect(selector, selected = DEFAULT_AI_MODEL) {
+       const select = $(selector);
+       if (!select) return;
+@@ -6759,6 +6830,7 @@
+     function readWebSettingsForm() {
+       return sanitizeWebSettings({
+         ai_model: $("#settingsAiModel")?.value || selectedAiModel(),
++        image_model: selectedYeriImageModel(),
+         blog_profile: $("#settingsBlogProfile")?.value || "",
+         neighbor_messages: $("#settingsNeighborMessages")?.value || "",
+       });
+@@ -6769,6 +6841,7 @@
+       const settings = state.webSettings || defaultWebSettings();
+       renderAiModelSelect("#settingsAiModel", settings.ai_model);
+       renderAiModelSelect("#yeriAiModel", settings.ai_model);
++      renderImageModelSelect("#yeriImageModel", settings.image_model);
+       renderYunmiModelSelect("#yunmiAiModel", DEFAULT_AI_MODEL);
+       if ($("#settingsBlogProfile")) $("#settingsBlogProfile").value = settings.blog_profile || "";
+       if ($("#settingsNeighborMessages")) $("#settingsNeighborMessages").value = webNeighborMessages().join("\n");
+@@ -7021,6 +7094,7 @@
+ 
+     async function api(path, options = {}) {
+       const response = await fetch(path, {
++        cache: "no-store",
+         ...options,
+         headers: {
+           "content-type": "application/json",
+@@ -9167,6 +9241,7 @@
+       const keywords = splitKeywords($("#yeriKeywords")?.value || "");
+       const mode = $("#yeriMode")?.value || "publish";
+       const model = normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel());
++      const imageModel = normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel());
+       const wordCount = $("#yeriWordCount")?.value || "1500";
+       const imageCount = normalizeImageCount($("#yeriImageCount")?.value || 3);
+       const schedule = mode === "schedule"
+@@ -9179,8 +9254,8 @@
+         ${jobSummaryRowsHtml([
+           ["키워드", keywords.length ? keywords.join(", ") : "입력 대기"],
+           ["발행 방식", yeriModeLabel(mode)],
+-          ["모델/분량", `${aiModelLabel(model)} · ${Number(wordCount || 0).toLocaleString("ko-KR")}자`],
+-          ["이미지", `${imageCount}장`],
++          ["글쓰기", `${aiModelLabel(model)} · ${Number(wordCount || 0).toLocaleString("ko-KR")}자`],
++          ["이미지", `${imageModelLabel(imageModel)} · ${imageCount}장`],
+           ["예약", schedule],
+           ["CTA", cta],
+           ["AI 연결", aiState.detail || aiState.status || "확인 중"],
+@@ -11991,6 +12066,41 @@
+       state.agentWatchUntil = 0;
+     }
+ 
++    function stopJobStatusWatch() {
++      if (state.jobWatchTimer) {
++        clearInterval(state.jobWatchTimer);
++        state.jobWatchTimer = null;
++      }
++    }
++
++    async function refreshJobsOnly() {
++      if (!state.token) return;
++      const jobs = await api("/api/jobs");
++      state.jobs = jobs.jobs || [];
++      renderAll();
++      if (!hasLiveJobs()) stopJobStatusWatch();
++    }
++
++    function startJobStatusWatch() {
++      if (!state.token || state.jobWatchTimer) return;
++      const tick = async () => {
++        if (!state.token) {
++          stopJobStatusWatch();
++          return;
++        }
++        try {
++          await refreshJobsOnly();
++        } catch (_error) {}
++      };
++      state.jobWatchTimer = setInterval(tick, 3000);
++      setTimeout(tick, 1200);
++    }
++
++    function syncJobStatusWatch() {
++      if (hasLiveJobs()) startJobStatusWatch();
++      else stopJobStatusWatch();
++    }
++
+     function startAgentStatusWatch(durationMs = 60000) {
+       state.agentWatchUntil = Math.max(Number(state.agentWatchUntil || 0), Date.now() + durationMs);
+       if (state.agentWatchTimer) return;
+@@ -12015,6 +12125,7 @@
+       ]);
+       state.agent = agent;
+       state.jobs = jobs.jobs || [];
++      syncJobStatusWatch();
+       try {
+         const currentVersion = state.agent?.agent?.version || "";
+         const version = await api(`/api/version?current=${encodeURIComponent(currentVersion)}&platform=${encodeURIComponent(state.platform)}`);
+@@ -12413,6 +12524,7 @@
+         if (kind === "yunmi_script" && job?.id) state.lastYunmiJobId = job.id;
+         showToast(job?.status === "done" ? "맡긴 일이 완료되었습니다." : "일 요청이 생성되었습니다.");
+         await refreshAll();
++        if (job && isLiveJobStatus(job.status)) startJobStatusWatch();
+         if (!isWebModuleJobKind(kind)) startAgentStatusWatch(120000);
+         return job;
+       } catch (error) {
+@@ -12879,6 +12991,7 @@
+           keywords,
+           mode,
+           ai_model: normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel()),
++          image_model: normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel()),
+           word_count: Number($("#yeriWordCount")?.value || 1500),
+           image_count: normalizeImageCount($("#yeriImageCount")?.value || 3),
+           category: nonEmpty($("#yeriCategory")?.value),
+@@ -13462,6 +13575,7 @@
+         await api("/api/auth/logout", { method: "POST", body: "{}" });
+       } catch (_error) {}
+       stopAgentStatusWatch();
++      stopJobStatusWatch();
+       forgetSessionToken();
+       state.token = "";
+       state.requiredUpdatePromptKey = "";
+@@ -13474,6 +13588,14 @@
+ 
+     $("#refreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("갱신되었습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
+     $("#jobRefreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("일 맡긴 기록을 갱신했습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
++    document.addEventListener("visibilitychange", () => {
++      if (document.visibilityState === "visible" && state.token) {
++        refreshAll().catch(() => {});
++      }
++    });
++    window.addEventListener("focus", () => {
++      if (state.token) refreshAll().catch(() => {});
++    });
+     $("#reportRefreshBtn").addEventListener("click", () => refreshReports().then(() => {
+       renderReportsList();
+       showToast("문의/피드백 목록을 갱신했습니다.");
+@@ -13562,6 +13684,13 @@
+       renderAiModelSelect("#settingsAiModel", current.ai_model);
+       renderAll();
+     });
++    $("#yeriImageModel")?.addEventListener("change", () => {
++      saveWebSettings({
++        ...(state.webSettings || defaultWebSettings()),
++        image_model: $("#yeriImageModel").value,
++      });
++      renderAll();
++    });
+     ["#yeriWordCount", "#yeriImageCount"].forEach((selector) => {
+       const field = $(selector);
+       if (field) field.addEventListener("change", () => {
+diff --git a/posting/editor.py b/posting/editor.py
+index f1171cb..c248195 100644
+--- a/posting/editor.py
++++ b/posting/editor.py
+@@ -915,7 +915,7 @@ def _dismiss_editor_popup(driver):
+         logger.debug(f"팝업 닫기 시도 중 오류: {e}")
+ 
+ 
+-def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key=""):
++def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model=""):
+     """파싱된 콘텐츠 리스트를 에디터에 입력
+ 
+     content_list 형식:
+@@ -929,6 +929,7 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
+     image_generated = 0
+     image_inserted = 0
+     image_providers = {"gemini": 0, "openai": 0}
++    image_models = {}
+     image_failures = []
+     for i, (content_type, content_data) in enumerate(content_list):
+         if content_type == 'text':
+@@ -943,12 +944,16 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
+                 api_key,
+                 image_provider=image_provider,
+                 fallback_api_key=fallback_api_key,
++                image_model=image_model,
+             ) or {}
+             if image_result.get("generated"):
+                 image_generated += 1
+                 provider = image_result.get("provider")
+                 if provider in image_providers:
+                     image_providers[provider] += 1
++                model = str(image_result.get("model") or "").strip()
++                if model:
++                    image_models[model] = image_models.get(model, 0) + 1
+             if image_result.get("inserted"):
+                 image_inserted += 1
+             if image_result.get("failure"):
+@@ -967,6 +972,7 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
+         "image_generated": image_generated,
+         "image_inserted": image_inserted,
+         "image_providers": image_providers,
++        "image_models": image_models,
+         "image_failures": image_failures,
+     }
+ 
+@@ -1103,10 +1109,10 @@ def _input_quotation(driver, text):
+         wait_short()
+ 
+ 
+-def _generate_image_with_provider(prompt, api_key, image_provider):
++def _generate_image_with_provider(prompt, api_key, image_provider, image_model=""):
+     if image_provider == "openai":
+-        return generate_openai_image(prompt, api_key), "openai"
+-    return generate_gemini_image(prompt, api_key), "gemini"
++        return generate_openai_image(prompt, api_key, model=image_model), "openai"
++    return generate_gemini_image(prompt, api_key, model=image_model), "gemini"
+ 
+ 
+ def _image_failure(stage, error, message, provider=""):
+@@ -1122,7 +1128,73 @@ def _image_failure(stage, error, message, provider=""):
+     }
+ 
+ 
+-def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_key=""):
++def _editor_image_node_count(driver):
++    """Smart Editor 본문 안에 실제 이미지/이미지 블록이 몇 개 있는지 센다."""
++    if driver is None:
++        return 0
++    try:
++        return int(driver.execute_script(
++            """
++            const roots = Array.from(document.querySelectorAll(
++              '.se-main-container, .se-content, .se-section-text, body'
++            )).filter(Boolean);
++            const root = roots[0] || document;
++            const selectors = [
++              '.se-component-image',
++              '.se-module-image',
++              '.se-image',
++              '.se-section-image',
++              '[class*="se-image"]',
++              'figure img',
++              'img'
++            ];
++            const nodes = new Set();
++            for (const selector of selectors) {
++              root.querySelectorAll(selector).forEach((node) => {
++                const rect = node.getBoundingClientRect ? node.getBoundingClientRect() : {width: 1, height: 1};
++                const style = window.getComputedStyle ? window.getComputedStyle(node) : {};
++                if (style.display === 'none' || style.visibility === 'hidden') return;
++                if (node.tagName && node.tagName.toLowerCase() === 'img') {
++                  const src = node.getAttribute('src') || node.getAttribute('data-src') || '';
++                  if (!src && rect.width <= 1 && rect.height <= 1) return;
++                }
++                nodes.add(node);
++              });
++            }
++            return nodes.size;
++            """
++        ) or 0)
++    except Exception as e:
++        logger.debug(f"이미지 DOM 카운트 실패: {e}")
++        return 0
++
++
++def _verify_editor_image_inserted(driver, before_count, timeout=14):
++    """업로드 후 Smart Editor 본문에 실제 이미지 노드가 증가했는지 확인한다."""
++    if driver is None:
++        return True
++    try:
++        ensure_editor_context(driver, timeout=5)
++    except Exception:
++        pass
++    try:
++        WebDriverWait(driver, timeout, poll_frequency=0.7).until(
++            lambda d: _editor_image_node_count(d) > int(before_count or 0)
++        )
++        after_count = _editor_image_node_count(driver)
++        logger.info(f"이미지 DOM 반영 확인: {before_count} -> {after_count}")
++        return True
++    except Exception:
++        after_count = _editor_image_node_count(driver)
++        logger.warning(f"이미지 DOM 반영 확인 실패: {before_count} -> {after_count}")
++        try:
++            _save_editor_debug(driver, "image_insert_not_verified")
++        except Exception:
++            pass
++        return False
++
++
++def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_key="", image_model=""):
+     """이미지 생성 후 에디터에 삽입"""
+     prompt = str(prompt or "").strip()
+     logger.info(f"이미지 삽입 중: {prompt[:50]}...")
+@@ -1163,7 +1235,7 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
+         }
+ 
+     try:
+-        image_path, used_provider = _generate_image_with_provider(prompt, api_key, image_provider)
++        image_path, used_provider = _generate_image_with_provider(prompt, api_key, image_provider, image_model)
+     except Exception as e:
+         logger.warning(f"{image_provider} 이미지 생성 예외 - 건너뜀: {e}")
+         failure = _image_failure(
+@@ -1185,7 +1257,7 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
+         fallback_provider = "openai" if image_provider != "openai" else "gemini"
+         logger.warning(f"{image_provider} 이미지 생성 실패 - {fallback_provider} fallback 시도")
+         try:
+-            image_path, used_provider = _generate_image_with_provider(prompt, fallback_api_key, fallback_provider)
++            image_path, used_provider = _generate_image_with_provider(prompt, fallback_api_key, fallback_provider, "")
+         except Exception as e:
+             logger.warning(f"{fallback_provider} 이미지 fallback 예외 - 건너뜀: {e}")
+             image_path = None
+@@ -1212,6 +1284,8 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
+     abs_path = os.path.abspath(image_path)
+ 
+     try:
++        before_image_count = _editor_image_node_count(driver)
++
+         # 방법 1: 이미지 버튼 클릭 → file input 대기 → send_keys
+         uploaded = _try_upload_via_image_button(driver, abs_path)
+         upload_method = "image_button" if uploaded else ""
+@@ -1242,8 +1316,25 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
+             }
+ 
+         wait_long()
++        if not _verify_editor_image_inserted(driver, before_image_count):
++            failure = _image_failure(
++                "image_insert_verification",
++                "image_uploaded_but_not_inserted",
++                "이미지는 생성/업로드를 시도했지만 네이버 에디터 본문에서 실제 이미지 반영을 확인하지 못했습니다.",
++                used_provider,
++            )
++            return {
++                "stage": failure["stage"],
++                "error_code": failure["error_code"],
++                "message": failure["message"],
++                "generated": True,
++                "inserted": False,
++                "provider": used_provider,
++                "method": upload_method,
++                "failure": failure,
++            }
+         logger.info("이미지 삽입 완료")
+-        return {"stage": "image_inserted", "method": upload_method, "generated": True, "inserted": True, "provider": used_provider}
++        return {"stage": "image_inserted", "method": upload_method, "generated": True, "inserted": True, "provider": used_provider, "model": image_model}
+     except Exception as e:
+         logger.error(f"이미지 삽입 오류: {e}")
+         failure = _image_failure(
