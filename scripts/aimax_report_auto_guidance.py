@@ -59,6 +59,19 @@ GUIDANCE: dict[str, Guidance] = {
             "이미지 1장짜리 새 작업 1건만 다시 시도해주세요. 급하면 이미지 0장으로 먼저 글쓰기만 진행할 수 있습니다."
         ),
     ),
+    "image_paid_required_saved_as_draft": Guidance(
+        category="image_paid_required_saved_as_draft",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message=(
+            "최근 예리 작업은 본문 생성 뒤 네이버 임시저장까지 완료됐지만, 요청한 이미지가 현재 Gemini 이미지 모델 권한/요금제에서 생성되지 않아 "
+            "공개 발행 또는 예약 발행 대신 안전하게 임시저장으로 전환되었습니다."
+        ),
+        next_update_message=(
+            "네이버 블로그 임시저장함에서 글이 저장됐는지 먼저 확인해주세요. 이미지까지 자동 첨부하려면 설정 > AI/API 연결에서 이미지 생성 가능한 키/모델을 "
+            "확인한 뒤 이미지 1장으로 새 작업 1건만 테스트해주세요. 급하면 이미지 0장으로 발행을 진행할 수 있습니다."
+        ),
+    ),
     "api_key_missing": Guidance(
         category="api_key_missing",
         status="waiting_user",
@@ -305,6 +318,27 @@ def images_completed(job: dict[str, Any]) -> bool:
     return attempted > 0 and generated >= attempted and inserted >= attempted and failures == 0
 
 
+def image_paid_required_saved_as_draft(job: dict[str, Any]) -> bool:
+    result = job.get("result") or {}
+    if str(job.get("kind") or "") != "yeri_write":
+        return False
+    if str(job.get("status") or "") != "done" or result.get("ok") is not True:
+        return False
+    images = result.get("images") or {}
+    attempted = int(images.get("attempted") or 0)
+    inserted = int(images.get("inserted") or 0)
+    failures = images.get("failures") if isinstance(images.get("failures"), list) else []
+    if attempted <= 0 or inserted > 0:
+        return False
+    if not (
+        images.get("mode_overridden_to_save") is True
+        or str(result.get("mode") or "") == "save"
+        or any(str((post or {}).get("mode") or "") == "save" for post in result.get("posts") or [])
+    ):
+        return False
+    return any(str(item.get("error_code") or item.get("error") or "") == "image_paid_required" for item in failures if isinstance(item, dict))
+
+
 def job_user_matches_report(job: dict[str, Any], row: dict[str, Any]) -> bool:
     report_user_id = str(row.get("account_user_id") or "")
     if not report_user_id:
@@ -357,6 +391,8 @@ def completion_guidance(row: dict[str, Any], detail: dict[str, Any] | None, jobs
     job_id = str(row.get("job_id") or "")
     job = jobs_by_id.get(job_id) if job_id else None
     if job and str(job.get("status") or "") == "done" and (job.get("result") or {}).get("ok") is True:
+        if image_paid_required_saved_as_draft(job):
+            return GUIDANCE["image_paid_required_saved_as_draft"]
         if re.search(r"그림|이미지|image", report_issue_text(row), re.I) and images_completed(job):
             return GUIDANCE["job_completed_after_report"]
     return None
