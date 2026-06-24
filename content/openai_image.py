@@ -34,7 +34,7 @@ def _download_image(url):
     return _save_image_bytes(response.content)
 
 
-def generate_image(prompt, api_key, max_retries=2):
+def generate_image(prompt, api_key, max_retries=2, model=None):
     """OpenAI Image API로 이미지 생성 후 임시 파일 경로 반환."""
     prompt = _normalize_prompt(prompt)
     if not prompt:
@@ -44,7 +44,7 @@ def generate_image(prompt, api_key, max_retries=2):
         logger.error("OpenAI 이미지 생성 실패: API Key 없음")
         return None
 
-    model = os.environ.get("AIMAX_OPENAI_IMAGE_MODEL", "gpt-image-1").strip() or "gpt-image-1"
+    model = (model or os.environ.get("AIMAX_OPENAI_IMAGE_MODEL", "gpt-image-1")).strip() or "gpt-image-1"
     quality = os.environ.get("AIMAX_OPENAI_IMAGE_QUALITY", "medium").strip() or "medium"
     size = os.environ.get("AIMAX_OPENAI_IMAGE_SIZE", "1024x1024").strip() or "1024x1024"
     last_error = None
