@@ -37,11 +37,13 @@
 ## GitHub Push Fallback
 
 - For AIMAX repos, local `git push` may fail because remotes are HTTPS and no interactive GitHub credential is available in this environment.
-- Before retrying the same failing push, check `git remote -v`, `git ls-remote`, and available GitHub connector state.
+- Do not repeatedly try local `git push` against an HTTPS GitHub remote from this environment. Treat one credential failure as enough signal to switch methods.
+- Before any remote sync, check `git remote -v`, `git ls-remote`, and available GitHub connector state.
 - If local push fails with `could not read Username for 'https://github.com': No such device or address`, use the GitHub connector workflow instead of repeatedly retrying local push:
   - create/update the target branch through the connector when possible;
   - update the changed text files through the connector contents API;
   - verify remote branch/file contents after writing.
+- If a previous session already succeeded through GitHub connector/API updates, prefer that known-good path first for GitHub sync unless the local remote has been changed to a verified non-interactive credentialed remote.
 - Record in the final/Telegram report whether remote GitHub sync was done by local git or by connector fallback.
 
 ## Employee Launch Checklist
