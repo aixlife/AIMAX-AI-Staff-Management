@@ -93,6 +93,92 @@ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-completion-") as 
 print("REPORT_AUTO_GUIDANCE_COMPLETION_SYNC_SMOKE_OK")
 
 
+draft_report_id = "AIMAX-RPT-SMOKE-IMAGE-PAID-DRAFT"
+draft_ticket_id = "AIMAX-AUTO-SMOKE-IMAGE-PAID-DRAFT"
+draft_job_id = "smoke-image-paid-draft-job"
+
+with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-image-paid-draft-") as tmp:
+    data_dir = Path(tmp)
+    report_dir = data_dir / "reports" / stored_at[:10]
+    report_dir.mkdir(parents=True)
+    index_row = {
+        "report_id": draft_report_id,
+        "stored_at": stored_at,
+        "date": stored_at[:10],
+        "status": "reviewing",
+        "status_updated_at": stored_at,
+        "work_context": "블로그",
+        "visible_error": "단계: content_generation server_generation_provider_transient",
+        "user_response": "still_failing",
+        "auto_guidance_category": "provider_transient",
+        "job_id": draft_job_id,
+        "automation_ticket_id": draft_ticket_id,
+    }
+    detail = {
+        "server_received_at": stored_at,
+        "support": {"automation_ticket_id": draft_ticket_id},
+    }
+    image_failure = {
+        "stage": "image_generation",
+        "error_code": "image_paid_required",
+        "provider": "gemini",
+        "message": "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 없이 본문을 입력했습니다.",
+    }
+    jobs = {
+        "jobs": [
+            {
+                "id": draft_job_id,
+                "kind": "yeri_write",
+                "status": "done",
+                "user_id": "",
+                "result": {
+                    "ok": True,
+                    "mode": "save",
+                    "images": {
+                        "attempted": 3,
+                        "generated": 0,
+                        "inserted": 0,
+                        "failure_count": 3,
+                        "failures": [image_failure, image_failure, image_failure],
+                        "soft_failure_accepted": True,
+                        "mode_overridden_to_save": True,
+                    },
+                    "posts": [{"status": "done", "mode": "save", "requested_mode": "schedule"}],
+                },
+            }
+        ]
+    }
+    (data_dir / "reports-index.jsonl").write_text(f"{json.dumps(index_row, ensure_ascii=False)}\n", encoding="utf-8")
+    (data_dir / "automation-tickets.jsonl").write_text(
+        f"{json.dumps({'ticket_id': draft_ticket_id, 'status': 'open', 'report_id': draft_report_id, 'updated_at': stored_at})}\n",
+        encoding="utf-8",
+    )
+    (report_dir / f"{draft_report_id}.json").write_text(f"{json.dumps(detail, ensure_ascii=False)}\n", encoding="utf-8")
+    (data_dir / "jobs.json").write_text(f"{json.dumps(jobs, ensure_ascii=False)}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
+            "--data-dir",
+            str(data_dir),
+            "--min-age-minutes",
+            "0",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["touched_count"] == 1, payload
+    assert payload["touched"][0]["category"] == "image_paid_required_saved_as_draft", payload
+    rows = guidance.read_rows(data_dir / "reports-index.jsonl")
+    assert rows[0]["status"] == "waiting_user", rows[0]
+    assert guidance.latest_ticket_statuses(data_dir)[draft_ticket_id] == "waiting_user"
+
+print("REPORT_AUTO_GUIDANCE_IMAGE_PAID_DRAFT_SMOKE_OK")
+
+
 yunmi_report_id = "AIMAX-RPT-SMOKE-YUNMI-FALLBACK-DONE"
 yunmi_ticket_id = "AIMAX-AUTO-SMOKE-YUNMI-FALLBACK-DONE"
 yunmi_failed_job_id = "smoke-yunmi-paid-job"
