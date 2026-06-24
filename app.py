@@ -1,4 +1,4 @@
-Total output lines: 7018
+Total output lines: 7082
 
 import sys
 import os
@@ -189,8 +189,16 @@ API_KEY_GUIDE_URL = os.environ.get(
 _KEYCHAIN_READ_UNAVAILABLE = False
 _USD_KRW_RATE = 1476
 _USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot"
-_GEMINI_IMAGE_PRICE_USD = 0.067
-_OPENAI_IMAGE_PRICE_USD = 0.042
+_DEFAULT_IMAGE_MODEL = "gpt-image-1"
+_IMAGE_MODEL_PRICE_USD = {
+    "gpt-image-1": {"provider": "openai", "label": "OpenAI GPT Image 1", "per_image": 0.042},
+    "gpt-image-2": {"provider": "openai", "label": "OpenAI GPT Image 2", "per_image": 0.053},
+    "gemini-2.5-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana", "per_image": 0.039},
+    "gemini-3.1-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana 2", "per_image": 0.067},
+    "gemini-3-pro-image": {"provider": "gemini", "label": "Gemini Nano Banana Pro", "per_image": 0.134},
+}
+_GEMINI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gemini-3.1-flash-image"]["per_image"]
+_OPENAI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gpt-image-1"]["per_image"]
 _AI_TEXT_PRICE_USD_PER_1M = {
     # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
     "gemini-3.5-flash": {"input": 1.50, "output": 9.00, "label": "Gemini 3.5 Flash"},
@@ -242,6 +250,30 @@ def _normalize_ai_model(value):
 
 def _is_openai_model(value):
     return str(value or "").startswith("gpt-")
+
+
+def _normalize_image_model(value, ai_model=None):
+    value = str(value or "").strip()
+    if not value:
+        return "gpt-image-1" if _is_openai_model(ai_model) else "gemini-3.1-flash-image"
+    aliases = {
+        "openai": "gpt-image-1",
+        "gpt-image": "gpt-image-1",
+        "gemini": "gemini-3.1-flash-image",
+        "nano-banana": "gemini-2.5-flash-image",
+        "nano-banana-pro": "gemini-3-pro-image",
+    }
+    value = aliases.get(value, value)
+    if value in _IMAGE_MODEL_PRICE_USD:
+        return value
+    if _is_openai_model(ai_model):
+        return "gpt-image-1"
+    return _DEFAULT_IMAGE_MODEL
+
+
+def _image_provider_for_model(image_model):
+    model = _normalize_image_model(image_model)
+    return _IMAGE_MODEL_PRICE_USD.get(model, {}).get("provider", "openai")
 
 
 def _persist_generated_markdown(source, markdown):
@@ -426,7 +458,7 @@ def _safe_image_failures(raw, limit=20):
 
 def _image_failure_stage(failures):
     stages = [str(item.get("stage") or "").strip() for item in failures if isinstance(item, dict)]
-    for stage in ("image_generation", "image_upload", "image_insert_exception", "image_prompt_empty"):
+    for stage in ("image_generation", "image_upload", "image_insert_verification", "image_insert_exception", "image_prompt_empty"):
         if stage in stages:
             return stage
     return "image_completion"
@@ -437,6 +469,7 @@ def _image_failure_message(requested, inserted, failures):
     stage_labels = {
         "image_generation": "이미지 생성 실패",
         "image_upload": "네이버 이미지 업로드 실패",
+        "image_insert_verification": "네이버 편집기 이미지 반영 확인 실패",
         "image_insert_exception": "이미지 삽입 중 예외 발생",
         "image_prompt_empty": "이미지 프롬프트 누락",
         "image_completion": "이미지 첨부 완료 확인 실패",
@@ -479,39 +512,7 @@ def _diagnose_local_failure(stage, error):
     if "image_paid_required" in text or "flash-image" in text or "이미지 생성은 유료" in text:
         return (
             "이미지 생성은 유료 키 필요",
-            "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지가 건너뛰어질 수 있습니다.\n이미지 수를 0장으로 바꾸거나 유료 키를 연결해주세요.",
-        )
-    if (
-        "browser_start" in text
-        and (
-            "애플리케이션 제어 정책" in text
-            or "application control policy" in text
-            or "chromedriver" in text
-            or "winerror 4551" in text
-        )
-    ):
-        return (
-            "브라우저 드라이버 차단",
-            "Windows 보안 또는 회사 보안 정책이 브라우저 드라이버 실행을 차단했습니다.\n"
-            "Windows 보안 > 보호 기록 또는 사용 중인 보안 프로그램에서 chromedriver/undetected_chromedriver/AIMAX 차단 내역을 허용 또는 복원한 뒤 다시 시도해주세요.",
-        )
-    if "naver_login" in text or "네이버 로그인" in text:
-        return (
-            "네이버 로그인 필요",
-            "네이버 로그인 또는 추가 인증 화면에서 자동 진행이 막혔습니다.\n네이버 재로그인 후 다시 시도해주세요.",
-        )
-    if stage in {"smart_editor_input", "smart_editor_open", "image_upload", "image_insert_exception", "browser_start"}:
-        return (
-            "AIMAX 관리자 조치 필요",
-            "사용자가 설정으로 해결하기 어려운 실행기/네이버 에디터 처리 오류입니다.\n오류 보고를 보내주시면 AIMAX 관리자가 확인합니다.",
-        )
-    return (
-        "작업 실패 원인 확인 필요",
-        "로그를 기준으로 원인을 확인해야 합니다.\n오류 보고를 보내주시면 AIMAX 관리자가 확인합니다.",
-    )
-
-
-def _won_from_usd(usd)…69944 tokens truncated…\n"
+            "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지가 건너뛰어질 수 있습니다.\n이미지 수를 0장으로 바꾸거나 유료 키를 …70842 tokens truncated…\n"
                     f"400자를 넘는 멘트 {len(too_long)}개를 줄인 뒤 다시 실행해 주세요.",
                 )
             except Exception:
