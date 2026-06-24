@@ -112,7 +112,7 @@ def _generate_content_with_timeout(client, *, model, contents, config):
         executor.shutdown(wait=False, cancel_futures=True)
 
 
-def generate_image(prompt, api_key, max_retries=3):
+def generate_image(prompt, api_key, max_retries=3, model=None):
     """Gemini로 이미지 생성 후 임시 파일 경로 반환.
 
     간헐적으로 텍스트만 반환하는 케이스가 있어, 짧은 재시도와
@@ -126,6 +126,7 @@ def generate_image(prompt, api_key, max_retries=3):
         logger.error("이미지 생성 실패: Gemini API 키가 없습니다. 이미지 없이 본문 입력을 계속합니다.")
         return None
 
+    image_model = (model or GEMINI_IMAGE_MODEL).strip() or GEMINI_IMAGE_MODEL
     client = genai.Client(api_key=api_key)
     last_error = None
 
@@ -141,7 +142,7 @@ def generate_image(prompt, api_key, max_retries=3):
             logger.info(f"이미지 생성 중 ({attempt}/{max_retries}): {prompt[:50]}...")
             response = _generate_content_with_timeout(
                 client,
-                model=GEMINI_IMAGE_MODEL,
+                model=image_model,
                 contents=attempt_prompt,
                 config=types.GenerateContentConfig(
                     response_modalities=["TEXT", "IMAGE"]
