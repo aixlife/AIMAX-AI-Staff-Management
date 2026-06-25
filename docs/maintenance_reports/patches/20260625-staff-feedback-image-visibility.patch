@@ -1,0 +1,318 @@
+From 788a3c6cbd7b717b9bfe340062f19f0c5e24f646 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 25 Jun 2026 13:10:32 +0900
+Subject: [PATCH] Triage staff feedback image visibility reports
+
+---
+ oracle/aimax-reports-api/server.js            |   1 +
+ scripts/aimax_report_auto_guidance.py         |  54 +++++++-
+ scripts/smoke_automation_tickets.mjs          |  39 ++++++
+ ...ke_report_auto_guidance_completion_sync.py | 131 ++++++++++++++++++
+ 4 files changed, 223 insertions(+), 2 deletions(-)
+
+diff --git a/oracle/aimax-reports-api/server.js b/oracle/aimax-reports-api/server.js
+index 0883376..7041b5a 100644
+--- a/oracle/aimax-reports-api/server.js
++++ b/oracle/aimax-reports-api/server.js
+@@ -9188,6 +9188,7 @@ function reportRecentJobs(report) {
+ function reportPrimaryJob(report) {
+   const jobs = reportRecentJobs(report);
+   if (!jobs.length) return null;
++  if (isFeedbackReport(report)) return jobs[0];
+   return jobs.find((job) => ["failed", "cancelled", "running"].includes(String(job.status || ""))) || jobs[0];
+ }
+ 
+diff --git a/scripts/aimax_report_auto_guidance.py b/scripts/aimax_report_auto_guidance.py
+index 9a55e47..4aca554 100755
+--- a/scripts/aimax_report_auto_guidance.py
++++ b/scripts/aimax_report_auto_guidance.py
+@@ -177,6 +177,18 @@ GUIDANCE: dict[str, Guidance] = {
+         public_message="남겨주신 직원 피드백을 운영팀이 확인 중입니다. 기능 오류인지, 설정/사용량/계정 상태 문제인지 함께 분류합니다.",
+         next_update_message="추가 조치가 확인되면 이 화면에 안내가 업데이트됩니다. 같은 증상은 여러 번 보내지 않아도 됩니다.",
+     ),
++    "staff_feedback_image_visibility_working": Guidance(
++        category="staff_feedback_image_visibility_working",
++        status="working",
++        status_label="처리 중",
++        public_message=(
++            "최근 작업 로그에는 이미지 생성과 네이버 에디터 삽입이 성공으로 기록됐지만, 실제 블로그 화면에서 이미지가 보이지 않는 유형으로 분류했습니다. "
++            "실행기 이미지 반영 검증 보강과 업데이트 반영이 필요한 항목입니다."
++        ),
++        next_update_message=(
++            "업데이트 안내가 나올 때까지 같은 유료 이미지 작업을 반복하지 말고, 급한 글은 이미지 0장 또는 직접 이미지 첨부로 진행해주세요."
++        ),
++    ),
+ }
+ 
+ 
+@@ -339,6 +351,36 @@ def image_paid_required_saved_as_draft(job: dict[str, Any]) -> bool:
+     return any(str(item.get("error_code") or item.get("error") or "") == "image_paid_required" for item in failures if isinstance(item, dict))
+ 
+ 
++def feedback_recent_job(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
++    jobs = (detail or {}).get("system", {}).get("jobs_recent")
++    if isinstance(jobs, list):
++        for job in jobs:
++            if isinstance(job, dict):
++                return job
++    job_id = str(row.get("job_id") or "")
++    return jobs_by_id.get(job_id) if job_id else None
++
++
++def staff_feedback_image_visibility_guidance(
++    row: dict[str, Any],
++    detail: dict[str, Any] | None,
++    jobs_by_id: dict[str, dict[str, Any]],
++) -> Guidance | None:
++    kind = str(row.get("report_kind") or "").lower()
++    source = str(row.get("source") or "").lower()
++    if kind != "feedback" and source != "staff_feedback":
++        return None
++    if str(row.get("status") or "") != "reviewing":
++        return None
++    text = report_issue_text(row)
++    if not re.search(r"사진|이미지|image", text, re.I):
++        return None
++    job = feedback_recent_job(row, detail, jobs_by_id)
++    if job and str(job.get("status") or "") == "done" and images_completed(job):
++        return GUIDANCE["staff_feedback_image_visibility_working"]
++    return None
++
++
+ def job_user_matches_report(job: dict[str, Any], row: dict[str, Any]) -> bool:
+     report_user_id = str(row.get("account_user_id") or "")
+     if not report_user_id:
+@@ -451,7 +493,6 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
+             return GUIDANCE[key]
+ 
+     rules: list[tuple[str, str]] = [
+-        ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
+         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
+         ("api_key_missing", r"api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안"),
+         ("api_key_invalid", r"api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized"),
+@@ -503,6 +544,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
+     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
+     parser.add_argument("--min-age-minutes", type=int, default=15)
+     parser.add_argument("--lookback-days", type=int, default=14)
++    parser.add_argument("--report-id", default="", help="Only process one report id")
+     parser.add_argument("--dry-run", action="store_true")
+     return parser.parse_args(argv)
+ 
+@@ -522,9 +564,12 @@ def main(argv: list[str]) -> int:
+     synced_tickets: list[dict[str, Any]] = []
+     latest_tickets = latest_ticket_statuses(data_dir)
+     jobs_by_id = load_jobs_by_id(data_dir)
++    target_report_id = str(args.report_id or "").strip()
+ 
+     backup(index_path, suffix, backups, args.dry_run)
+     for row in rows:
++        if target_report_id and str(row.get("report_id") or "") != target_report_id:
++            continue
+         stored_at = parse_time(str(row.get("stored_at") or ""))
+         if stored_at and now - stored_at > lookback:
+             continue
+@@ -560,7 +605,12 @@ def main(argv: list[str]) -> int:
+                 detail = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+             except json.JSONDecodeError:
+                 detail = None
+-        guidance = completion_guidance(row, detail, jobs_by_id) or still_failing_guidance(row) or classify(row, detail)
++        guidance = (
++            completion_guidance(row, detail, jobs_by_id)
++            or still_failing_guidance(row)
++            or staff_feedback_image_visibility_guidance(row, detail, jobs_by_id)
++            or classify(row, detail)
++        )
+         if not guidance or not should_touch(row, guidance, min_age):
+             continue
+ 
+diff --git a/scripts/smoke_automation_tickets.mjs b/scripts/smoke_automation_tickets.mjs
+index 8fb4c56..00ffc44 100644
+--- a/scripts/smoke_automation_tickets.mjs
++++ b/scripts/smoke_automation_tickets.mjs
+@@ -119,6 +119,45 @@ try {
+   assert(transientTicket.priority === "high", "never_published_priority_mismatch");
+   assert(transientTicket.job_id === "job-transient-1", "system_jobs_recent_not_used");
+   assert(transientTicket.job_stage === "content_generation", "system_jobs_recent_stage_not_used");
++
++  const feedbackReport = {
++    report_id: "AIMAX-RPT-20260625034631-feedback",
++    source: "staff_feedback",
++    report_kind: "feedback",
++    feedback: {
++      employee_code: "yeri",
++      rating: "1",
++      improve: "사진생성 안됨",
++      contact_needed: false,
++    },
++    user_input: {
++      work_context: "예리 직원 피드백",
++      visible_error: "사진생성 안됨",
++    },
++    system: {
++      jobs_recent: [
++        {
++          id: "latest-done-image-job",
++          kind: "yeri_write",
++          worker_code: "yeri_writer",
++          status: "done",
++          result: { images: { attempted: 1, generated: 1, inserted: 1, failure_count: 0 } },
++        },
++        {
++          id: "older-login-failure",
++          kind: "yeri_write",
++          worker_code: "yeri_writer",
++          status: "failed",
++          failed_stage: "naver_login",
++        },
++      ],
++    },
++    support: { status: "reviewing", updated_at: storedAt },
++  };
++  const feedbackTicket = __automationTest.buildAutomationTicketForReport(feedbackReport, storedAt, storedAt.slice(0, 10));
++  assert(feedbackTicket.category === "staff_feedback", "feedback_ticket_category_mismatch");
++  assert(feedbackTicket.job_id === "latest-done-image-job", "feedback_should_use_latest_job");
++  assert(feedbackTicket.job_status === "done", "feedback_latest_job_status_mismatch");
+   console.log("AUTOMATION_TICKETS_SMOKE_OK");
+ } finally {
+   fs.rmSync(tmpRoot, { recursive: true, force: true });
+diff --git a/scripts/smoke_report_auto_guidance_completion_sync.py b/scripts/smoke_report_auto_guidance_completion_sync.py
+index 7238867..fa1b36a 100644
+--- a/scripts/smoke_report_auto_guidance_completion_sync.py
++++ b/scripts/smoke_report_auto_guidance_completion_sync.py
+@@ -443,3 +443,134 @@ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-driver-block-repe
+     assert guidance.latest_ticket_statuses(data_dir)[driver_block_ticket_id] == "waiting_user"
+ 
+ print("REPORT_AUTO_GUIDANCE_DRIVER_BLOCK_REPEAT_SMOKE_OK")
++
++
++feedback_report_id = "AIMAX-RPT-SMOKE-FEEDBACK-IMAGE-VISIBILITY"
++feedback_ticket_id = "AIMAX-AUTO-SMOKE-FEEDBACK-IMAGE-VISIBILITY"
++
++with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-feedback-image-") as tmp:
++    data_dir = Path(tmp)
++    report_dir = data_dir / "reports" / stored_at[:10]
++    report_dir.mkdir(parents=True)
++    index_row = {
++        "report_id": feedback_report_id,
++        "stored_at": stored_at,
++        "date": stored_at[:10],
++        "source": "staff_feedback",
++        "report_kind": "feedback",
++        "status": "reviewing",
++        "status_updated_at": stored_at,
++        "work_context": "예리 직원 피드백",
++        "visible_error": "사진생성 안됨",
++        "feedback_improve": "사진생성 안됨",
++        "automation_ticket_id": feedback_ticket_id,
++    }
++    detail = {
++        "server_received_at": stored_at,
++        "source": "staff_feedback",
++        "report_kind": "feedback",
++        "support": {"automation_ticket_id": feedback_ticket_id},
++        "system": {
++            "jobs_recent": [
++                {
++                    "id": "latest-done-image-job",
++                    "kind": "yeri_write",
++                    "status": "done",
++                    "result": {"images": {"attempted": 1, "generated": 1, "inserted": 1, "failure_count": 0}},
++                },
++                {
++                    "id": "older-login-failure",
++                    "kind": "yeri_write",
++                    "status": "failed",
++                    "failed_stage": "naver_login",
++                },
++            ]
++        },
++    }
++    (data_dir / "reports-index.jsonl").write_text(f"{json.dumps(index_row, ensure_ascii=False)}\n", encoding="utf-8")
++    (data_dir / "automation-tickets.jsonl").write_text(
++        f"{json.dumps({'ticket_id': feedback_ticket_id, 'status': 'open', 'report_id': feedback_report_id, 'updated_at': stored_at})}\n",
++        encoding="utf-8",
++    )
++    (data_dir / "jobs.json").write_text(f"{json.dumps({'jobs': []})}\n", encoding="utf-8")
++    (report_dir / f"{feedback_report_id}.json").write_text(f"{json.dumps(detail, ensure_ascii=False)}\n", encoding="utf-8")
++
++    result = subprocess.run(
++        [
++            sys.executable,
++            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
++            "--data-dir",
++            str(data_dir),
++            "--min-age-minutes",
++            "0",
++        ],
++        check=True,
++        capture_output=True,
++        text=True,
++    )
++    payload = json.loads(result.stdout)
++    assert payload["touched_count"] == 1, payload
++    assert payload["touched"][0]["category"] == "staff_feedback_image_visibility_working", payload
++    rows = guidance.read_rows(data_dir / "reports-index.jsonl")
++    assert rows[0]["status"] == "working", rows[0]
++    assert guidance.latest_ticket_statuses(data_dir)[feedback_ticket_id] == "working"
++
++print("REPORT_AUTO_GUIDANCE_FEEDBACK_IMAGE_VISIBILITY_SMOKE_OK")
++
++
++with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-stale-job-no-browser-") as tmp:
++    data_dir = Path(tmp)
++    report_dir = data_dir / "reports" / stored_at[:10]
++    report_dir.mkdir(parents=True)
++    stale_report_id = "AIMAX-RPT-SMOKE-IMAGE-WITH-STALE-BROWSER-JOB"
++    index_row = {
++        "report_id": stale_report_id,
++        "stored_at": stored_at,
++        "date": stored_at[:10],
++        "source": "aimax-webapp",
++        "report_kind": "error",
++        "status": "reviewing",
++        "status_updated_at": stored_at,
++        "work_context": "블로그 글쓰기",
++        "visible_error": "글생성은 잘되나 이미지생성이 안되고 있음",
++        "feedback_improve": "이미지 생성만 안됨",
++        "job_stage": "worker_running",
++        "user_response": "still_failing",
++        "auto_guidance_category": "provider_transient",
++    }
++    detail = {
++        "server_received_at": stored_at,
++        "system": {
++            "jobs_recent": [
++                {
++                    "id": "older-browser-policy-failure",
++                    "kind": "yeri_write",
++                    "status": "failed",
++                    "failed_stage": "browser_start",
++                    "result": {"error": "Windows 애플리케이션 제어 정책이 chromedriver 실행을 차단했습니다."},
++                }
++            ]
++        },
++    }
++    (data_dir / "reports-index.jsonl").write_text(f"{json.dumps(index_row, ensure_ascii=False)}\n", encoding="utf-8")
++    (data_dir / "automation-tickets.jsonl").write_text("", encoding="utf-8")
++    (data_dir / "jobs.json").write_text(f"{json.dumps({'jobs': []})}\n", encoding="utf-8")
++    (report_dir / f"{stale_report_id}.json").write_text(f"{json.dumps(detail, ensure_ascii=False)}\n", encoding="utf-8")
++
++    result = subprocess.run(
++        [
++            sys.executable,
++            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
++            "--data-dir",
++            str(data_dir),
++            "--min-age-minutes",
++            "0",
++        ],
++        check=True,
++        capture_output=True,
++        text=True,
++    )
++    payload = json.loads(result.stdout)
++    assert payload["touched_count"] == 0, payload
++
++print("REPORT_AUTO_GUIDANCE_STALE_JOB_NO_BROWSER_SMOKE_OK")
+-- 
+2.43.0
