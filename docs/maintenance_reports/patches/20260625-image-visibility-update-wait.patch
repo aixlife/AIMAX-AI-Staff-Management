@@ -1,0 +1,139 @@
+From f0a72805bd67a687a5d8e607303e7a32e9feb16d Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 25 Jun 2026 15:12:38 +0900
+Subject: [PATCH] Move image visibility feedback to update wait
+
+---
+ scripts/aimax_report_auto_guidance.py         | 14 ++--
+ ...ke_report_auto_guidance_completion_sync.py | 71 ++++++++++++++++++-
+ 2 files changed, 75 insertions(+), 10 deletions(-)
+
+diff --git a/scripts/aimax_report_auto_guidance.py b/scripts/aimax_report_auto_guidance.py
+index 4aca554..6863b39 100755
+--- a/scripts/aimax_report_auto_guidance.py
++++ b/scripts/aimax_report_auto_guidance.py
+@@ -177,13 +177,13 @@ GUIDANCE: dict[str, Guidance] = {
+         public_message="남겨주신 직원 피드백을 운영팀이 확인 중입니다. 기능 오류인지, 설정/사용량/계정 상태 문제인지 함께 분류합니다.",
+         next_update_message="추가 조치가 확인되면 이 화면에 안내가 업데이트됩니다. 같은 증상은 여러 번 보내지 않아도 됩니다.",
+     ),
+-    "staff_feedback_image_visibility_working": Guidance(
+-        category="staff_feedback_image_visibility_working",
+-        status="working",
+-        status_label="처리 중",
++    "staff_feedback_image_visibility_update_waiting": Guidance(
++        category="staff_feedback_image_visibility_update_waiting",
++        status="waiting_user",
++        status_label="업데이트 대기",
+         public_message=(
+             "최근 작업 로그에는 이미지 생성과 네이버 에디터 삽입이 성공으로 기록됐지만, 실제 블로그 화면에서 이미지가 보이지 않는 유형으로 분류했습니다. "
+-            "실행기 이미지 반영 검증 보강과 업데이트 반영이 필요한 항목입니다."
++            "실행기 이미지 반영 검증 보강은 준비됐고, Windows 실행기 업데이트 반영이 필요한 항목입니다."
+         ),
+         next_update_message=(
+             "업데이트 안내가 나올 때까지 같은 유료 이미지 작업을 반복하지 말고, 급한 글은 이미지 0장 또는 직접 이미지 첨부로 진행해주세요."
+@@ -370,14 +370,14 @@ def staff_feedback_image_visibility_guidance(
+     source = str(row.get("source") or "").lower()
+     if kind != "feedback" and source != "staff_feedback":
+         return None
+-    if str(row.get("status") or "") != "reviewing":
++    if str(row.get("status") or "") not in {"reviewing", "working"}:
+         return None
+     text = report_issue_text(row)
+     if not re.search(r"사진|이미지|image", text, re.I):
+         return None
+     job = feedback_recent_job(row, detail, jobs_by_id)
+     if job and str(job.get("status") or "") == "done" and images_completed(job):
+-        return GUIDANCE["staff_feedback_image_visibility_working"]
++        return GUIDANCE["staff_feedback_image_visibility_update_waiting"]
+     return None
+ 
+ 
+diff --git a/scripts/smoke_report_auto_guidance_completion_sync.py b/scripts/smoke_report_auto_guidance_completion_sync.py
+index fa1b36a..1e8be9b 100644
+--- a/scripts/smoke_report_auto_guidance_completion_sync.py
++++ b/scripts/smoke_report_auto_guidance_completion_sync.py
+@@ -510,14 +510,79 @@ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-feedback-image-")
+     )
+     payload = json.loads(result.stdout)
+     assert payload["touched_count"] == 1, payload
+-    assert payload["touched"][0]["category"] == "staff_feedback_image_visibility_working", payload
++    assert payload["touched"][0]["category"] == "staff_feedback_image_visibility_update_waiting", payload
+     rows = guidance.read_rows(data_dir / "reports-index.jsonl")
+-    assert rows[0]["status"] == "working", rows[0]
+-    assert guidance.latest_ticket_statuses(data_dir)[feedback_ticket_id] == "working"
++    assert rows[0]["status"] == "waiting_user", rows[0]
++    assert guidance.latest_ticket_statuses(data_dir)[feedback_ticket_id] == "waiting_user"
+ 
+ print("REPORT_AUTO_GUIDANCE_FEEDBACK_IMAGE_VISIBILITY_SMOKE_OK")
+ 
+ 
++with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-feedback-image-working-") as tmp:
++    data_dir = Path(tmp)
++    report_dir = data_dir / "reports" / stored_at[:10]
++    report_dir.mkdir(parents=True)
++    index_row = {
++        "report_id": feedback_report_id,
++        "stored_at": stored_at,
++        "date": stored_at[:10],
++        "source": "staff_feedback",
++        "report_kind": "feedback",
++        "status": "working",
++        "status_updated_at": stored_at,
++        "work_context": "예리 직원 피드백",
++        "visible_error": "사진생성 안됨",
++        "feedback_improve": "사진생성 안됨",
++        "auto_guidance_category": "staff_feedback_image_visibility_working",
++        "automation_ticket_id": feedback_ticket_id,
++    }
++    detail = {
++        "server_received_at": stored_at,
++        "source": "staff_feedback",
++        "report_kind": "feedback",
++        "support": {"automation_ticket_id": feedback_ticket_id},
++        "system": {
++            "jobs_recent": [
++                {
++                    "id": "latest-done-image-job",
++                    "kind": "yeri_write",
++                    "status": "done",
++                    "result": {"images": {"attempted": 1, "generated": 1, "inserted": 1, "failure_count": 0}},
++                }
++            ]
++        },
++    }
++    (data_dir / "reports-index.jsonl").write_text(f"{json.dumps(index_row, ensure_ascii=False)}\n", encoding="utf-8")
++    (data_dir / "automation-tickets.jsonl").write_text(
++        f"{json.dumps({'ticket_id': feedback_ticket_id, 'status': 'working', 'report_id': feedback_report_id, 'updated_at': stored_at})}\n",
++        encoding="utf-8",
++    )
++    (data_dir / "jobs.json").write_text(f"{json.dumps({'jobs': []})}\n", encoding="utf-8")
++    (report_dir / f"{feedback_report_id}.json").write_text(f"{json.dumps(detail, ensure_ascii=False)}\n", encoding="utf-8")
++
++    result = subprocess.run(
++        [
++            sys.executable,
++            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
++            "--data-dir",
++            str(data_dir),
++            "--min-age-minutes",
++            "0",
++        ],
++        check=True,
++        capture_output=True,
++        text=True,
++    )
++    payload = json.loads(result.stdout)
++    assert payload["touched_count"] == 1, payload
++    assert payload["touched"][0]["category"] == "staff_feedback_image_visibility_update_waiting", payload
++    rows = guidance.read_rows(data_dir / "reports-index.jsonl")
++    assert rows[0]["status"] == "waiting_user", rows[0]
++    assert guidance.latest_ticket_statuses(data_dir)[feedback_ticket_id] == "waiting_user"
++
++print("REPORT_AUTO_GUIDANCE_FEEDBACK_IMAGE_VISIBILITY_WORKING_SMOKE_OK")
++
++
+ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-stale-job-no-browser-") as tmp:
+     data_dir = Path(tmp)
+     report_dir = data_dir / "reports" / stored_at[:10]
+-- 
+2.43.0
