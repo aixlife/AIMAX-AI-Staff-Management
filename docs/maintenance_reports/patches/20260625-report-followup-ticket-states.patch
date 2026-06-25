@@ -1,0 +1,114 @@
+From de3b58d24cb14b5a1821de9dbb4617e5236d5c83 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 25 Jun 2026 12:37:57 +0900
+Subject: [PATCH] Sync report follow-up ticket states
+
+---
+ oracle/aimax-reports-api/server.js            |  4 ++
+ scripts/aimax_report_auto_guidance.py         |  2 +-
+ scripts/smoke_automation_tickets.mjs          |  3 ++
+ ...ke_report_auto_guidance_completion_sync.py | 50 +++++++++++++++++++
+ 4 files changed, 58 insertions(+), 1 deletion(-)
+
+diff --git a/oracle/aimax-reports-api/server.js b/oracle/aimax-reports-api/server.js
+index 77d138e..0883376 100644
+--- a/oracle/aimax-reports-api/server.js
++++ b/oracle/aimax-reports-api/server.js
+@@ -13934,6 +13934,10 @@ async function handleReportUserResponse(req, res, reportId) {
+       return;
+     }
+ 
++    if (updatedRow.automation_ticket_id) {
++      appendAutomationTicketStatusUpdate(updatedRow.automation_ticket_id, reportId, nextStatus, updatedAt);
++    }
++
+     if (response === "still_failing") {
+       const jobLine = compactJobLine(updatedRow);
+       sendTelegramMessage([
+diff --git a/scripts/aimax_report_auto_guidance.py b/scripts/aimax_report_auto_guidance.py
+index d794568..9a55e47 100755
+--- a/scripts/aimax_report_auto_guidance.py
++++ b/scripts/aimax_report_auto_guidance.py
+@@ -474,7 +474,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
+ def should_touch(row: dict[str, Any], guidance: Guidance, min_age: timedelta) -> bool:
+     if str(row.get("status") or "") in {"done", "waiting_user"}:
+         return False
+-    if str(row.get("auto_guidance_category") or "") == guidance.category:
++    if str(row.get("auto_guidance_category") or "") == guidance.category and str(row.get("status") or "") == guidance.status:
+         return False
+     updated_at = parse_time(str(row.get("status_updated_at") or row.get("stored_at") or ""))
+     if updated_at and datetime.now(UTC) - updated_at < min_age:
+diff --git a/scripts/smoke_automation_tickets.mjs b/scripts/smoke_automation_tickets.mjs
+index a783448..8fb4c56 100644
+--- a/scripts/smoke_automation_tickets.mjs
++++ b/scripts/smoke_automation_tickets.mjs
+@@ -81,6 +81,9 @@ try {
+   const ticketUpdate = __automationTest.appendAutomationTicketStatusUpdate(guidedTicket.ticket_id, guided.report_id, guided.support.status, storedAt);
+   assert(ticketUpdate.status === "waiting_user", "ticket_update_status_mismatch");
+   assert(__automationTest.latestAutomationTickets().find((item) => item.ticket_id === guidedTicket.ticket_id)?.status === "waiting_user", "latest_ticket_status_mismatch");
++  const reopenUpdate = __automationTest.appendAutomationTicketStatusUpdate(guidedTicket.ticket_id, guided.report_id, "reviewing", storedAt);
++  assert(reopenUpdate.status === "open", "ticket_reopen_status_mismatch");
++  assert(__automationTest.latestAutomationTickets().find((item) => item.ticket_id === guidedTicket.ticket_id)?.status === "open", "latest_ticket_reopen_mismatch");
+ 
+   const transientReport = {
+     report_id: "AIMAX-RPT-20260618122443-d8ccac1e",
+diff --git a/scripts/smoke_report_auto_guidance_completion_sync.py b/scripts/smoke_report_auto_guidance_completion_sync.py
+index e21af80..7238867 100644
+--- a/scripts/smoke_report_auto_guidance_completion_sync.py
++++ b/scripts/smoke_report_auto_guidance_completion_sync.py
+@@ -393,3 +393,53 @@ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-driver-block-") a
+     assert guidance.latest_ticket_statuses(data_dir)[driver_block_ticket_id] == "waiting_user"
+ 
+ print("REPORT_AUTO_GUIDANCE_DRIVER_BLOCK_SMOKE_OK")
++
++
++with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-driver-block-repeat-") as tmp:
++    data_dir = Path(tmp)
++    report_dir = data_dir / "reports" / stored_at[:10]
++    report_dir.mkdir(parents=True)
++    index_row = {
++        "report_id": driver_block_report_id,
++        "stored_at": stored_at,
++        "date": stored_at[:10],
++        "status": "reviewing",
++        "status_updated_at": stored_at,
++        "work_context": "블로그 글쓰기",
++        "visible_error": "단계: browser_start Windows 애플리케이션 제어 정책이 chromedriver 실행을 차단했습니다.",
++        "feedback_improve": "Windows 애플리케이션 제어 정책이 브라우저 드라이버 실행을 차단했습니다.",
++        "job_stage": "browser_start",
++        "user_response": "still_failing",
++        "auto_guidance_category": "browser_driver_policy_blocked",
++        "automation_ticket_id": driver_block_ticket_id,
++    }
++    detail = {"server_received_at": stored_at, "support": {"automation_ticket_id": driver_block_ticket_id}}
++    (data_dir / "reports-index.jsonl").write_text(f"{json.dumps(index_row, ensure_ascii=False)}\n", encoding="utf-8")
++    (data_dir / "automation-tickets.jsonl").write_text(
++        f"{json.dumps({'ticket_id': driver_block_ticket_id, 'status': 'open', 'report_id': driver_block_report_id, 'updated_at': stored_at})}\n",
++        encoding="utf-8",
++    )
++    (data_dir / "jobs.json").write_text(f"{json.dumps({'jobs': []})}\n", encoding="utf-8")
++    (report_dir / f"{driver_block_report_id}.json").write_text(f"{json.dumps(detail, ensure_ascii=False)}\n", encoding="utf-8")
++
++    result = subprocess.run(
++        [
++            sys.executable,
++            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
++            "--data-dir",
++            str(data_dir),
++            "--min-age-minutes",
++            "0",
++        ],
++        check=True,
++        capture_output=True,
++        text=True,
++    )
++    payload = json.loads(result.stdout)
++    assert payload["touched_count"] == 1, payload
++    assert payload["touched"][0]["category"] == "browser_driver_policy_blocked", payload
++    rows = guidance.read_rows(data_dir / "reports-index.jsonl")
++    assert rows[0]["status"] == "waiting_user", rows[0]
++    assert guidance.latest_ticket_statuses(data_dir)[driver_block_ticket_id] == "waiting_user"
++
++print("REPORT_AUTO_GUIDANCE_DRIVER_BLOCK_REPEAT_SMOKE_OK")
+-- 
+2.43.0
