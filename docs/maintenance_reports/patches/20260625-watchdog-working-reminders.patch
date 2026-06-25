@@ -1,0 +1,166 @@
+From c2838976c574416cab54175882393e6deac1a9a4 Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Thu, 25 Jun 2026 13:38:42 +0900
+Subject: [PATCH] Tune watchdog working ticket reminders
+
+---
+ scripts/aimax_report_watchdog.py             | 23 ++++++++++---
+ scripts/smoke_report_watchdog_ticket_sync.py | 35 ++++++++++++++++++++
+ 2 files changed, 53 insertions(+), 5 deletions(-)
+
+diff --git a/scripts/aimax_report_watchdog.py b/scripts/aimax_report_watchdog.py
+index eb37c0c..fa35fd1 100755
+--- a/scripts/aimax_report_watchdog.py
++++ b/scripts/aimax_report_watchdog.py
+@@ -112,15 +112,22 @@ def latest_rows_by_id(rows: list[dict[str, Any]], key: str) -> dict[str, dict[st
+     for row in rows:
+         row_id = str(row.get(key) or "")
+         if row_id:
+-            latest[row_id] = row
++            latest[row_id] = {**latest.get(row_id, {}), **row}
+     return latest
+ 
+ 
++def status_stale_after(status: str, stale_after: timedelta, working_stale_after: timedelta | None = None) -> timedelta:
++    if status == "working" and working_stale_after:
++        return working_stale_after
++    return stale_after
++
++
+ def stale_reports(
+     rows: list[dict[str, Any]],
+     now: datetime,
+     stale_after: timedelta,
+     lookback: timedelta,
++    working_stale_after: timedelta | None = None,
+ ) -> list[dict[str, Any]]:
+     candidates: list[dict[str, Any]] = []
+     for row in rows:
+@@ -134,7 +141,7 @@ def stale_reports(
+         stored_at = parse_time(str(row.get("stored_at") or ""))
+         if stored_at and now - stored_at > lookback:
+             continue
+-        if age >= stale_after:
++        if age >= status_stale_after(status, stale_after, working_stale_after):
+             candidates.append({**row, "_age": age})
+     return sorted(candidates, key=lambda item: item["_age"], reverse=True)
+ 
+@@ -145,11 +152,13 @@ def open_tickets(
+     stale_after: timedelta,
+     lookback: timedelta,
+     report_status_by_id: dict[str, str] | None = None,
++    working_stale_after: timedelta | None = None,
+ ) -> list[dict[str, Any]]:
+     latest = latest_rows_by_id(rows, "ticket_id").values()
+     candidates: list[dict[str, Any]] = []
+     for row in latest:
+-        if str(row.get("status") or "open") not in {"open", "new", "working"}:
++        status = str(row.get("status") or "open")
++        if status not in {"open", "new", "working"}:
+             continue
+         linked_report_id = str(row.get("report_id") or "")
+         linked_report_status = (report_status_by_id or {}).get(linked_report_id, "")
+@@ -162,7 +171,7 @@ def open_tickets(
+         created_at = parse_time(str(row.get("created_at") or ""))
+         if created_at and now - created_at > lookback:
+             continue
+-        if age >= stale_after:
++        if age >= status_stale_after(status, stale_after, working_stale_after):
+             candidates.append({**row, "_age": age})
+     return sorted(candidates, key=lambda item: item["_age"], reverse=True)
+ 
+@@ -245,6 +254,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
+     parser.add_argument("--data-dir", type=Path, default=DEFAULT_DATA_DIR)
+     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV_FILE)
+     parser.add_argument("--stale-minutes", type=int, default=60)
++    parser.add_argument("--working-stale-minutes", type=int, default=120)
+     parser.add_argument("--lookback-days", type=int, default=7)
+     parser.add_argument("--repeat-hours", type=int, default=6)
+     parser.add_argument("--state-file", type=Path)
+@@ -258,6 +268,7 @@ def main(argv: list[str]) -> int:
+     load_env_file(args.env_file)
+     now = utc_now()
+     stale_after = timedelta(minutes=max(1, args.stale_minutes))
++    working_stale_after = timedelta(minutes=max(args.stale_minutes, args.working_stale_minutes))
+     lookback = timedelta(days=max(1, args.lookback_days))
+     repeat_after = timedelta(hours=max(1, args.repeat_hours))
+     data_dir = args.data_dir
+@@ -266,13 +277,14 @@ def main(argv: list[str]) -> int:
+         str(row.get("report_id") or ""): str(row.get("status") or "new")
+         for row in latest_rows_by_id(report_rows, "report_id").values()
+     }
+-    reports = stale_reports(report_rows, now, stale_after, lookback)
++    reports = stale_reports(report_rows, now, stale_after, lookback, working_stale_after)
+     tickets = open_tickets(
+         read_jsonl(data_dir / "automation-tickets.jsonl"),
+         now,
+         stale_after,
+         lookback,
+         report_status_by_id,
++        working_stale_after,
+     )
+     public_base_url = os.environ.get("AIMAX_PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
+     message = build_message(reports, tickets, public_base_url=public_base_url, now=now, limit=args.limit)
+@@ -285,6 +297,7 @@ def main(argv: list[str]) -> int:
+         "ok": True,
+         "send": args.send,
+         "stale_minutes": args.stale_minutes,
++        "working_stale_minutes": args.working_stale_minutes,
+         "lookback_days": args.lookback_days,
+         "repeat_hours": args.repeat_hours,
+         "send_allowed": send_allowed,
+diff --git a/scripts/smoke_report_watchdog_ticket_sync.py b/scripts/smoke_report_watchdog_ticket_sync.py
+index a68378b..7d77b60 100644
+--- a/scripts/smoke_report_watchdog_ticket_sync.py
++++ b/scripts/smoke_report_watchdog_ticket_sync.py
+@@ -31,6 +31,8 @@ old = "2026-06-19T11:20:10.235Z"
+ ticket = {
+     "ticket_id": "AIMAX-AUTO-20260618122443-f7699a80",
+     "status": "open",
++    "category": "staff_feedback",
++    "priority": "low",
+     "report_id": "AIMAX-RPT-20260618122443-d8ccac1e",
+     "created_at": "2026-06-18T12:24:43.547Z",
+     "updated_at": old,
+@@ -48,6 +50,39 @@ open_with_waiting_report = watchdog.open_tickets(
+ )
+ assert open_with_waiting_report == []
+ 
++ticket_status_update = {
++    "ticket_id": ticket["ticket_id"],
++    "status": "working",
++    "report_id": ticket["report_id"],
++    "updated_at": "2026-06-19T11:40:00.000Z",
++}
++merged_ticket = watchdog.latest_rows_by_id([ticket, ticket_status_update], "ticket_id")[ticket["ticket_id"]]
++assert merged_ticket["category"] == "staff_feedback"
++assert merged_ticket["priority"] == "low"
++assert merged_ticket["status"] == "working"
++assert merged_ticket["created_at"] == ticket["created_at"]
++
++working_report = {
++    "report_id": "AIMAX-RPT-WORKING",
++    "status": "working",
++    "stored_at": "2026-06-19T11:00:00.000Z",
++    "status_updated_at": "2026-06-19T11:40:00.000Z",
++}
++assert watchdog.stale_reports(
++    [working_report],
++    now,
++    timedelta(minutes=15),
++    timedelta(days=14),
++    timedelta(minutes=120),
++) == []
++assert len(watchdog.stale_reports(
++    [working_report],
++    now,
++    timedelta(minutes=15),
++    timedelta(days=14),
++    timedelta(minutes=30),
++)) == 1
++
+ with tempfile.TemporaryDirectory(prefix="aimax-report-ticket-sync-") as tmp:
+     data_dir = Path(tmp)
+     (data_dir / "automation-tickets.jsonl").write_text(f"{json.dumps(ticket)}\n", encoding="utf-8")
+-- 
+2.43.0
