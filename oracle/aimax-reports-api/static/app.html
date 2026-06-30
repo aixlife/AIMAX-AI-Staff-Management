@@ -3994,8 +3994,12 @@
                         </select>
                       </div>
                       <div class="field">
-                        <label for="yeriAiModel">AI 모델</label>
+                        <label for="yeriAiModel">글쓰기 모델</label>
                         <select id="yeriAiModel"></select>
+                      </div>
+                      <div class="field">
+                        <label for="yeriImageModel">이미지 모델</label>
+                        <select id="yeriImageModel"></select>
                       </div>
                       <div class="field">
                         <label for="yeriWordCount">분량</label>
@@ -4983,11 +4987,10 @@
     const SIDEBAR_COLLAPSED_KEY = "aimax_sidebar_collapsed";
     const NEW_SONGI_PROJECT_VALUE = "__new_project__";
     const DEFAULT_AI_MODEL = "gemini-2.5-flash";
+    const DEFAULT_IMAGE_MODEL = "gpt-image-1";
     const SONGI_DEFAULT_AI_MODEL = "gemini-2.5-flash";
     const USD_KRW_RATE = 1476;
-    const USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot";
-    const GEMINI_IMAGE_PRICE_USD = 0.067;
-    const OPENAI_IMAGE_PRICE_USD = 0.042;
+    const USD_KRW_RATE_LABEL = "2026-06-24 official model pricing check";
     const SONGI_APIFY_PRICES_USD = {
       Instagram: 0.0026,
       InstagramProfile: 0.0016,
@@ -5015,6 +5018,20 @@
       ["gpt-5-mini", "GPT-5 mini"],
       ["claude", "Claude"],
     ];
+    const IMAGE_MODEL_OPTIONS = [
+      ["gpt-image-1", "OpenAI gpt-image-1"],
+      ["gpt-image-2", "OpenAI gpt-image-2"],
+      ["gemini-2.5-flash-image", "Gemini Nano Banana"],
+      ["gemini-3.1-flash-image", "Gemini Nano Banana 2"],
+      ["gemini-3-pro-image", "Gemini Nano Banana Pro"],
+    ];
+    const IMAGE_MODEL_PRICES = {
+      "gpt-image-1": { provider: "OpenAI", label: "OpenAI gpt-image-1", perImageUsd: 0.042 },
+      "gpt-image-2": { provider: "OpenAI", label: "OpenAI gpt-image-2", perImageUsd: 0.053 },
+      "gemini-2.5-flash-image": { provider: "Gemini", label: "Gemini Nano Banana", perImageUsd: 0.039 },
+      "gemini-3.1-flash-image": { provider: "Gemini", label: "Gemini Nano Banana 2", perImageUsd: 0.067 },
+      "gemini-3-pro-image": { provider: "Gemini", label: "Gemini Nano Banana Pro", perImageUsd: 0.134 },
+    };
     const YUNMI_AI_MODEL_OPTIONS = [
       ["gemini-3.5-flash", "Gemini 3.5 Flash"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
@@ -5139,6 +5156,7 @@
       downloadReleaseTimer: null,
       agentWatchTimer: null,
       agentWatchUntil: 0,
+      jobWatchTimer: null,
       requiredUpdatePromptKey: "",
       serviceNoticeDismissed: storageGet("localStorage", SERVICE_NOTICE_KEY) === "1",
       reportAttentionPromptKey: "",
@@ -5894,9 +5912,27 @@
       return AI_MODEL_OPTIONS.some(([id]) => id === model) ? model : DEFAULT_AI_MODEL;
     }
 
+    function normalizeImageModel(value) {
+      const model = String(value || "").trim();
+      const aliases = {
+        openai: "gpt-image-1",
+        "gpt-image": "gpt-image-1",
+        gemini: "gemini-3.1-flash-image",
+        "nano-banana": "gemini-2.5-flash-image",
+        "nano-banana-pro": "gemini-3-pro-image",
+      };
+      const normalized = aliases[model] || model;
+      return IMAGE_MODEL_OPTIONS.some(([id]) => id === normalized) ? normalized : DEFAULT_IMAGE_MODEL;
+    }
+
     function aiModelLabel(value) {
       const model = normalizeAiModel(value);
       return AI_MODEL_OPTIONS.find(([id]) => id === model)?.[1] || model;
+    }
+
+    function imageModelLabel(value) {
+      const model = normalizeImageModel(value);
+      return IMAGE_MODEL_PRICES[model]?.label || model;
     }
 
     function normalizeYunmiAiModel(value) {
@@ -5953,16 +5989,21 @@
       return String(value || "").startsWith("gpt-");
     }
 
-    function estimateImageCostWon(imageCount, model = selectedAiModel()) {
+    function estimateImageCostWon(imageCount, model = selectedYeriImageModel()) {
       const count = normalizeImageCount(imageCount);
-      const perImageUsd = isOpenAiModel(model) ? OPENAI_IMAGE_PRICE_USD : GEMINI_IMAGE_PRICE_USD;
-      const provider = isOpenAiModel(model) ? "OpenAI" : "Gemini";
+      const imageModel = normalizeImageModel(model);
+      const price = IMAGE_MODEL_PRICES[imageModel] || IMAGE_MODEL_PRICES[DEFAULT_IMAGE_MODEL];
+      const perImageUsd = price.perImageUsd;
+      const provider = price.provider;
       const usd = count * perImageUsd;
       return {
         usd,
         won: wonFromUsd(usd),
         count,
         provider,
+        model: imageModel,
+        modelLabel: price.label,
+        perImageUsd,
       };
     }
 
@@ -6098,6 +6139,7 @@
       const target = $("#yeriCostEstimate");
       if (!target) return;
       const model = normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel());
+      const imageModel = normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel());
       const wordCount = Number($("#yeriWordCount")?.value || 1500);
       const imageCount = normalizeImageCount($("#yeriImageCount")?.value || 3);
       const fallback = yeriServerGenerationFallbackState(model);
@@ -6114,12 +6156,13 @@
         return;
       }
       const text = estimateTextCostWon(model, wordCount);
-      const images = estimateImageCostWon(imageCount, model);
+      const images = estimateImageCostWon(imageCount, imageModel);
       const totalWon = text.won + images.won;
       const gptMini = estimateTextCostWon("gpt-5.4-mini", wordCount);
       target.innerHTML = [
         `예상 원가 약 ${wonLabel(totalWon)}`,
-        `글 ${wonLabel(text.won)} + ${images.provider} 이미지 ${imageCount}장 ${wonLabel(images.won)}`,
+        `글 ${wonLabel(text.won)} + ${images.modelLabel} 이미지 ${imageCount}장 ${wonLabel(images.won)}`,
+        `이미지 단가: 장당 약 ${wonLabel(wonFromUsd(images.perImageUsd))}`,
         `환율 ${USD_KRW_RATE.toLocaleString("ko-KR")}원/USD (${USD_KRW_RATE_LABEL})`,
         `참고 GPT-5.4 mini 글 비용 ${wonLabel(gptMini.won)} 수준`,
       ].map(escapeHtml).join("<br>");
@@ -6533,6 +6576,18 @@
       `;
     }
 
+    function failureRecoveryHtml(failure, compact) {
+      if (compact) return "";
+      const paths = [
+        failure?.recovery_markdown_path ? `원고: ${failure.recovery_markdown_path}` : "",
+        failure?.recovery_manifest_path ? `복구 안내: ${failure.recovery_manifest_path}` : "",
+      ].filter(Boolean);
+      const imagePaths = Array.isArray(failure?.images?.local_paths) ? failure.images.local_paths.filter(Boolean).slice(0, 3) : [];
+      for (const imagePath of imagePaths) paths.push(`이미지: ${imagePath}`);
+      if (!paths.length) return "";
+      return `<span class="failure-explain-next">${escapeHtml(paths.join("\n"))}</span>`;
+    }
+
     function failureExplanationHtml(failure, options = {}) {
       const explanation = explainFailure(failure);
       const keyword = failureKeyword(failure);
@@ -6545,6 +6600,7 @@
       const costNote = explanation.costNote ? `<span class="failure-explain-next">${escapeHtml(explanation.costNote)}</span>` : "";
       const retryLine = options.compact ? "" : `<span>${escapeHtml(explanation.retry)}</span>`;
       const actionButtons = failureActionButtonsHtml(explanation, Boolean(options.compact));
+      const recovery = failureRecoveryHtml(failure, Boolean(options.compact));
       const technical = detail
         ? `<details class="failure-technical"><summary>기술 정보 보기</summary><code>${escapeHtml(detail)}</code></details>`
         : "";
@@ -6556,6 +6612,7 @@
           <span>${escapeHtml(explanation.action)}</span>
           ${retryLine}
           ${costNote}
+          ${recovery}
           <span class="failure-explain-next">${escapeHtml(explanation.next)}</span>
           ${actionButtons}
           ${technical}
@@ -6652,6 +6709,14 @@
         .sort((a, b) => String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || "")));
     }
 
+    function isLiveJobStatus(status) {
+      return ["queued", "generating", "ready_for_publish", "running"].includes(String(status || "").toLowerCase());
+    }
+
+    function hasLiveJobs() {
+      return (state.jobs || []).some((job) => isLiveJobStatus(job?.status));
+    }
+
     function jobLabelHtml(job) {
       if (job?.kind === "songi_research" && job.research_item) {
         return `<button class="link-button songi-job-link" type="button" data-songi-table-item="${escapeHtml(job.research_item.id)}">${escapeHtml(job.label)}</button>`;
@@ -6676,6 +6741,7 @@
     function defaultWebSettings() {
       return {
         ai_model: DEFAULT_AI_MODEL,
+        image_model: DEFAULT_IMAGE_MODEL,
         blog_profile: "",
         neighbor_messages: [],
       };
@@ -6685,6 +6751,7 @@
       const data = value && typeof value === "object" && !Array.isArray(value) ? value : {};
       return {
         ai_model: normalizeAiModel(data.ai_model),
+        image_model: normalizeImageModel(data.image_model),
         blog_profile: String(data.blog_profile || "").slice(0, 4000),
         neighbor_messages: sanitizeMessageList(data.neighbor_messages),
       };
@@ -6707,6 +6774,10 @@
 
     function selectedAiModel() {
       return normalizeAiModel(state.webSettings?.ai_model);
+    }
+
+    function selectedYeriImageModel() {
+      return normalizeImageModel(state.webSettings?.image_model);
     }
 
     function hasExplicitAiModelSetting() {
@@ -6742,6 +6813,20 @@
       }
     }
 
+    function renderImageModelSelect(selector, selected) {
+      const select = $(selector);
+      if (!select) return;
+      const current = normalizeImageModel(selected);
+      select.innerHTML = "";
+      for (const [id, label] of IMAGE_MODEL_OPTIONS) {
+        const option = document.createElement("option");
+        option.value = id;
+        option.textContent = label;
+        option.selected = id === current;
+        select.appendChild(option);
+      }
+    }
+
     function renderYunmiModelSelect(selector, selected = DEFAULT_AI_MODEL) {
       const select = $(selector);
       if (!select) return;
@@ -6759,6 +6844,7 @@
     function readWebSettingsForm() {
       return sanitizeWebSettings({
         ai_model: $("#settingsAiModel")?.value || selectedAiModel(),
+        image_model: selectedYeriImageModel(),
         blog_profile: $("#settingsBlogProfile")?.value || "",
         neighbor_messages: $("#settingsNeighborMessages")?.value || "",
       });
@@ -6769,6 +6855,7 @@
       const settings = state.webSettings || defaultWebSettings();
       renderAiModelSelect("#settingsAiModel", settings.ai_model);
       renderAiModelSelect("#yeriAiModel", settings.ai_model);
+      renderImageModelSelect("#yeriImageModel", settings.image_model);
       renderYunmiModelSelect("#yunmiAiModel", DEFAULT_AI_MODEL);
       if ($("#settingsBlogProfile")) $("#settingsBlogProfile").value = settings.blog_profile || "";
       if ($("#settingsNeighborMessages")) $("#settingsNeighborMessages").value = webNeighborMessages().join("\n");
@@ -7021,6 +7108,7 @@
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
+        cache: "no-store",
         ...options,
         headers: {
           "content-type": "application/json",
@@ -9167,6 +9255,7 @@
       const keywords = splitKeywords($("#yeriKeywords")?.value || "");
       const mode = $("#yeriMode")?.value || "publish";
       const model = normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel());
+      const imageModel = normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel());
       const wordCount = $("#yeriWordCount")?.value || "1500";
       const imageCount = normalizeImageCount($("#yeriImageCount")?.value || 3);
       const schedule = mode === "schedule"
@@ -9179,8 +9268,8 @@
         ${jobSummaryRowsHtml([
           ["키워드", keywords.length ? keywords.join(", ") : "입력 대기"],
           ["발행 방식", yeriModeLabel(mode)],
-          ["모델/분량", `${aiModelLabel(model)} · ${Number(wordCount || 0).toLocaleString("ko-KR")}자`],
-          ["이미지", `${imageCount}장`],
+          ["글쓰기", `${aiModelLabel(model)} · ${Number(wordCount || 0).toLocaleString("ko-KR")}자`],
+          ["이미지", `${imageModelLabel(imageModel)} · ${imageCount}장`],
           ["예약", schedule],
           ["CTA", cta],
           ["AI 연결", aiState.detail || aiState.status || "확인 중"],
@@ -11991,6 +12080,41 @@
       state.agentWatchUntil = 0;
     }
 
+    function stopJobStatusWatch() {
+      if (state.jobWatchTimer) {
+        clearInterval(state.jobWatchTimer);
+        state.jobWatchTimer = null;
+      }
+    }
+
+    async function refreshJobsOnly() {
+      if (!state.token) return;
+      const jobs = await api("/api/jobs");
+      state.jobs = jobs.jobs || [];
+      renderAll();
+      if (!hasLiveJobs()) stopJobStatusWatch();
+    }
+
+    function startJobStatusWatch() {
+      if (!state.token || state.jobWatchTimer) return;
+      const tick = async () => {
+        if (!state.token) {
+          stopJobStatusWatch();
+          return;
+        }
+        try {
+          await refreshJobsOnly();
+        } catch (_error) {}
+      };
+      state.jobWatchTimer = setInterval(tick, 3000);
+      setTimeout(tick, 1200);
+    }
+
+    function syncJobStatusWatch() {
+      if (hasLiveJobs()) startJobStatusWatch();
+      else stopJobStatusWatch();
+    }
+
     function startAgentStatusWatch(durationMs = 60000) {
       state.agentWatchUntil = Math.max(Number(state.agentWatchUntil || 0), Date.now() + durationMs);
       if (state.agentWatchTimer) return;
@@ -12015,6 +12139,7 @@
       ]);
       state.agent = agent;
       state.jobs = jobs.jobs || [];
+      syncJobStatusWatch();
       try {
         const currentVersion = state.agent?.agent?.version || "";
         const version = await api(`/api/version?current=${encodeURIComponent(currentVersion)}&platform=${encodeURIComponent(state.platform)}`);
@@ -12413,6 +12538,7 @@
         if (kind === "yunmi_script" && job?.id) state.lastYunmiJobId = job.id;
         showToast(job?.status === "done" ? "맡긴 일이 완료되었습니다." : "일 요청이 생성되었습니다.");
         await refreshAll();
+        if (job && isLiveJobStatus(job.status)) startJobStatusWatch();
         if (!isWebModuleJobKind(kind)) startAgentStatusWatch(120000);
         return job;
       } catch (error) {
@@ -12879,6 +13005,7 @@
           keywords,
           mode,
           ai_model: normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel()),
+          image_model: normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel()),
           word_count: Number($("#yeriWordCount")?.value || 1500),
           image_count: normalizeImageCount($("#yeriImageCount")?.value || 3),
           category: nonEmpty($("#yeriCategory")?.value),
@@ -13462,6 +13589,7 @@
         await api("/api/auth/logout", { method: "POST", body: "{}" });
       } catch (_error) {}
       stopAgentStatusWatch();
+      stopJobStatusWatch();
       forgetSessionToken();
       state.token = "";
       state.requiredUpdatePromptKey = "";
@@ -13474,6 +13602,14 @@
 
     $("#refreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("갱신되었습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
     $("#jobRefreshBtn").addEventListener("click", () => refreshAll().then(() => showToast("일 맡긴 기록을 갱신했습니다.")).catch(() => showToast("갱신에 실패했습니다.")));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.token) {
+        refreshAll().catch(() => {});
+      }
+    });
+    window.addEventListener("focus", () => {
+      if (state.token) refreshAll().catch(() => {});
+    });
     $("#reportRefreshBtn").addEventListener("click", () => refreshReports().then(() => {
       renderReportsList();
       showToast("문의/피드백 목록을 갱신했습니다.");
@@ -13560,6 +13696,13 @@
         ai_model: $("#yeriAiModel").value,
       });
       renderAiModelSelect("#settingsAiModel", current.ai_model);
+      renderAll();
+    });
+    $("#yeriImageModel")?.addEventListener("change", () => {
+      saveWebSettings({
+        ...(state.webSettings || defaultWebSettings()),
+        image_model: $("#yeriImageModel").value,
+      });
       renderAll();
     });
     ["#yeriWordCount", "#yeriImageCount"].forEach((selector) => {

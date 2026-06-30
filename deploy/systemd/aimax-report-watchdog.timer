@@ -1,0 +1,12 @@
+[Unit]
+Description=Run AIMAX report watchdog every 30 minutes
+
+[Timer]
+OnBootSec=5min
+OnActiveSec=2min
+OnUnitActiveSec=30min
+Persistent=true
+Unit=aimax-report-watchdog.service
+
+[Install]
+WantedBy=timers.target
