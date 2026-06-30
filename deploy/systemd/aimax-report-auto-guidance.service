@@ -4,4 +4,4 @@ Description=AIMAX user-facing report guidance updater
 [Service]
 Type=oneshot
 WorkingDirectory=/home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management
-ExecStart=/usr/bin/python3 /home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management/scripts/aimax_report_auto_guidance.py --min-age-minutes 15 --lookback-days 14
+ExecStart=/usr/bin/python3 /home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management/scripts/aimax_report_auto_guidance.py --min-age-minutes 5 --lookback-days 14
