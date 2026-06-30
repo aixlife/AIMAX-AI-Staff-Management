@@ -732,6 +732,7 @@
           <div id="bulkResult" class="notice warn">아직 대량 생성 결과가 없습니다.</div>
           <div class="actions">
             <button id="copyBulkGuideBtn" class="btn" type="button" disabled>전체 안내문 복사</button>
+            <button id="sendBulkGuideEmailsBtn" class="btn primary" type="button" disabled>전체 안내문 메일 발송</button>
             <button id="clearBulkBtn" class="btn" type="button">입력 지우기</button>
           </div>
         </section>
@@ -985,6 +986,7 @@
       lastGuide: "",
       lastGuideEmail: null,
       lastBulkGuide: "",
+      lastBulkGuideEmails: [],
       cafe24Orders: [],
       cafe24Stats: {},
       lastCafe24Guides: [],
@@ -2208,6 +2210,10 @@
     function renderBatchResult(result) {
       const rows = result.users || [];
       const guideBlocks = [];
+      state.lastBulkGuideEmails = rows.map((row) => ({
+        email: row.user?.email || "",
+        name: row.user?.name || "",
+      })).filter((row) => row.email);
       const summary = rows.map((row) => {
         const user = row.user || {};
         const password = row.temporary_password || "";
@@ -2224,6 +2230,36 @@
         "임시 비밀번호는 이 응답에서만 확인할 수 있습니다.",
       ].join("\n");
       $("#copyBulkGuideBtn").disabled = !state.lastBulkGuide;
+      $("#sendBulkGuideEmailsBtn").disabled = !state.lastBulkGuideEmails.length;
+    }
+
+    async function sendBulkGuideEmails() {
+      if (!state.lastBulkGuideEmails.length) return;
+      const button = $("#sendBulkGuideEmailsBtn");
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = "발송 중";
+      try {
+        const result = await api("/api/admin/users/send-guides-batch", {
+          method: "POST",
+          body: JSON.stringify({ users: state.lastBulkGuideEmails }),
+        });
+        const errors = result.errors || [];
+        $("#bulkResult").classList.toggle("warn", Boolean(errors.length));
+        $("#bulkResult").textContent = [
+          `메일 발송 완료: ${result.sent_count || 0}건`,
+          errors.length ? `실패: ${errors.length}건` : "",
+          ...errors.slice(0, 8).map((item) => `${item.email || "-"}: ${statusLabels[item.error] || item.error}`),
+        ].filter(Boolean).join("\n");
+        if (!errors.length) state.lastBulkGuideEmails = [];
+        await loadUsers();
+      } catch (error) {
+        $("#bulkResult").classList.add("warn");
+        $("#bulkResult").textContent = apiError(error);
+      } finally {
+        button.textContent = original;
+        button.disabled = !state.lastBulkGuideEmails.length;
+      }
     }
 
     async function loadCatalog() {
@@ -2685,6 +2721,7 @@
         $("#bulkResult").classList.add("warn");
         $("#bulkResult").textContent = apiError(error);
         $("#copyBulkGuideBtn").disabled = true;
+        $("#sendBulkGuideEmailsBtn").disabled = true;
       }
     });
 
@@ -2696,6 +2733,7 @@
     });
 
     $("#sendGuideEmailBtn").addEventListener("click", () => sendGuideEmail());
+    $("#sendBulkGuideEmailsBtn").addEventListener("click", () => sendBulkGuideEmails());
 
     $("#copyBulkGuideBtn").addEventListener("click", async () => {
       if (!state.lastBulkGuide) return;
@@ -2709,7 +2747,9 @@
       $("#bulkResult").classList.add("warn");
       $("#bulkResult").textContent = "아직 대량 생성 결과가 없습니다.";
       state.lastBulkGuide = "";
+      state.lastBulkGuideEmails = [];
       $("#copyBulkGuideBtn").disabled = true;
+      $("#sendBulkGuideEmailsBtn").disabled = true;
     });
 
     $("#openUserAppBtn").addEventListener("click", () => window.open("/app", "_blank", "noopener"));

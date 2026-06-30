@@ -72,6 +72,19 @@ GUIDANCE: dict[str, Guidance] = {
             "확인한 뒤 이미지 1장으로 새 작업 1건만 테스트해주세요. 급하면 이미지 0장으로 발행을 진행할 수 있습니다."
         ),
     ),
+    "image_generation_failed": Guidance(
+        category="image_generation_failed",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message=(
+            "본문은 생성됐지만 이미지 생성 또는 네이버 이미지 첨부가 완료되지 않아 작업이 중단되었습니다. "
+            "생성된 원고는 로컬 실행기의 generated 폴더에 보존됩니다."
+        ),
+        next_update_message=(
+            "이미지 0장 또는 1장으로 새 작업 1건만 다시 시도해주세요. 같은 문제가 반복되면 이미지 모델/API 권한을 확인하고, "
+            "generated 폴더의 원고와 이미지 파일을 수동으로 붙여넣을 수 있습니다."
+        ),
+    ),
     "api_key_missing": Guidance(
         category="api_key_missing",
         status="waiting_user",
@@ -106,6 +119,13 @@ GUIDANCE: dict[str, Guidance] = {
         status_label="사용자 확인 필요",
         public_message="선택한 AI 모델을 현재 계정에서 사용할 수 없거나 모델명이 맞지 않아 작업이 중단되었습니다.",
         next_update_message="설정 > AI/API 연결에서 AIMAX 기본 모델 또는 현재 계정에서 사용 가능한 모델로 바꾼 뒤 새 작업 1건만 다시 시도해주세요.",
+    ),
+    "organization_verification_required": Guidance(
+        category="organization_verification_required",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message="OpenAI 이미지 모델 사용에 필요한 조직 인증 또는 모델 권한이 완료되지 않아 이미지 생성이 중단되었습니다.",
+        next_update_message="OpenAI 개발자 콘솔에서 조직 인증과 이미지 모델 사용 권한을 확인한 뒤, 이미지 1장짜리 새 작업 1건만 다시 시도해주세요. 급하면 이미지 0장으로 먼저 글쓰기만 진행할 수 있습니다.",
     ),
     "provider_transient": Guidance(
         category="provider_transient",
@@ -443,6 +463,8 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
         ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
         ("mac_gatekeeper", r"macos|개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응"),
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
+        ("image_generation_failed", r"image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted"),
+        ("organization_verification_required", r"organization_verification_required|organization verification|verify your organization|must be verified|조직 인증"),
         ("model_not_found", r"model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가"),
         ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
     ]
@@ -453,10 +475,12 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
     rules: list[tuple[str, str]] = [
         ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
+        ("image_generation_failed", r"image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted"),
         ("api_key_missing", r"api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안"),
         ("api_key_invalid", r"api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized"),
         ("quota_exceeded", r"quota_exceeded|insufficient_quota|billing|payment|credit|balance|크레딧|결제|요금제 한도|한도 초과"),
         ("rate_limited", r"rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일 한도"),
+        ("organization_verification_required", r"organization_verification_required|organization verification|verify your organization|must be verified|조직 인증"),
         ("model_not_found", r"model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가"),
         ("provider_transient", r"provider_transient|temporar|unavailable|overloaded|일시적 오류|잠시 후"),
         ("web_login_failed", r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지"),
@@ -472,9 +496,11 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
 
 
 def should_touch(row: dict[str, Any], guidance: Guidance, min_age: timedelta) -> bool:
-    if str(row.get("status") or "") in {"done", "waiting_user"}:
+    if str(row.get("status") or "") == "done":
         return False
     if str(row.get("auto_guidance_category") or "") == guidance.category:
+        return False
+    if str(row.get("status") or "") == "waiting_user" and not str(row.get("auto_guidance_category") or ""):
         return False
     updated_at = parse_time(str(row.get("status_updated_at") or row.get("stored_at") or ""))
     if updated_at and datetime.now(UTC) - updated_at < min_age:
@@ -551,7 +577,7 @@ def main(argv: list[str]) -> int:
                         "next_status": expected_ticket_status,
                     }
                 )
-        if status not in {"new", "reviewing", "working"}:
+        if status not in {"new", "reviewing", "working", "waiting_user"}:
             continue
         path = report_path(data_dir, row)
         detail = None

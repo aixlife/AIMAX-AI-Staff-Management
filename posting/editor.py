@@ -1,7 +1,6 @@
-Total output lines: 1503
-
 import os
 import re
+import shutil
 import time
 import pyperclip
 from urllib.parse import quote
@@ -23,6 +22,7 @@ from content.openai_image import generate_image as generate_openai_image
 from utils.delays import wait_short, wait_medium, wait_long
 from utils.logger import get_logger
 from paths import DEBUG_DIR as _DEBUG_DIR
+from paths import GENERATED_DIR
 from auth.naver_login import login_on_current_nid_page
 
 logger = get_logger(__name__)
@@ -505,7 +505,549 @@ def _toolbar_button_is_active(button):
         class_values = [
             str(value or "").lower()
             for value in [
-                button.get_at…5281 tokens truncated…               human_type(driver, part_text)
+                button.get_attribute("class"),
+                button.find_element(By.XPATH, "./..").get_attribute("class"),
+            ]
+        ]
+        tokens = set()
+        for class_value in class_values:
+            tokens.update(token for token in re.split(r"\s+", class_value) if token)
+        active_tokens = {
+            "active",
+            "selected",
+            "checked",
+            "is-active",
+            "is-selected",
+            "se-is-active",
+            "se-selected",
+            "se-is-selected",
+            "se-toolbar-item-active",
+            "se-toolbar-item-selected",
+        }
+        if tokens.intersection(active_tokens):
+            return True
+        return any(token.endswith("--active") or token.endswith("_active") for token in tokens)
+    except Exception:
+        return False
+
+
+def _focus_content_area(driver):
+    """에디터 본문 영역에 확실하게 포커스를 줍니다."""
+    logger.info("본문 영역 포커스 시도...")
+    content_selectors = [
+        ".se-content [contenteditable='true']",
+        "[contenteditable='true'].se-content",
+        ".se-text-paragraph [contenteditable='true']",
+        ".se-main-container [contenteditable='true']",
+        "[contenteditable='true']",
+    ]
+    for sel in content_selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el.is_displayed():
+                human_click(driver, el)
+                driver.execute_script("arguments[0].focus();", el)
+                wait_short()
+                logger.info(f"본문 영역 포커스 성공 ({sel})")
+                return el
+        except Exception:
+            continue
+    logger.warning("본문 영역 포커스 실패")
+    return None
+
+
+def editor_visible_text_count(driver):
+    """현재 Smart Editor 본문에 실제로 들어간 텍스트 글자 수를 센다."""
+    if driver is None:
+        return 0
+    try:
+        ensure_editor_context(driver, timeout=5)
+    except Exception:
+        pass
+    try:
+        return int(driver.execute_script(
+            """
+            const roots = Array.from(document.querySelectorAll(
+              '.se-main-container, .se-content, .se-section-text, body'
+            )).filter(Boolean);
+            const root = roots[0] || document.body || document;
+            const clone = root.cloneNode(true);
+            clone.querySelectorAll(
+              'script, style, button, input, textarea, select, option, [contenteditable="false"], .se-toolbar, .se-popup'
+            ).forEach((node) => node.remove());
+            const text = (clone.innerText || clone.textContent || '').replace(/\\s+/g, '');
+            return text.length;
+            """
+        ) or 0)
+    except Exception as e:
+        logger.debug(f"에디터 본문 글자 수 확인 실패: {e}")
+        return 0
+
+
+def _reset_inline_formatting(driver):
+    """이전 글쓰기 상태 등으로 인해 볼드, 취소선, 밑줄 등이 활성화되어 있으면 입력 전에 명시적으로 끕니다.
+    꺼져 있는 서식을 역활성화하여 켜는 부작용을 막기 위해, 실제 active 상태인 서식만 골라서 비활성화합니다.
+    """
+    logger.info("인라인 서식(볼드, 취소선, 밑줄 등) 상태 검사 및 정밀 초기화 시작...")
+
+    # 툴바 상태 동기화를 위해 본문 영역에 확실하게 포커스를 먼저 부여합니다.
+    _focus_content_area(driver)
+    time.sleep(0.5)
+
+    targets = [
+        ("볼드", [BOLD_BUTTON, "button[class*='bold']", ".se-toolbar-item-bold button"]),
+        ("취소선", ["button[class*='strikethrough']", ".se-toolbar-item-strikethrough button", ".se-strikethrough-toolbar-button"]),
+        ("밑줄", ["button[class*='underline']", ".se-toolbar-item-underline button", ".se-underline-toolbar-button"]),
+        ("기울임", ["button[class*='italic']", ".se-toolbar-item-italic button", ".se-italic-toolbar-button"]),
+    ]
+
+    for name, selectors in targets:
+        button = None
+        for sel in selectors:
+            try:
+                el = driver.find_element(By.CSS_SELECTOR, sel)
+                if el.is_displayed():
+                    button = el
+                    break
+            except Exception:
+                continue
+
+        if button:
+            try:
+                # 디버그 로그 추가
+                parent_html = ""
+                try:
+                    parent_html = button.find_element(By.XPATH, "./..").get_attribute("outerHTML")
+                except Exception:
+                    pass
+                logger.info(f"[디버그] {name} 버튼 HTML: {button.get_attribute('outerHTML')}")
+                logger.info(f"[디버그] {name} 버튼 부모 HTML: {parent_html[:200]}")
+
+                is_active = _toolbar_button_is_active(button)
+                logger.info(f"[서식검사] {name} 버튼 감지됨 (활성화 상태: {is_active})")
+                if is_active:
+                    logger.info(f"[서식초기화] {name} 서식이 활성화되어 있어 클릭하여 비활성화 처리합니다.")
+                    driver.execute_script("arguments[0].click();", button)
+                    wait_short()
+            except Exception as e:
+                logger.debug(f"{name} 서식 상태 조회/비활성화 실패: {e}")
+
+
+def input_title(driver, title):
+    """제목 입력 (먼저 제목 컨테이너를 클릭하여 React의 동적 contenteditable 생성을 유도한 뒤, 실제 에디터 알맹이에 100% 주입 보장)"""
+    title = str(title or "").strip()
+    if not title:
+        raise RuntimeError("제목이 비어 있어 Smart Editor에 입력할 수 없습니다.")
+    logger.info(f"제목 입력 시도: {title}")
+
+    # 방어: 작성중 글 팝업이 아직 떠 있으면 Cmd/Ctrl+A(전체선택)가 허공으로 날아가
+    # 제목이 조용히 비워진다. 제목 입력 직전 한 번 더 정리한다.
+    if _draft_popup_visible(driver):
+        logger.info("제목 입력 직전 작성중 글 팝업 잔존 — 재정리 시도")
+        _dismiss_draft_popup(driver, timeout=5)
+        wait_short()
+
+    # 1. 제목 영역의 껍데기(컨테이너)를 먼저 확실히 클릭하여 React 편집 모드를 동적 활성화합니다.
+    title_container_selectors = [
+        ".se-section-documentTitle",
+        ".se-documentTitle",
+        ".se-title-text",
+        TITLE_AREA,
+    ]
+
+    container_element = None
+    for sel in title_container_selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el.is_displayed():
+                container_element = el
+                logger.info(f"제목 컨테이너 매칭 성공: {sel}")
+                break
+        except Exception:
+            continue
+
+    if container_element:
+        try:
+            human_click(driver, container_element)
+            logger.info("제목 컨테이너 클릭 완료 (React contenteditable 활성화 유도)")
+            time.sleep(0.5) # React가 DOM을 업데이트하여 진짜 입력 필드를 생성할 시간 부여
+        except Exception as e:
+            logger.warning(f"제목 컨테이너 클릭 실패: {e}")
+
+    # 2. 클릭 후 동적으로 렌더링된 진짜 제목 문단(p)을 우선 탐색한다.
+    # Smart Editor는 빈 span.__se-node 안에 placeholder를 함께 두는 경우가 있어
+    # span을 먼저 잡으면 입력/검증이 빈 값으로 남을 수 있다.
+    title_editable_selectors = [
+        ".se-title-text p.se-text-paragraph",
+        ".se-documentTitle p",
+        ".se-title-text span.__se-node",
+        ".se-documentTitle span.__se-node",
+        ".se-documentTitle [contenteditable='true']",
+        ".se-section-documentTitle [contenteditable='true']",
+        "[contenteditable='true'].se-title-text",
+        ".se-title-text [contenteditable='true']",
+        "[data-a11y-title='제목'] [contenteditable='true']",
+        "h3.se-title-text",
+        ".se-title-text",
+        TITLE_AREA,
+    ]
+
+    title_element = None
+    for sel in title_editable_selectors:
+        try:
+            el = driver.find_element(By.CSS_SELECTOR, sel)
+            if el.is_displayed():
+                title_element = el
+                logger.info(f"실제 제목 입력 엘리먼트 매칭 성공: {sel}")
+                break
+        except Exception:
+            continue
+
+    if not title_element:
+        title_element = driver.find_element(By.CSS_SELECTOR, TITLE_AREA)
+        logger.warning(f"적합한 제목 입력 엘리먼트를 찾지 못해 기본 영역({TITLE_AREA})을 타겟팅합니다.")
+
+    try:
+        logger.info(f"[디버그] 매칭된 제목 엘리먼트 HTML: {title_element.get_attribute('outerHTML')}")
+    except Exception as e:
+        logger.debug(f"제목 엘리먼트 HTML 가져오기 실패: {e}")
+
+    ctrl_key = Keys.CONTROL if os.name == "nt" else Keys.META
+
+    def _fresh_title_element():
+        for selector in title_editable_selectors:
+            try:
+                el = driver.find_element(By.CSS_SELECTOR, selector)
+                if el.is_displayed():
+                    return el
+            except Exception:
+                continue
+        return title_element
+
+    def _click_title_target():
+        fresh = _fresh_title_element()
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", fresh)
+        try:
+            ActionChains(driver).move_to_element(fresh).click().perform()
+        except Exception:
+            driver.execute_script("arguments[0].click();", fresh)
+        # 빈 제목 <p> 는 높이가 0이라 클릭만으로 캐럿이 안 들어가는 경우가 있어
+        # JS 로 포커스를 주고 캐럿을 내용 끝으로 옮겨 키 입력이 확실히 꽂히게 한다.
+        try:
+            driver.execute_script(
+                """
+                const el = arguments[0];
+                el.focus();
+                const sel = window.getSelection();
+                if (sel) {
+                    const range = document.createRange();
+                    range.selectNodeContents(el);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+                """,
+                fresh,
+            )
+        except Exception:
+            pass
+        wait_short()
+        return fresh
+
+    def _js_insert_title():
+        """키 입력이 에디터에 안 꽂힐 때의 폴백 — contenteditable 에 직접 execCommand 로 주입."""
+        fresh = _fresh_title_element()
+        driver.execute_script(
+            """
+            const el = arguments[0], text = arguments[1];
+            el.focus();
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            // 기존 내용 비우고 텍스트 삽입 (React/SmartEditor input 이벤트 동반)
+            document.execCommand('selectAll', false, null);
+            const ok = document.execCommand('insertText', false, text);
+            if (!ok) {
+                el.textContent = text;
+            }
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('keyup', { bubbles: true }));
+            """,
+            fresh,
+            title,
+        )
+        wait_short()
+
+    def _keyboard_paste_title():
+        pyperclip.copy(title)
+        _click_title_target()
+        actions = ActionChains(driver)
+        actions.key_down(ctrl_key).send_keys("a").key_up(ctrl_key)
+        actions.send_keys(Keys.BACKSPACE)
+        actions.key_down(ctrl_key).send_keys("v").key_up(ctrl_key)
+        actions.perform()
+        wait_short()
+
+    def _keyboard_type_title():
+        _click_title_target()
+        actions = ActionChains(driver)
+        actions.key_down(ctrl_key).send_keys("a").key_up(ctrl_key)
+        actions.send_keys(Keys.BACKSPACE)
+        actions.perform()
+        wait_short()
+        human_type(driver, title, avg_delay=0.015)
+        wait_short()
+
+    # 입력 전략 순서 (v1.0.44 의 '키보드=실사용자 입력' 결정을 유지):
+    #   1) 클립보드 붙여넣기 → 2) 직접 타이핑 → 3) JS execCommand 주입(폴백)
+    # 키보드 입력이 되는 환경은 기존 동작 그대로 유지하고, 빈 제목 <p>(높이 0)에 키 이벤트가
+    # 안 꽂히는 환경(Chrome 148 등)에서만 JS 주입이 구제한다. JS 주입 뒤에도 본문은
+    # input_content 의 본문 포커스 클릭으로 진입하므로 '본문이 제목에 써지는' 문제는 발생하지 않는다.
+    actual = ""
+    for attempt in range(1, 4):
+        try:
+            _keyboard_paste_title()
+            actual = _read_title_text(driver)
+            logger.info(f"제목 입력 검증 결과(붙여넣기 {attempt}/3): '{actual}'")
+            if actual and actual.strip():
+                break
+        except Exception as e:
+            logger.debug(f"클립보드 제목 붙여넣기 실패({attempt}/3): {e}")
+
+    if not actual or actual.strip() == "":
+        for attempt in range(1, 3):
+            try:
+                _keyboard_type_title()
+                actual = _read_title_text(driver)
+                logger.info(f"제목 입력 검증 결과(직접 타이핑 {attempt}/2): '{actual}'")
+                if actual and actual.strip():
+                    break
+            except Exception as e:
+                logger.debug(f"직접 제목 타이핑 실패({attempt}/2): {e}")
+
+    # 키보드 입력이 에디터에 닿지 않는 환경 대비 JS 직접 주입 폴백 (최후 수단)
+    if not actual or actual.strip() == "":
+        for attempt in range(1, 3):
+            try:
+                _click_title_target()
+                _js_insert_title()
+                actual = _read_title_text(driver)
+                logger.info(f"제목 입력 검증 결과(JS 주입 폴백 {attempt}/2): '{actual}'")
+                if actual and actual.strip():
+                    break
+            except Exception as e:
+                logger.debug(f"JS 제목 주입 실패({attempt}/2): {e}")
+
+    # 제목이 성공했을 때만 Enter로 본문으로 이동한다.
+    if actual and actual.strip():
+        try:
+            ActionChains(driver).send_keys(Keys.ENTER).perform()
+            wait_short()
+        except Exception as e:
+            logger.debug(f"제목 이후 본문 이동 Enter 실패: {e}")
+
+    # 최종 안전 차단 장치: 제목이 제대로 입력되지 않은 경우 저장을 진행하지 않고 예외 발생
+    if not actual or actual.strip() == "":
+        raise RuntimeError(f"Smart Editor 제목 입력에 실패했습니다. (입력 목표값: {title})")
+
+    logger.info(f"제목 입력 최종 성공 확인: {actual[:80]}")
+
+
+def _read_title_text(driver):
+    """Smart Editor 제목 영역의 현재 텍스트를 읽는다 (플레이스홀더 텍스트는 원천 제외)."""
+    try:
+        return driver.execute_script("""
+            const selectors = [
+              '.se-title-text p.se-text-paragraph',
+              '.se-documentTitle p',
+              '.se-title-text span.__se-node',
+              '.se-documentTitle span.__se-node',
+              '.se-documentTitle [contenteditable="true"]',
+              '.se-section-documentTitle [contenteditable="true"]',
+              '[contenteditable="true"].se-title-text',
+              '.se-title-text [contenteditable="true"]',
+              '[data-a11y-title="제목"] [contenteditable="true"]',
+              'textarea[placeholder*="제목"]',
+              'input[placeholder*="제목"]'
+            ];
+            for (const selector of selectors) {
+              for (const el of document.querySelectorAll(selector)) {
+                if (el.classList.contains('se-placeholder') || el.classList.contains('is-placeholder')) {
+                  continue;
+                }
+                const clone = el.cloneNode(true);
+                const placeholders = clone.querySelectorAll('.se-placeholder, [class*="placeholder"]');
+                placeholders.forEach(p => p.remove());
+                const value = (clone.value || clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim();
+                // 순수 플레이스홀더 문자열 자체이거나 빈 값이면 패스
+                if (value && value !== '제목' && value !== 'Title') return value;
+              }
+            }
+            const editable = Array.from(document.querySelectorAll('[contenteditable="true"]'));
+            for (const el of editable) {
+              const label = `${el.getAttribute('aria-label') || ''} ${el.getAttribute('data-placeholder') || ''} ${el.className || ''}`;
+              if (!/제목|title/i.test(label)) continue;
+              const clone = el.cloneNode(true);
+              const placeholders = clone.querySelectorAll('.se-placeholder, [class*="placeholder"]');
+              placeholders.forEach(p => p.remove());
+              const value = (clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim();
+              if (value && value !== '제목' && value !== 'Title') return value;
+            }
+            return '';
+        """) or ""
+    except Exception:
+        return ""
+
+
+def _dismiss_editor_popup(driver):
+    """에디터 팝업 오버레이(.se-popup-dim) 가 떠 있으면 닫기"""
+    try:
+        overlays = driver.find_elements(By.CSS_SELECTOR, ".se-popup-dim")
+        visible = [el for el in overlays if el.is_displayed()]
+        if not visible:
+            return
+
+        logger.info(f"팝업 오버레이 감지 ({len(visible)}개) - 닫는 중...")
+
+        # 1) 팝업 내 닫기/취소 버튼 클릭
+        for cancel_sel in [
+            ".se-popup-button-cancel",
+            ".se-popup-footer button:first-child",
+            "button[data-action='cancel']",
+            ".se-popup button[class*='cancel']",
+            ".se-popup button[class*='close']",
+            ".se-popup .se-close-button",
+        ]:
+            try:
+                btn = driver.find_element(By.CSS_SELECTOR, cancel_sel)
+                if btn.is_displayed():
+                    driver.execute_script("arguments[0].click();", btn)
+                    wait_short()
+                    logger.info(f"팝업 닫기 성공 ({cancel_sel})")
+                    return
+            except Exception:
+                continue
+
+        # 2) Escape 키
+        ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+        wait_short()
+
+        # 3) JS로 강제 숨김 (최후 수단)
+        for el in visible:
+            try:
+                driver.execute_script("arguments[0].style.display='none';", el)
+            except Exception:
+                pass
+        logger.info("팝업 JS 강제 숨김 처리")
+    except Exception as e:
+        logger.debug(f"팝업 닫기 시도 중 오류: {e}")
+
+
+def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model=""):
+    """파싱된 콘텐츠 리스트를 에디터에 입력
+
+    content_list 형식:
+      [('quote', text), ('image', prompt), ('text', [(type, text), ...]), ...]
+    """
+    # 혹시 남아있는 팝업 먼저 제거
+    _dismiss_editor_popup(driver)
+    _reset_inline_formatting(driver)
+
+    image_attempted = 0
+    image_generated = 0
+    image_inserted = 0
+    image_providers = {"gemini": 0, "openai": 0}
+    image_models = {}
+    image_failures = []
+    image_local_paths = []
+    image_items = []
+    for i, (content_type, content_data) in enumerate(content_list):
+        if content_type == 'text':
+            _input_text_block(driver, content_data)
+        elif content_type == 'quote':
+            _input_quotation(driver, content_data)
+        elif content_type == 'image':
+            image_attempted += 1
+            image_result = _input_image(
+                driver,
+                content_data,
+                api_key,
+                image_provider=image_provider,
+                fallback_api_key=fallback_api_key,
+                image_model=image_model,
+            ) or {}
+            if image_result.get("generated"):
+                image_generated += 1
+                provider = image_result.get("provider")
+                if provider in image_providers:
+                    image_providers[provider] += 1
+                model = str(image_result.get("model") or "").strip()
+                if model:
+                    image_models[model] = image_models.get(model, 0) + 1
+            if image_result.get("inserted"):
+                image_inserted += 1
+            local_path = str(image_result.get("local_image_path") or "").strip()
+            if local_path:
+                image_local_paths.append(local_path)
+            image_items.append({
+                "index": image_attempted,
+                "prompt": str(content_data or "").strip()[:500],
+                "provider": str(image_result.get("provider") or "").strip(),
+                "model": str(image_result.get("model") or image_model or "").strip(),
+                "generated": bool(image_result.get("generated")),
+                "inserted": bool(image_result.get("inserted")),
+                "local_image_path": local_path,
+                "stage": str(image_result.get("stage") or "").strip(),
+                "error_code": str(image_result.get("error_code") or "").strip(),
+            })
+            if image_result.get("failure"):
+                image_failures.append(image_result.get("failure"))
+                if not image_result.get("inserted"):
+                    _focus_content_area(driver)
+
+        # 블록 사이에 2줄 줄바꿈 (마지막 블록 제외)
+        if i < len(content_list) - 1:
+            actions = ActionChains(driver)
+            actions.send_keys(Keys.ENTER)
+            actions.send_keys(Keys.ENTER)
+            actions.perform()
+            wait_short()
+
+    return {
+        "image_attempted": image_attempted,
+        "image_generated": image_generated,
+        "image_inserted": image_inserted,
+        "image_providers": image_providers,
+        "image_models": image_models,
+        "image_failures": image_failures,
+        "local_image_paths": image_local_paths,
+        "image_items": image_items,
+    }
+
+
+def _input_text_block(driver, parts):
+    """텍스트 블록 입력 (볼드 처리 + 링크 + 문단 구분 포함)"""
+    # 붙여넣기 단축키는 OS별로 다르다 (Windows: Ctrl, macOS: Cmd/Meta)
+    ctrl_key = Keys.CONTROL if os.name == "nt" else Keys.META
+
+    # 블록 사이 빈 줄은 input_content 의 블록 간 Enter(2회)로 일괄 관리한다.
+    # 텍스트 블록 앞뒤에 붙은 순수 줄바꿈 파트('\n', '\n\n')는 빈 줄을 중복으로 쌓아
+    # 글이 과도하게 벌어지게 하므로 블록 경계의 줄바꿈만 제거한다(블록 내부 줄바꿈은 보존).
+    def _is_newline_only(part):
+        return part[0] == 'text' and (part[1] or '').strip('\n') == ''
+
+    parts = list(parts)
+    while parts and _is_newline_only(parts[0]):
+        parts.pop(0)
+    while parts and _is_newline_only(parts[-1]):
+        parts.pop()
+
+    for part_type, part_text in parts:
+        if part_type == 'bold':
+            if not _editor_bold_enabled():
+                human_type(driver, part_text)
                 wait_short()
                 continue
             # 팝업 정리는 input_content 진입 시 1회 수행됨 — 볼드 파트마다 반복하지 않는다.
@@ -619,12 +1161,61 @@ def _input_quotation(driver, text):
 
 def _generate_image_with_provider(prompt, api_key, image_provider, image_model=""):
     if image_provider == "openai":
-        return generate_openai_image(prompt, api_key, model=image_model), "openai"
-    return generate_gemini_image(prompt, api_key, model=image_model), "gemini"
+        path = generate_openai_image(prompt, api_key, model=image_model)
+        return path, "openai", getattr(generate_openai_image, "last_error", {}) or {}
+    path = generate_gemini_image(prompt, api_key, model=image_model)
+    return path, "gemini", getattr(generate_gemini_image, "last_error", {}) or {}
+
+
+def _normalize_generated_image_result(result, default_provider):
+    if isinstance(result, tuple):
+        if len(result) >= 3:
+            return result[0], result[1] or default_provider, result[2] if isinstance(result[2], dict) else {}
+        if len(result) >= 2:
+            return result[0], result[1] or default_provider, {}
+        if len(result) == 1:
+            return result[0], default_provider, {}
+    return result, default_provider, {}
+
+
+def _preserve_generated_image(image_path, provider="", image_model=""):
+    """Store generated images outside temp so editor upload failures can be retried manually."""
+    if not image_path:
+        return ""
+    try:
+        src = os.path.abspath(image_path)
+        if not os.path.exists(src):
+            return ""
+        os.makedirs(GENERATED_DIR, exist_ok=True)
+        ext = os.path.splitext(src)[1].lower() or ".png"
+        safe_provider = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(provider or "image")).strip("-") or "image"
+        safe_model = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(image_model or "")).strip("-")
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        suffix = f"-{safe_model}" if safe_model else ""
+        base = f"{stamp}-{safe_provider}{suffix}-{int(time.time() * 1000)}"
+        dest = os.path.join(str(GENERATED_DIR), f"{base}{ext}")
+        counter = 1
+        while os.path.exists(dest):
+            dest = os.path.join(str(GENERATED_DIR), f"{base}-{counter}{ext}")
+            counter += 1
+        shutil.copy2(src, dest)
+        logger.info(f"생성 이미지 로컬 보존: {dest}")
+        return dest
+    except Exception as e:
+        logger.warning(f"생성 이미지 로컬 보존 실패: {e}")
+        return ""
 
 
 def _image_failure(stage, error, message, provider=""):
-    user_actionable = error in {"api_key_missing", "image_paid_required", "quota_exceeded", "rate_limited"}
+    user_actionable = error in {
+        "api_key_missing",
+        "image_paid_required",
+        "quota_exceeded",
+        "rate_limited",
+        "api_key_invalid",
+        "model_not_found",
+        "organization_verification_required",
+    }
     return {
         "stage": stage,
         "error": error,
@@ -743,7 +1334,10 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
         }
 
     try:
-        image_path, used_provider = _generate_image_with_provider(prompt, api_key, image_provider, image_model)
+        image_path, used_provider, generation_error = _normalize_generated_image_result(
+            _generate_image_with_provider(prompt, api_key, image_provider, image_model),
+            image_provider,
+        )
     except Exception as e:
         logger.warning(f"{image_provider} 이미지 생성 예외 - 건너뜀: {e}")
         failure = _image_failure(
@@ -765,19 +1359,28 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
         fallback_provider = "openai" if image_provider != "openai" else "gemini"
         logger.warning(f"{image_provider} 이미지 생성 실패 - {fallback_provider} fallback 시도")
         try:
-            image_path, used_provider = _generate_image_with_provider(prompt, fallback_api_key, fallback_provider, "")
+            image_path, used_provider, generation_error = _normalize_generated_image_result(
+                _generate_image_with_provider(prompt, fallback_api_key, fallback_provider, ""),
+                fallback_provider,
+            )
         except Exception as e:
             logger.warning(f"{fallback_provider} 이미지 fallback 예외 - 건너뜀: {e}")
             image_path = None
             used_provider = fallback_provider
+            generation_error = {"error_code": "image_generation_exception", "message": str(e)}
     if not image_path:
         logger.warning("이미지 생성 실패, 건너뜀")
-        error_code = "image_paid_required" if image_provider == "gemini" else "image_generation_failed"
+        error_code = str((generation_error or {}).get("error_code") or "").strip()
+        if not error_code:
+            error_code = "image_paid_required" if image_provider == "gemini" else "image_generation_failed"
+        provider_message = str((generation_error or {}).get("message") or "").strip()
         message = (
             "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 없이 본문을 입력했습니다."
             if error_code == "image_paid_required"
             else "이미지 생성에 실패해 이미지 없이 본문을 입력했습니다."
         )
+        if provider_message:
+            message = f"{message} 제공자 응답: {provider_message[:240]}"
         failure = _image_failure("image_generation", error_code, message, used_provider or image_provider)
         return {
             "stage": failure["stage"],
@@ -790,6 +1393,7 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
         }
 
     abs_path = os.path.abspath(image_path)
+    preserved_path = _preserve_generated_image(abs_path, used_provider, image_model)
 
     try:
         before_image_count = _editor_image_node_count(driver)
@@ -810,9 +1414,14 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
             failure = _image_failure(
                 "image_upload",
                 "image_upload_failed",
-                "이미지는 생성됐지만 네이버 에디터 업로드에 실패했습니다.",
+                (
+                    "이미지는 생성됐지만 네이버 에디터 업로드에 실패했습니다."
+                    + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
+                ),
                 used_provider,
             )
+            if preserved_path:
+                failure["local_image_path"] = preserved_path
             return {
                 "stage": failure["stage"],
                 "error_code": failure["error_code"],
@@ -820,6 +1429,7 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
                 "generated": True,
                 "inserted": False,
                 "provider": used_provider,
+                "local_image_path": preserved_path,
                 "failure": failure,
             }
 
@@ -828,9 +1438,14 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
             failure = _image_failure(
                 "image_insert_verification",
                 "image_uploaded_but_not_inserted",
-                "이미지는 생성/업로드를 시도했지만 네이버 에디터 본문에서 실제 이미지 반영을 확인하지 못했습니다.",
+                (
+                    "이미지는 생성/업로드를 시도했지만 네이버 에디터 본문에서 실제 이미지 반영을 확인하지 못했습니다."
+                    + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
+                ),
                 used_provider,
             )
+            if preserved_path:
+                failure["local_image_path"] = preserved_path
             return {
                 "stage": failure["stage"],
                 "error_code": failure["error_code"],
@@ -839,18 +1454,32 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
                 "inserted": False,
                 "provider": used_provider,
                 "method": upload_method,
+                "local_image_path": preserved_path,
                 "failure": failure,
             }
         logger.info("이미지 삽입 완료")
-        return {"stage": "image_inserted", "method": upload_method, "generated": True, "inserted": True, "provider": used_provider, "model": image_model}
+        return {
+            "stage": "image_inserted",
+            "method": upload_method,
+            "generated": True,
+            "inserted": True,
+            "provider": used_provider,
+            "model": image_model,
+            "local_image_path": preserved_path,
+        }
     except Exception as e:
         logger.error(f"이미지 삽입 오류: {e}")
         failure = _image_failure(
             "image_insert_exception",
             "image_insert_exception",
-            f"이미지 삽입 중 오류가 발생했습니다: {e}",
+            (
+                f"이미지 삽입 중 오류가 발생했습니다: {e}"
+                + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
+            ),
             used_provider,
         )
+        if preserved_path:
+            failure["local_image_path"] = preserved_path
         return {
             "stage": failure["stage"],
             "error_code": failure["error_code"],
@@ -858,6 +1487,7 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
             "generated": True,
             "inserted": False,
             "provider": used_provider,
+            "local_image_path": preserved_path,
             "failure": failure,
         }
     finally:

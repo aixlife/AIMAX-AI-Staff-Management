@@ -18,6 +18,32 @@ except (TypeError, ValueError):
     GEMINI_IMAGE_TIMEOUT_SECONDS = 180
 
 
+def _set_last_error(error_code="", message=""):
+    generate_image.last_error = {
+        "error_code": str(error_code or "").strip(),
+        "message": str(message or "").strip()[:500],
+    }
+
+
+def _classify_error(message):
+    text = str(message or "").lower()
+    if not text:
+        return "image_generation_failed"
+    if "api key" in text or "unauthorized" in text or "permission" in text or "403" in text:
+        return "api_key_invalid"
+    if "quota" in text or "resource_exhausted" in text:
+        return "quota_exceeded"
+    if "rate" in text or "429" in text:
+        return "rate_limited"
+    if "billing" in text or "paid" in text or "payment" in text or "credit" in text:
+        return "image_paid_required"
+    if "not found" in text or "unsupported" in text or "model" in text:
+        return "model_not_found"
+    if "timed out" in text or "timeout" in text:
+        return "timeout"
+    return "image_generation_failed"
+
+
 def _normalize_prompt(prompt):
     if not prompt:
         return ""
@@ -119,11 +145,14 @@ def generate_image(prompt, api_key, max_retries=3, model=None):
     응답 구조 로그를 남겨 안정성을 높인다.
     """
     prompt = _normalize_prompt(prompt)
+    _set_last_error("", "")
     if not prompt:
         logger.error("이미지 생성 실패: 프롬프트 비어 있음")
+        _set_last_error("empty_image_prompt", "이미지 프롬프트가 비어 있습니다.")
         return None
     if not (api_key or "").strip():
         logger.error("이미지 생성 실패: Gemini API 키가 없습니다. 이미지 없이 본문 입력을 계속합니다.")
+        _set_last_error("api_key_missing", "Gemini 이미지 생성용 API 키가 없습니다.")
         return None
 
     image_model = (model or GEMINI_IMAGE_MODEL).strip() or GEMINI_IMAGE_MODEL
@@ -157,6 +186,7 @@ def generate_image(prompt, api_key, max_retries=3, model=None):
                     image_path = _save_image_part(part)
                     if image_path:
                         logger.info(f"이미지 생성 완료: {image_path}")
+                        _set_last_error("", "")
                         return image_path
 
                 last_error = f"이미지 데이터 없음 ({_summarize_response(response)})"
@@ -170,4 +200,5 @@ def generate_image(prompt, api_key, max_retries=3, model=None):
             time.sleep(1.2 * attempt)
 
     logger.error(f"이미지 생성 실패: {last_error}")
+    _set_last_error(_classify_error(last_error), last_error)
     return None
