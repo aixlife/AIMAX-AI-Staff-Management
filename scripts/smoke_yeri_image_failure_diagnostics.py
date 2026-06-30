@@ -31,6 +31,7 @@ def main() -> None:
     original_generate = editor._generate_image_with_provider
     original_button = editor._try_upload_via_image_button
     original_clipboard = editor._try_upload_via_clipboard
+    preserved_paths: list[Path] = []
 
     try:
         called = {"generate": False}
@@ -58,6 +59,9 @@ def main() -> None:
         _assert(upload_fail["stage"] == "image_upload", "upload failure stage missing")
         _assert(upload_fail["error_code"] == "image_upload_failed", "upload failure code missing")
         _assert(upload_fail["generated"] and not upload_fail["inserted"], "upload failure counts wrong")
+        _assert(upload_fail.get("local_image_path"), "upload failure local image path missing")
+        _assert(Path(upload_fail["local_image_path"]).exists(), "upload failure local image file missing")
+        preserved_paths.append(Path(upload_fail["local_image_path"]))
 
         editor._generate_image_with_provider = lambda *_args, **_kwargs: (_temp_image_path(), "openai")
         editor._try_upload_via_image_button = lambda *_args, **_kwargs: False
@@ -66,6 +70,8 @@ def main() -> None:
         _assert(upload_ok["stage"] == "image_inserted", "success stage missing")
         _assert(upload_ok["method"] == "clipboard", "success method missing")
         _assert(upload_ok["generated"] and upload_ok["inserted"], "success counts wrong")
+        if upload_ok.get("local_image_path"):
+            preserved_paths.append(Path(upload_ok["local_image_path"]))
 
         editor._generate_image_with_provider = lambda *_args, **_kwargs: (_temp_image_path(), "gemini")
         editor._try_upload_via_image_button = lambda *_args, **_kwargs: False
@@ -81,13 +87,21 @@ def main() -> None:
         _assert(stats["image_attempted"] == 1, "aggregate attempted count wrong")
         _assert(stats["image_generated"] == 1, "aggregate generated count wrong")
         _assert(stats["image_inserted"] == 0, "aggregate inserted count wrong")
+        _assert(stats.get("local_image_paths"), "aggregate local image paths missing")
         _assert(len(failures) == 1, "aggregate failure missing")
         _assert(failures[0]["stage"] == "image_upload", "aggregate failure stage wrong")
+        _assert(failures[0].get("local_image_path"), "aggregate local image path missing")
+        preserved_paths.append(Path(failures[0]["local_image_path"]))
 
     finally:
         editor._generate_image_with_provider = original_generate
         editor._try_upload_via_image_button = original_button
         editor._try_upload_via_clipboard = original_clipboard
+        for path in preserved_paths:
+            try:
+                path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     print("R3H_YERI_IMAGE_FAILURE_DIAGNOSTICS_OK")
 

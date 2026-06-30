@@ -1,5 +1,6 @@
 import os
 import re
+import shutil
 import time
 import pyperclip
 from urllib.parse import quote
@@ -21,6 +22,7 @@ from content.openai_image import generate_image as generate_openai_image
 from utils.delays import wait_short, wait_medium, wait_long
 from utils.logger import get_logger
 from paths import DEBUG_DIR as _DEBUG_DIR
+from paths import GENERATED_DIR
 from auth.naver_login import login_on_current_nid_page
 
 logger = get_logger(__name__)
@@ -554,6 +556,34 @@ def _focus_content_area(driver):
     return None
 
 
+def editor_visible_text_count(driver):
+    """현재 Smart Editor 본문에 실제로 들어간 텍스트 글자 수를 센다."""
+    if driver is None:
+        return 0
+    try:
+        ensure_editor_context(driver, timeout=5)
+    except Exception:
+        pass
+    try:
+        return int(driver.execute_script(
+            """
+            const roots = Array.from(document.querySelectorAll(
+              '.se-main-container, .se-content, .se-section-text, body'
+            )).filter(Boolean);
+            const root = roots[0] || document.body || document;
+            const clone = root.cloneNode(true);
+            clone.querySelectorAll(
+              'script, style, button, input, textarea, select, option, [contenteditable="false"], .se-toolbar, .se-popup'
+            ).forEach((node) => node.remove());
+            const text = (clone.innerText || clone.textContent || '').replace(/\\s+/g, '');
+            return text.length;
+            """
+        ) or 0)
+    except Exception as e:
+        logger.debug(f"에디터 본문 글자 수 확인 실패: {e}")
+        return 0
+
+
 def _reset_inline_formatting(driver):
     """이전 글쓰기 상태 등으로 인해 볼드, 취소선, 밑줄 등이 활성화되어 있으면 입력 전에 명시적으로 끕니다.
     꺼져 있는 서식을 역활성화하여 켜는 부작용을 막기 위해, 실제 active 상태인 서식만 골라서 비활성화합니다.
@@ -915,7 +945,7 @@ def _dismiss_editor_popup(driver):
         logger.debug(f"팝업 닫기 시도 중 오류: {e}")
 
 
-def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key=""):
+def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model=""):
     """파싱된 콘텐츠 리스트를 에디터에 입력
 
     content_list 형식:
@@ -929,7 +959,10 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
     image_generated = 0
     image_inserted = 0
     image_providers = {"gemini": 0, "openai": 0}
+    image_models = {}
     image_failures = []
+    image_local_paths = []
+    image_items = []
     for i, (content_type, content_data) in enumerate(content_list):
         if content_type == 'text':
             _input_text_block(driver, content_data)
@@ -943,16 +976,36 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
                 api_key,
                 image_provider=image_provider,
                 fallback_api_key=fallback_api_key,
+                image_model=image_model,
             ) or {}
             if image_result.get("generated"):
                 image_generated += 1
                 provider = image_result.get("provider")
                 if provider in image_providers:
                     image_providers[provider] += 1
+                model = str(image_result.get("model") or "").strip()
+                if model:
+                    image_models[model] = image_models.get(model, 0) + 1
             if image_result.get("inserted"):
                 image_inserted += 1
+            local_path = str(image_result.get("local_image_path") or "").strip()
+            if local_path:
+                image_local_paths.append(local_path)
+            image_items.append({
+                "index": image_attempted,
+                "prompt": str(content_data or "").strip()[:500],
+                "provider": str(image_result.get("provider") or "").strip(),
+                "model": str(image_result.get("model") or image_model or "").strip(),
+                "generated": bool(image_result.get("generated")),
+                "inserted": bool(image_result.get("inserted")),
+                "local_image_path": local_path,
+                "stage": str(image_result.get("stage") or "").strip(),
+                "error_code": str(image_result.get("error_code") or "").strip(),
+            })
             if image_result.get("failure"):
                 image_failures.append(image_result.get("failure"))
+                if not image_result.get("inserted"):
+                    _focus_content_area(driver)
 
         # 블록 사이에 2줄 줄바꿈 (마지막 블록 제외)
         if i < len(content_list) - 1:
@@ -967,7 +1020,10 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
         "image_generated": image_generated,
         "image_inserted": image_inserted,
         "image_providers": image_providers,
+        "image_models": image_models,
         "image_failures": image_failures,
+        "local_image_paths": image_local_paths,
+        "image_items": image_items,
     }
 
 
@@ -1103,14 +1159,63 @@ def _input_quotation(driver, text):
         wait_short()
 
 
-def _generate_image_with_provider(prompt, api_key, image_provider):
+def _generate_image_with_provider(prompt, api_key, image_provider, image_model=""):
     if image_provider == "openai":
-        return generate_openai_image(prompt, api_key), "openai"
-    return generate_gemini_image(prompt, api_key), "gemini"
+        path = generate_openai_image(prompt, api_key, model=image_model)
+        return path, "openai", getattr(generate_openai_image, "last_error", {}) or {}
+    path = generate_gemini_image(prompt, api_key, model=image_model)
+    return path, "gemini", getattr(generate_gemini_image, "last_error", {}) or {}
+
+
+def _normalize_generated_image_result(result, default_provider):
+    if isinstance(result, tuple):
+        if len(result) >= 3:
+            return result[0], result[1] or default_provider, result[2] if isinstance(result[2], dict) else {}
+        if len(result) >= 2:
+            return result[0], result[1] or default_provider, {}
+        if len(result) == 1:
+            return result[0], default_provider, {}
+    return result, default_provider, {}
+
+
+def _preserve_generated_image(image_path, provider="", image_model=""):
+    """Store generated images outside temp so editor upload failures can be retried manually."""
+    if not image_path:
+        return ""
+    try:
+        src = os.path.abspath(image_path)
+        if not os.path.exists(src):
+            return ""
+        os.makedirs(GENERATED_DIR, exist_ok=True)
+        ext = os.path.splitext(src)[1].lower() or ".png"
+        safe_provider = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(provider or "image")).strip("-") or "image"
+        safe_model = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(image_model or "")).strip("-")
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        suffix = f"-{safe_model}" if safe_model else ""
+        base = f"{stamp}-{safe_provider}{suffix}-{int(time.time() * 1000)}"
+        dest = os.path.join(str(GENERATED_DIR), f"{base}{ext}")
+        counter = 1
+        while os.path.exists(dest):
+            dest = os.path.join(str(GENERATED_DIR), f"{base}-{counter}{ext}")
+            counter += 1
+        shutil.copy2(src, dest)
+        logger.info(f"생성 이미지 로컬 보존: {dest}")
+        return dest
+    except Exception as e:
+        logger.warning(f"생성 이미지 로컬 보존 실패: {e}")
+        return ""
 
 
 def _image_failure(stage, error, message, provider=""):
-    user_actionable = error in {"api_key_missing", "image_paid_required", "quota_exceeded", "rate_limited"}
+    user_actionable = error in {
+        "api_key_missing",
+        "image_paid_required",
+        "quota_exceeded",
+        "rate_limited",
+        "api_key_invalid",
+        "model_not_found",
+        "organization_verification_required",
+    }
     return {
         "stage": stage,
         "error": error,
@@ -1122,7 +1227,73 @@ def _image_failure(stage, error, message, provider=""):
     }
 
 
-def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_key=""):
+def _editor_image_node_count(driver):
+    """Smart Editor 본문 안에 실제 이미지/이미지 블록이 몇 개 있는지 센다."""
+    if driver is None:
+        return 0
+    try:
+        return int(driver.execute_script(
+            """
+            const roots = Array.from(document.querySelectorAll(
+              '.se-main-container, .se-content, .se-section-text, body'
+            )).filter(Boolean);
+            const root = roots[0] || document;
+            const selectors = [
+              '.se-component-image',
+              '.se-module-image',
+              '.se-image',
+              '.se-section-image',
+              '[class*="se-image"]',
+              'figure img',
+              'img'
+            ];
+            const nodes = new Set();
+            for (const selector of selectors) {
+              root.querySelectorAll(selector).forEach((node) => {
+                const rect = node.getBoundingClientRect ? node.getBoundingClientRect() : {width: 1, height: 1};
+                const style = window.getComputedStyle ? window.getComputedStyle(node) : {};
+                if (style.display === 'none' || style.visibility === 'hidden') return;
+                if (node.tagName && node.tagName.toLowerCase() === 'img') {
+                  const src = node.getAttribute('src') || node.getAttribute('data-src') || '';
+                  if (!src && rect.width <= 1 && rect.height <= 1) return;
+                }
+                nodes.add(node);
+              });
+            }
+            return nodes.size;
+            """
+        ) or 0)
+    except Exception as e:
+        logger.debug(f"이미지 DOM 카운트 실패: {e}")
+        return 0
+
+
+def _verify_editor_image_inserted(driver, before_count, timeout=14):
+    """업로드 후 Smart Editor 본문에 실제 이미지 노드가 증가했는지 확인한다."""
+    if driver is None:
+        return True
+    try:
+        ensure_editor_context(driver, timeout=5)
+    except Exception:
+        pass
+    try:
+        WebDriverWait(driver, timeout, poll_frequency=0.7).until(
+            lambda d: _editor_image_node_count(d) > int(before_count or 0)
+        )
+        after_count = _editor_image_node_count(driver)
+        logger.info(f"이미지 DOM 반영 확인: {before_count} -> {after_count}")
+        return True
+    except Exception:
+        after_count = _editor_image_node_count(driver)
+        logger.warning(f"이미지 DOM 반영 확인 실패: {before_count} -> {after_count}")
+        try:
+            _save_editor_debug(driver, "image_insert_not_verified")
+        except Exception:
+            pass
+        return False
+
+
+def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_key="", image_model=""):
     """이미지 생성 후 에디터에 삽입"""
     prompt = str(prompt or "").strip()
     logger.info(f"이미지 삽입 중: {prompt[:50]}...")
@@ -1163,7 +1334,10 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
         }
 
     try:
-        image_path, used_provider = _generate_image_with_provider(prompt, api_key, image_provider)
+        image_path, used_provider, generation_error = _normalize_generated_image_result(
+            _generate_image_with_provider(prompt, api_key, image_provider, image_model),
+            image_provider,
+        )
     except Exception as e:
         logger.warning(f"{image_provider} 이미지 생성 예외 - 건너뜀: {e}")
         failure = _image_failure(
@@ -1185,19 +1359,28 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
         fallback_provider = "openai" if image_provider != "openai" else "gemini"
         logger.warning(f"{image_provider} 이미지 생성 실패 - {fallback_provider} fallback 시도")
         try:
-            image_path, used_provider = _generate_image_with_provider(prompt, fallback_api_key, fallback_provider)
+            image_path, used_provider, generation_error = _normalize_generated_image_result(
+                _generate_image_with_provider(prompt, fallback_api_key, fallback_provider, ""),
+                fallback_provider,
+            )
         except Exception as e:
             logger.warning(f"{fallback_provider} 이미지 fallback 예외 - 건너뜀: {e}")
             image_path = None
             used_provider = fallback_provider
+            generation_error = {"error_code": "image_generation_exception", "message": str(e)}
     if not image_path:
         logger.warning("이미지 생성 실패, 건너뜀")
-        error_code = "image_paid_required" if image_provider == "gemini" else "image_generation_failed"
+        error_code = str((generation_error or {}).get("error_code") or "").strip()
+        if not error_code:
+            error_code = "image_paid_required" if image_provider == "gemini" else "image_generation_failed"
+        provider_message = str((generation_error or {}).get("message") or "").strip()
         message = (
             "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 없이 본문을 입력했습니다."
             if error_code == "image_paid_required"
             else "이미지 생성에 실패해 이미지 없이 본문을 입력했습니다."
         )
+        if provider_message:
+            message = f"{message} 제공자 응답: {provider_message[:240]}"
         failure = _image_failure("image_generation", error_code, message, used_provider or image_provider)
         return {
             "stage": failure["stage"],
@@ -1210,8 +1393,11 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
         }
 
     abs_path = os.path.abspath(image_path)
+    preserved_path = _preserve_generated_image(abs_path, used_provider, image_model)
 
     try:
+        before_image_count = _editor_image_node_count(driver)
+
         # 방법 1: 이미지 버튼 클릭 → file input 대기 → send_keys
         uploaded = _try_upload_via_image_button(driver, abs_path)
         upload_method = "image_button" if uploaded else ""
@@ -1228,9 +1414,14 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
             failure = _image_failure(
                 "image_upload",
                 "image_upload_failed",
-                "이미지는 생성됐지만 네이버 에디터 업로드에 실패했습니다.",
+                (
+                    "이미지는 생성됐지만 네이버 에디터 업로드에 실패했습니다."
+                    + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
+                ),
                 used_provider,
             )
+            if preserved_path:
+                failure["local_image_path"] = preserved_path
             return {
                 "stage": failure["stage"],
                 "error_code": failure["error_code"],
@@ -1238,20 +1429,57 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
                 "generated": True,
                 "inserted": False,
                 "provider": used_provider,
+                "local_image_path": preserved_path,
                 "failure": failure,
             }
 
         wait_long()
+        if not _verify_editor_image_inserted(driver, before_image_count):
+            failure = _image_failure(
+                "image_insert_verification",
+                "image_uploaded_but_not_inserted",
+                (
+                    "이미지는 생성/업로드를 시도했지만 네이버 에디터 본문에서 실제 이미지 반영을 확인하지 못했습니다."
+                    + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
+                ),
+                used_provider,
+            )
+            if preserved_path:
+                failure["local_image_path"] = preserved_path
+            return {
+                "stage": failure["stage"],
+                "error_code": failure["error_code"],
+                "message": failure["message"],
+                "generated": True,
+                "inserted": False,
+                "provider": used_provider,
+                "method": upload_method,
+                "local_image_path": preserved_path,
+                "failure": failure,
+            }
         logger.info("이미지 삽입 완료")
-        return {"stage": "image_inserted", "method": upload_method, "generated": True, "inserted": True, "provider": used_provider}
+        return {
+            "stage": "image_inserted",
+            "method": upload_method,
+            "generated": True,
+            "inserted": True,
+            "provider": used_provider,
+            "model": image_model,
+            "local_image_path": preserved_path,
+        }
     except Exception as e:
         logger.error(f"이미지 삽입 오류: {e}")
         failure = _image_failure(
             "image_insert_exception",
             "image_insert_exception",
-            f"이미지 삽입 중 오류가 발생했습니다: {e}",
+            (
+                f"이미지 삽입 중 오류가 발생했습니다: {e}"
+                + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
+            ),
             used_provider,
         )
+        if preserved_path:
+            failure["local_image_path"] = preserved_path
         return {
             "stage": failure["stage"],
             "error_code": failure["error_code"],
@@ -1259,6 +1487,7 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
             "generated": True,
             "inserted": False,
             "provider": used_provider,
+            "local_image_path": preserved_path,
             "failure": failure,
         }
     finally:

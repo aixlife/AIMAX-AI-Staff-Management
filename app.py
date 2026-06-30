@@ -159,11 +159,12 @@ else:
 # ──────────────────────────────────────────────
 # 설정 파일 경로 (플랫폼별 사용자 데이터 디렉토리 사용)
 # ──────────────────────────────────────────────
-from paths import SETTINGS_PATH as _SETTINGS_PATH, APP_DATA_DIR as _APP_DATA_DIR
+from paths import SETTINGS_PATH as _SETTINGS_PATH, APP_DATA_DIR as _APP_DATA_DIR, GENERATED_DIR as _GENERATED_DIR
 
 SETTINGS_PATH = str(_SETTINGS_PATH)
 SECRET_FALLBACK_PATH = str(_APP_DATA_DIR / ".settings_secrets.json")
 EXPORTS_DIR = str(_APP_DATA_DIR / "exports")
+GENERATED_IMAGE_DIR = str(_GENERATED_DIR)
 
 
 # ──────────────────────────────────────────────
@@ -187,8 +188,16 @@ API_KEY_GUIDE_URL = os.environ.get(
 _KEYCHAIN_READ_UNAVAILABLE = False
 _USD_KRW_RATE = 1476
 _USD_KRW_RATE_LABEL = "2026-05-06 Wise/Investing.com spot"
-_GEMINI_IMAGE_PRICE_USD = 0.067
-_OPENAI_IMAGE_PRICE_USD = 0.042
+_DEFAULT_IMAGE_MODEL = "gpt-image-1"
+_IMAGE_MODEL_PRICE_USD = {
+    "gpt-image-1": {"provider": "openai", "label": "OpenAI GPT Image 1", "per_image": 0.042},
+    "gpt-image-2": {"provider": "openai", "label": "OpenAI GPT Image 2", "per_image": 0.053},
+    "gemini-2.5-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana", "per_image": 0.039},
+    "gemini-3.1-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana 2", "per_image": 0.067},
+    "gemini-3-pro-image": {"provider": "gemini", "label": "Gemini Nano Banana Pro", "per_image": 0.134},
+}
+_GEMINI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gemini-3.1-flash-image"]["per_image"]
+_OPENAI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gpt-image-1"]["per_image"]
 _AI_TEXT_PRICE_USD_PER_1M = {
     # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
     "gemini-3.5-flash": {"input": 1.50, "output": 9.00, "label": "Gemini 3.5 Flash"},
@@ -242,6 +251,35 @@ def _is_openai_model(value):
     return str(value or "").startswith("gpt-")
 
 
+def _normalize_image_model(value, ai_model=None):
+    value = str(value or "").strip()
+    if not value:
+        return "gpt-image-1" if _is_openai_model(ai_model) else "gemini-3.1-flash-image"
+    aliases = {
+        "openai": "gpt-image-1",
+        "gpt-image": "gpt-image-1",
+        "gemini": "gemini-3.1-flash-image",
+        "nano-banana": "gemini-2.5-flash-image",
+        "nano-banana-pro": "gemini-3-pro-image",
+    }
+    value = aliases.get(value, value)
+    if value in _IMAGE_MODEL_PRICE_USD:
+        return value
+    if _is_openai_model(ai_model):
+        return "gpt-image-1"
+    return _DEFAULT_IMAGE_MODEL
+
+
+def _image_provider_for_model(image_model):
+    model = _normalize_image_model(image_model)
+    return _IMAGE_MODEL_PRICE_USD.get(model, {}).get("provider", "openai")
+
+
+def _safe_generated_basename(source):
+    safe = re.sub(r"[^0-9A-Za-z가-힣 _-]", "", str(source or "post")).strip()[:40]
+    return safe or "post"
+
+
 def _persist_generated_markdown(source, markdown):
     """AI가 생성한(과금된) 원고를 네이버 입력 전에 파일로 보관한다.
 
@@ -255,11 +293,37 @@ def _persist_generated_markdown(source, markdown):
         from datetime import datetime as _dt
         from paths import GENERATED_DIR
         GENERATED_DIR.mkdir(parents=True, exist_ok=True)
-        safe = re.sub(r"[^0-9A-Za-z가-힣 _-]", "", str(source or "post")).strip()[:40] or "post"
+        safe = _safe_generated_basename(source)
         stamp = _dt.now().strftime("%Y%m%d-%H%M%S")
         path = GENERATED_DIR / f"{stamp}_{safe}.md"
         path.write_text(text, encoding="utf-8")
         return str(path)
+    except Exception:
+        return None
+
+
+def _write_recovery_manifest(title, markdown_path=None, image_items=None, error=""):
+    """사용자가 네이버 에디터 실패 뒤 직접 옮길 수 있게 원고/이미지 위치를 한 파일에 남긴다."""
+    try:
+        from datetime import datetime as _dt
+        GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = _dt.now().strftime("%Y%m%d-%H%M%S")
+        safe = _safe_generated_basename(title)
+        manifest_path = GENERATED_DIR / f"{stamp}_{safe}_복구안내.json"
+        payload = {
+            "title": str(title or "").strip(),
+            "markdown_path": str(markdown_path or "").strip(),
+            "generated_folder": str(GENERATED_DIR),
+            "images": image_items if isinstance(image_items, list) else [],
+            "error": str(error or "")[:500],
+            "guide": [
+                "markdown_path의 원고를 열어 네이버 편집기에 붙여넣을 수 있습니다.",
+                "images 배열은 본문 [이미지] 위치 순서와 로컬 이미지 파일 경로입니다.",
+                "자동 발행/예약 중 이미지 실패가 있으면 공개 발행 대신 임시저장으로 보호됩니다.",
+            ],
+        }
+        manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return str(manifest_path)
     except Exception:
         return None
 
@@ -416,15 +480,51 @@ def _safe_image_failures(raw, limit=20):
             "provider": str(item.get("provider") or "")[:40],
             "method": str(item.get("method") or "")[:40],
             "message": str(item.get("message") or "")[:180],
+            "local_image_path": str(item.get("local_image_path") or "")[:260],
             "user_actionable": bool(item.get("user_actionable")),
             "admin_action_required": bool(item.get("admin_action_required")),
         })
     return failures
 
 
+def _safe_local_image_paths(raw, limit=20):
+    if not isinstance(raw, list):
+        return []
+    paths = []
+    seen = set()
+    for item in raw[:limit]:
+        path = str(item or "").strip()
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        paths.append(path[:260])
+    return paths
+
+
+def _safe_image_items(raw, limit=20):
+    if not isinstance(raw, list):
+        return []
+    items = []
+    for item in raw[:limit]:
+        if not isinstance(item, dict):
+            continue
+        items.append({
+            "index": max(0, _usage_number(item.get("index"))),
+            "prompt": str(item.get("prompt") or "")[:500],
+            "provider": str(item.get("provider") or "")[:40],
+            "model": str(item.get("model") or "")[:80],
+            "generated": bool(item.get("generated")),
+            "inserted": bool(item.get("inserted")),
+            "local_image_path": str(item.get("local_image_path") or "")[:260],
+            "stage": str(item.get("stage") or "")[:80],
+            "error_code": str(item.get("error_code") or "")[:80],
+        })
+    return items
+
+
 def _image_failure_stage(failures):
     stages = [str(item.get("stage") or "").strip() for item in failures if isinstance(item, dict)]
-    for stage in ("image_generation", "image_upload", "image_insert_exception", "image_prompt_empty"):
+    for stage in ("image_generation", "image_upload", "image_insert_verification", "image_insert_exception", "image_prompt_empty"):
         if stage in stages:
             return stage
     return "image_completion"
@@ -435,6 +535,7 @@ def _image_failure_message(requested, inserted, failures):
     stage_labels = {
         "image_generation": "이미지 생성 실패",
         "image_upload": "네이버 이미지 업로드 실패",
+        "image_insert_verification": "네이버 편집기 이미지 반영 확인 실패",
         "image_insert_exception": "이미지 삽입 중 예외 발생",
         "image_prompt_empty": "이미지 프롬프트 누락",
         "image_completion": "이미지 첨부 완료 확인 실패",
@@ -445,6 +546,17 @@ def _image_failure_message(requested, inserted, failures):
         f"{stage_labels.get(stage, '이미지 첨부 실패')}: 요청 {requested}장 중 {inserted}장만 첨부되었습니다."
         f"{code_text} 생성된 본문은 보존합니다."
     )
+
+
+def _generated_image_location_note(paths):
+    safe_paths = _safe_local_image_paths(paths, limit=5)
+    if not safe_paths:
+        return ""
+    lines = ["생성 이미지 위치:", GENERATED_IMAGE_DIR]
+    lines.extend(safe_paths[:3])
+    if len(safe_paths) > 3:
+        lines.append(f"외 {len(safe_paths) - 3}개")
+    return "\n".join(lines)
 
 
 def _diagnose_local_failure(stage, error):
@@ -479,12 +591,34 @@ def _diagnose_local_failure(stage, error):
             "이미지 생성은 유료 키 필요",
             "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지가 건너뛰어질 수 있습니다.\n이미지 수를 0장으로 바꾸거나 유료 키를 연결해주세요.",
         )
+    if (
+        "browser_start" in text
+        and (
+            "애플리케이션 제어 정책" in text
+            or "application control policy" in text
+            or "chromedriver" in text
+            or "winerror 4551" in text
+        )
+    ):
+        return (
+            "브라우저 드라이버 차단",
+            "Windows 보안 또는 회사 보안 정책이 브라우저 드라이버 실행을 차단했습니다.\n"
+            "Windows 보안 > 보호 기록 또는 사용 중인 보안 프로그램에서 chromedriver/undetected_chromedriver/AIMAX 차단 내역을 허용 또는 복원한 뒤 다시 시도해주세요.",
+        )
     if "naver_login" in text or "네이버 로그인" in text:
         return (
             "네이버 로그인 필요",
             "네이버 로그인 또는 추가 인증 화면에서 자동 진행이 막혔습니다.\n네이버 재로그인 후 다시 시도해주세요.",
         )
-    if stage in {"smart_editor_input", "smart_editor_open", "image_upload", "image_insert_exception", "browser_start"}:
+    if stage in {
+        "smart_editor_input",
+        "smart_editor_input_verification",
+        "smart_editor_open",
+        "image_upload",
+        "image_insert_verification",
+        "image_insert_exception",
+        "browser_start",
+    }:
         return (
             "AIMAX 관리자 조치 필요",
             "사용자가 설정으로 해결하기 어려운 실행기/네이버 에디터 처리 오류입니다.\n오류 보고를 보내주시면 AIMAX 관리자가 확인합니다.",
@@ -499,13 +633,14 @@ def _won_from_usd(usd):
     return int(math.ceil(max(0.0, float(usd or 0)) * _USD_KRW_RATE))
 
 
-def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_provider_counts=None):
+def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_provider_counts=None, image_model_counts=None):
     model = _normalize_ai_model(ai_model)
     price = _AI_TEXT_PRICE_USD_PER_1M.get(model)
     input_tokens = _usage_number((usage_totals or {}).get("input_tokens"))
     output_tokens = _usage_number((usage_totals or {}).get("billable_output_tokens")) or _usage_number((usage_totals or {}).get("output_tokens"))
     image_generated = max(0, int(image_generated or 0))
     provider_counts = image_provider_counts if isinstance(image_provider_counts, dict) else {}
+    model_counts = image_model_counts if isinstance(image_model_counts, dict) else {}
     gemini_images = max(0, _usage_number(provider_counts.get("gemini")))
     openai_images = max(0, _usage_number(provider_counts.get("openai")))
     unattributed_images = max(0, image_generated - gemini_images - openai_images)
@@ -518,7 +653,29 @@ def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_pr
             input_tokens * price["input"] / 1_000_000
             + output_tokens * price["output"] / 1_000_000
         )
-    image_usd = gemini_images * _GEMINI_IMAGE_PRICE_USD + openai_images * _OPENAI_IMAGE_PRICE_USD
+    image_usd = 0.0
+    attributed_by_model = 0
+    image_model_costs = {}
+    for raw_model, raw_count in model_counts.items():
+        image_model = _normalize_image_model(raw_model)
+        count = max(0, _usage_number(raw_count))
+        if not count:
+            continue
+        unit = _IMAGE_MODEL_PRICE_USD.get(image_model, _IMAGE_MODEL_PRICE_USD[_DEFAULT_IMAGE_MODEL])
+        model_usd = count * unit["per_image"]
+        image_usd += model_usd
+        attributed_by_model += count
+        image_model_costs[image_model] = {
+            "count": count,
+            "provider": unit["provider"],
+            "label": unit["label"],
+            "per_image_usd": unit["per_image"],
+            "won": _won_from_usd(model_usd),
+        }
+    if attributed_by_model < image_generated:
+        remaining_openai = max(0, openai_images - sum(v["count"] for v in image_model_costs.values() if v["provider"] == "openai"))
+        remaining_gemini = max(0, gemini_images - sum(v["count"] for v in image_model_costs.values() if v["provider"] == "gemini"))
+        image_usd += remaining_gemini * _GEMINI_IMAGE_PRICE_USD + remaining_openai * _OPENAI_IMAGE_PRICE_USD
     total_usd = text_usd + image_usd
     return {
         "currency": "KRW",
@@ -536,6 +693,8 @@ def _calculate_generation_cost(ai_model, usage_totals, image_generated, image_pr
             "gemini": gemini_images,
             "openai": openai_images,
         },
+        "image_model_counts": model_counts,
+        "image_model_costs": image_model_costs,
         "text_won": _won_from_usd(text_usd),
         "image_won": _won_from_usd(image_usd),
         "total_won": _won_from_usd(total_usd),
@@ -574,8 +733,12 @@ def _build_write_result(
             "generated": _usage_number(image_totals.get("generated")),
             "inserted": _usage_number(image_totals.get("inserted")),
             "provider_counts": image_totals.get("providers") if isinstance(image_totals.get("providers"), dict) else {},
+            "model_counts": image_totals.get("models") if isinstance(image_totals.get("models"), dict) else {},
             "failure_count": len(_safe_image_failures(image_totals.get("failures"))),
             "failures": _safe_image_failures(image_totals.get("failures")),
+            "local_paths": _safe_local_image_paths(image_totals.get("local_paths")),
+            "items": _safe_image_items(image_totals.get("items")),
+            "local_folder": GENERATED_IMAGE_DIR,
             "shortfall_accepted": bool(image_totals.get("shortfall_accepted")),
             "soft_failure_accepted": bool(image_totals.get("soft_failure_accepted")),
             "image_skipped_no_key": bool(image_totals.get("image_skipped_no_key")),
@@ -595,6 +758,7 @@ def _build_write_result(
         result["usage"],
         result["images"]["generated"],
         result["images"].get("provider_counts"),
+        result["images"].get("model_counts"),
     )
     if error:
         result["error"] = str(error)[:500]
@@ -603,7 +767,24 @@ def _build_write_result(
 
 def _is_real_secret(value):
     value = (value or "").strip()
-    return bool(value) and value.lower() not in _PLACEHOLDER_SECRET_VALUES
+    if not value:
+        return False
+    normalized = value.lower()
+    if normalized in _PLACEHOLDER_SECRET_VALUES:
+        return False
+    compact = re.sub(r"\s+", "", value)
+    if compact and re.fullmatch(r"[*•●·]+", compact):
+        return False
+    if normalized in {"[redacted]", "redacted", "masked", "web_saved", "web-stored", "웹저장됨", "웹 저장됨"}:
+        return False
+    if len(compact) <= 12 and set(compact) <= {"*", "•", "●", "·", "x", "X"}:
+        return False
+    return True
+
+
+def _runtime_secret(value):
+    value = (value or "").strip()
+    return value if _is_real_secret(value) else ""
 
 
 def _load_settings_data():
@@ -1836,19 +2017,25 @@ class NaverBlogApp:
         model = _normalize_ai_model(ai_model or self.ai_model_var.get() or _DEFAULT_AI_MODEL)
         secrets = web_secrets if isinstance(web_secrets, dict) else self._fetch_web_secret_statuses()
         if model == "claude":
-            return bool((self.claude_key_var.get() or "").strip()) or bool(secrets.get("claude"))
+            return _is_real_secret(self.claude_key_var.get()) or bool(secrets.get("claude"))
         if _is_openai_model(model):
-            return bool((self.openai_key_var.get() or "").strip()) or bool(secrets.get("openai"))
-        return bool((self.api_key_var.get() or "").strip()) or bool(secrets.get("gemini"))
+            return _is_real_secret(self.openai_key_var.get()) or bool(secrets.get("openai"))
+        return _is_real_secret(self.api_key_var.get()) or bool(secrets.get("gemini"))
 
     def _has_local_or_web_image_key(self, web_secrets=None):
         secrets = web_secrets if isinstance(web_secrets, dict) else self._fetch_web_secret_statuses()
         return (
-            bool((self.api_key_var.get() or "").strip())
-            or bool((self.openai_key_var.get() or "").strip())
+            _is_real_secret(self.api_key_var.get())
+            or _is_real_secret(self.openai_key_var.get())
             or bool(secrets.get("gemini"))
             or bool(secrets.get("openai"))
         )
+
+    def _has_local_image_key(self, image_model=None):
+        provider = _image_provider_for_model(image_model or _DEFAULT_IMAGE_MODEL)
+        if provider == "openai":
+            return _is_real_secret(self.openai_key_var.get())
+        return _is_real_secret(self.api_key_var.get())
 
     def _web_agent_tool_candidates(self, command, env_path=""):
         candidates = []
@@ -2148,6 +2335,8 @@ class NaverBlogApp:
                 "apify": self._web_agent_status_value(bool(apify_key)),
                 "selected_model": ai_model,
                 "selected_model_ready": self._web_agent_status_value(selected_ai_ready),
+                "local_image_gemini": self._web_agent_status_value(bool(gemini_key)),
+                "local_image_openai": self._web_agent_status_value(bool(openai_key)),
             },
             "neighbor_messages": {
                 "status": self._web_agent_status_value(bool(neighbor_messages)),
@@ -3171,10 +3360,12 @@ class NaverBlogApp:
             if artifact:
                 requested_images = _payload_image_count(payload)
                 artifact_image_count = min(self._remote_artifact_image_count(artifact), requested_images)
-            if artifact_image_count > 0 and not self._has_local_or_web_image_key(web_secrets):
+            image_model = _normalize_image_model(payload.get("image_model"), payload.get("ai_model") or payload.get("model") or self.ai_model_var.get())
+            if artifact_image_count > 0 and not self._has_local_image_key(image_model):
                 self._log(
-                    "[웹앱 작업] 이미지 생성 키가 없어 이미지는 건너뜁니다. "
-                    "서버에서 생성된 글 원고는 보존하고 네이버 입력을 계속 진행합니다."
+                    "[웹앱 작업] 선택한 이미지 모델을 실행할 로컬 이미지 API 키가 없어 이미지는 건너뜁니다. "
+                    "웹앱에 저장된 키는 현재 로컬 네이버 에디터 이미지 생성에는 직접 사용되지 않습니다. "
+                    "Mac 실행기의 AI/API 연결에 OpenAI 또는 Gemini 키를 저장해주세요."
                 )
 
             client.update_job(
@@ -3241,6 +3432,7 @@ class NaverBlogApp:
             "image_count": _payload_image_count(payload),
             "font_name": str(payload.get("font_name") or "").strip() or None,
             "ai_model": _normalize_ai_model(payload.get("ai_model") or payload.get("model") or self.ai_model_var.get()),
+            "image_model": _normalize_image_model(payload.get("image_model"), payload.get("ai_model") or payload.get("model") or self.ai_model_var.get()),
             "seo_brief": payload.get("seo_brief") if isinstance(payload.get("seo_brief"), dict) else None,
             "artifact": artifact if isinstance(artifact, dict) else None,
         }
@@ -3807,6 +3999,8 @@ class NaverBlogApp:
         try:
             from tkinter import Toplevel
             is_failure = any(token in str(title or "") for token in ("실패", "오류", "필요", "불가"))
+            action = next_stage if isinstance(next_stage, dict) else {}
+            open_path = str(action.get("open_path") or "").strip()
             popup = Toplevel(self.root)
             popup.title("오류 진단" if is_failure else "작업 완료")
             popup.configure(bg=COLORS["card_bg"])
@@ -3814,7 +4008,9 @@ class NaverBlogApp:
             popup.grab_set()
 
             # 크기 + 중앙 정렬
-            w, h = 440, 260
+            body_text = str(body or "")
+            w = 520 if len(body_text) > 180 else 440
+            h = 340 if len(body_text) > 180 else 260
             self.root.update_idletasks()
             rx = self.root.winfo_rootx()
             ry = self.root.winfo_rooty()
@@ -3843,10 +4039,10 @@ class NaverBlogApp:
 
             # 본문 (결과 요약)
             tk.Label(
-                popup, text=body,
+                popup, text=body_text,
                 font=(FONT_UI, 10),
                 bg=COLORS["card_bg"], fg=COLORS["text_secondary"],
-                justify="center", wraplength=400,
+                justify="center", wraplength=w - 40,
             ).pack(pady=(12, 10))
 
             # 버튼들
@@ -3854,6 +4050,15 @@ class NaverBlogApp:
             btn_frame.pack(pady=(4, 14))
 
             next_panel, next_label = self.STAGE_NEXT.get(stage_key, (None, None))
+            if open_path:
+                def _open_generated_folder():
+                    self._open_local_path(open_path)
+                ttk.Button(
+                    btn_frame, text="이미지 폴더 열기",
+                    bootstyle="primary",
+                    command=_open_generated_folder,
+                ).pack(side=LEFT, padx=4)
+
             if next_panel:
                 def _go_next():
                     popup.destroy()
@@ -3868,13 +4073,19 @@ class NaverBlogApp:
                     bootstyle="secondary-outline",
                     command=popup.destroy,
                 ).pack(side=LEFT, padx=4)
-            else:
+            elif not open_path:
                 # 마지막 단계 — 종료 버튼만
                 ttk.Button(
                     btn_frame, text=f"오늘도 수고했어요, {self.mode_config['casual_name']}!",
                     bootstyle="primary",
                     command=popup.destroy,
                 ).pack()
+            else:
+                ttk.Button(
+                    btn_frame, text="닫기",
+                    bootstyle="secondary-outline",
+                    command=popup.destroy,
+                ).pack(side=LEFT, padx=4)
         except Exception as e:
             # 팝업 실패 시 로그로만 알림
             self._log(f"[완료] {title} — {body}")
@@ -5528,13 +5739,13 @@ class NaverBlogApp:
             return False
         if need_api:
             model = self.ai_model_var.get()
-            if model == "claude" and not self.claude_key_var.get():
+            if model == "claude" and not _is_real_secret(self.claude_key_var.get()):
                 self._log("[오류] Claude API Key를 입력해주세요.")
                 return False
-            if _is_openai_model(model) and not self.openai_key_var.get():
+            if _is_openai_model(model) and not _is_real_secret(self.openai_key_var.get()):
                 self._log("[오류] OpenAI API Key를 입력해주세요.")
                 return False
-            if model != "claude" and not _is_openai_model(model) and not self.api_key_var.get():
+            if model != "claude" and not _is_openai_model(model) and not _is_real_secret(self.api_key_var.get()):
                 self._log("[오류] Gemini API Key를 입력해주세요.")
                 return False
         return True
@@ -5584,14 +5795,14 @@ class NaverBlogApp:
 
         self._start_worker(self._worker_write, keywords=keywords, md_file=md_file, mode=mode, style_id=style_id, category=category, cta_link=cta_link, cta_text=cta_text, schedule_date=schedule_date, schedule_hour=schedule_hour, schedule_interval=schedule_interval, word_count=word_count, font_name=font_name)
 
-    def _worker_write(self, keywords, md_file, mode, style_id="info", category=None, cta_link=None, cta_text=None, schedule_date=None, schedule_hour=None, schedule_interval=None, word_count=1500, image_count=3, font_name=None, ai_model=None, seo_brief=None, artifact=None):
+    def _worker_write(self, keywords, md_file, mode, style_id="info", category=None, cta_link=None, cta_text=None, schedule_date=None, schedule_hour=None, schedule_interval=None, word_count=1500, image_count=3, font_name=None, ai_model=None, image_model=None, seo_brief=None, artifact=None):
         success = 0
         total = 0
         last_error = None
         stage = "init"
         failed_keyword = ""
         usage_totals = {}
-        image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "failures": []}
+        image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "models": {}, "failures": [], "local_paths": []}
         post_results = []
         failed_posts = []
         try:
@@ -5601,17 +5812,18 @@ class NaverBlogApp:
             from auth.naver_login import login
             from content.ai_text import generate_blog_content, measure_visible_char_count
             from content.markdown_parser import parse_markdown, parse_markdown_file
-            from posting.editor import navigate_to_editor, input_title, input_content, set_font
+            from posting.editor import navigate_to_editor, input_title, input_content, set_font, editor_visible_text_count
             from posting.publisher import save_draft, publish_now, schedule_publish
             from utils.delays import random_delay
 
             nid = self.naver_id_var.get()
             npw = self.naver_pw_var.get()
             ai_model = _normalize_ai_model(ai_model or self.ai_model_var.get())
+            image_model = _normalize_image_model(image_model, ai_model)
             image_count = _normalize_image_count(image_count)
-            gemini_key = self.api_key_var.get()
-            claude_key = self.claude_key_var.get()
-            openai_key = self.openai_key_var.get()
+            gemini_key = _runtime_secret(self.api_key_var.get())
+            claude_key = _runtime_secret(self.claude_key_var.get())
+            openai_key = _runtime_secret(self.openai_key_var.get())
             artifact_mode = isinstance(artifact, dict) and bool(str(artifact.get("content_markdown") or "").strip())
             if ai_model == "claude":
                 text_api_key = claude_key
@@ -5619,10 +5831,7 @@ class NaverBlogApp:
                 text_api_key = openai_key
             else:
                 text_api_key = gemini_key
-            if artifact_mode and openai_key:
-                image_provider = "openai"
-            else:
-                image_provider = "openai" if _is_openai_model(ai_model) and openai_key else "gemini"
+            image_provider = _image_provider_for_model(image_model)
             image_api_key = openai_key if image_provider == "openai" else gemini_key
             fallback_image_api_key = gemini_key if image_provider == "openai" else openai_key
 
@@ -5645,7 +5854,7 @@ class NaverBlogApp:
                 self._log(f"다중 키워드 모드: {total}개 글 작성 예정")
 
             usage_totals = {}
-            image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "failures": []}
+            image_totals = {"attempted": 0, "generated": 0, "inserted": 0, "providers": {"gemini": 0, "openai": 0}, "models": {}, "failures": [], "local_paths": [], "items": []}
             post_results = []
             failed_posts = []
             force_save_due_to_image_skip = False
@@ -5668,7 +5877,7 @@ class NaverBlogApp:
                     self._log("[보호] 이미지 키가 없어 공개 발행/예약 대신 임시저장으로 전환합니다.")
                 image_count = 0
 
-            def _record_failed(post, post_stage, error, title="", char_count=0, images=None, draft_save_confirmed=None, recovery_path=None):
+            def _record_failed(post, post_stage, error, title="", char_count=0, images=None, draft_save_confirmed=None, recovery_path=None, recovery_manifest_path=None):
                 failed = {
                     "source": post.get("source", ""),
                     "keyword": post.get("source", ""),
@@ -5686,6 +5895,8 @@ class NaverBlogApp:
                     failed["draft_save_confirmed"] = bool(draft_save_confirmed)
                 if recovery_path:
                     failed["recovery_markdown_path"] = recovery_path
+                if recovery_manifest_path:
+                    failed["recovery_manifest_path"] = recovery_manifest_path
                 failed_posts.append(failed)
 
             def _reset_driver(reason=None):
@@ -5760,8 +5971,11 @@ class NaverBlogApp:
                 image_generated = 0
                 image_inserted = 0
                 image_failures = []
+                local_image_paths = []
+                image_items = []
                 draft_save_confirmed = None
                 saved_md_path = None
+                recovery_manifest_path = None
                 image_soft_failed = False
                 effective_mode = "save" if force_save_due_to_image_skip and mode in {"publish", "schedule"} else mode
 
@@ -5866,6 +6080,7 @@ class NaverBlogApp:
                                 image_api_key,
                                 image_provider=image_provider,
                                 fallback_api_key=fallback_image_api_key,
+                                image_model=image_model,
                             ) or {}
                             image_attempted = _usage_number(input_stats.get("image_attempted")) or image_block_count
                             image_generated = _usage_number(input_stats.get("image_generated"))
@@ -5876,9 +6091,32 @@ class NaverBlogApp:
                             for provider, count in (input_stats.get("image_providers") or {}).items():
                                 if provider in image_totals["providers"]:
                                     image_totals["providers"][provider] += _usage_number(count)
+                            for model_name, count in (input_stats.get("image_models") or {}).items():
+                                model_name = str(model_name or "").strip()
+                                if model_name:
+                                    image_totals["models"][model_name] = image_totals["models"].get(model_name, 0) + _usage_number(count)
                             image_failures = _safe_image_failures(input_stats.get("image_failures"))
                             if image_failures:
                                 image_totals["failures"].extend(image_failures)
+                            local_image_paths = _safe_local_image_paths(input_stats.get("local_image_paths"))
+                            if local_image_paths:
+                                image_totals["local_paths"].extend(local_image_paths)
+                                self._log("[이미지] 생성 이미지 보관 폴더: " + GENERATED_IMAGE_DIR)
+                                for local_image_path in local_image_paths[:5]:
+                                    self._log("[이미지] 재업로드용 파일: " + local_image_path)
+                            image_items = [
+                                item for item in (input_stats.get("image_items") or [])
+                                if isinstance(item, dict)
+                            ]
+                            if image_items:
+                                image_totals["items"].extend(image_items)
+                                recovery_manifest_path = _write_recovery_manifest(
+                                    title,
+                                    markdown_path=saved_md_path,
+                                    image_items=image_items,
+                                )
+                                if recovery_manifest_path:
+                                    self._log(f"수동 복구 안내 파일 저장: {recovery_manifest_path}")
 
                             if image_count > 0 and image_inserted < image_block_count:
                                 post_stage = _image_failure_stage(image_failures)
@@ -5893,6 +6131,17 @@ class NaverBlogApp:
                                     effective_mode = "save"
                                     image_totals["mode_overridden_to_save"] = True
                                     self._log("[보호] 이미지 실패가 있어 공개 발행/예약 대신 임시저장으로 전환합니다.")
+
+                            editor_char_count = editor_visible_text_count(self.driver)
+                            min_editor_chars = max(300, int((visible_char_count or 0) * 0.75))
+                            if visible_char_count and editor_char_count and editor_char_count < min_editor_chars:
+                                post_stage = "smart_editor_input_verification"
+                                stage = post_stage
+                                raise RuntimeError(
+                                    "네이버 에디터 입력 글자 수가 생성 원고보다 크게 부족합니다. "
+                                    f"생성 원고 {visible_char_count}자 / 에디터 감지 {editor_char_count}자. "
+                                    "생성 원고 백업 파일을 확인해 다시 붙여넣을 수 있습니다."
+                                )
 
                             # 발행
                             if effective_mode == "save":
@@ -5955,11 +6204,15 @@ class NaverBlogApp:
                             "inserted": image_inserted,
                             "failure_count": len(image_failures),
                             "failures": image_failures,
+                            "local_paths": local_image_paths,
+                            "items": image_items,
                             "soft_failure_accepted": bool(image_soft_failed),
                         },
                         "draft_save_confirmed": draft_save_confirmed,
                         "char_count": visible_char_count,
                         "target_char_count": word_count,
+                        "recovery_markdown_path": saved_md_path or "",
+                        "recovery_manifest_path": recovery_manifest_path or "",
                     })
                     if is_multi:
                         self._log(f"── [{i+1}/{total}] 완료 ──")
@@ -5971,6 +6224,15 @@ class NaverBlogApp:
                     self._log(f"[오류] {last_error}")
                     if saved_md_path:
                         self._log(f"이미 생성된 원고는 버리지 않고 저장해 뒀어요: {saved_md_path} (다시 시도하면 재사용 가능)")
+                    if not recovery_manifest_path:
+                        recovery_manifest_path = _write_recovery_manifest(
+                            title or post.get("source"),
+                            markdown_path=saved_md_path,
+                            image_items=image_items if "image_items" in locals() else [],
+                            error=str(e),
+                        )
+                    if recovery_manifest_path:
+                        self._log(f"수동 복구 안내 파일: {recovery_manifest_path}")
                     _record_failed(
                         post,
                         stage,
@@ -5983,9 +6245,11 @@ class NaverBlogApp:
                             "inserted": image_inserted,
                             "failure_count": len(image_failures),
                             "failures": image_failures,
+                            "local_paths": local_image_paths if "local_image_paths" in locals() else [],
                         },
                         draft_save_confirmed=draft_save_confirmed,
                         recovery_path=saved_md_path,
+                        recovery_manifest_path=recovery_manifest_path,
                     )
 
                 # 다음 글까지 대기 (마지막 제외)
@@ -5998,6 +6262,8 @@ class NaverBlogApp:
             self.queue.put(("progress", 100))
             result_mode = "save" if image_totals.get("mode_overridden_to_save") else mode
             action_label = {"save": "임시저장", "schedule": "예약 발행", "publish": "발행"}.get(result_mode, "발행")
+            image_location_note = _generated_image_location_note(image_totals.get("local_paths"))
+            popup_action = {"open_path": GENERATED_IMAGE_DIR} if image_location_note else None
             if success != total:
                 error_msg = last_error or f"글쓰기 성공 건수가 부족합니다: {success}/{total}"
                 self._log(f"[오류] 글쓰기 작업 실패: {success}/{total} 글 성공")
@@ -6007,9 +6273,11 @@ class NaverBlogApp:
                     f"총 {success}/{total}개 글만 {action_label}됐습니다.\n"
                     f"마지막 오류: {error_msg}"
                 )
+                if image_location_note:
+                    body += "\n\n" + image_location_note
                 self.queue.put((
                     "popup",
-                    ("error", diag_title, body, None),
+                    ("error", diag_title, body, popup_action),
                 ))
                 return _build_write_result(
                     False, success, total, result_mode, ai_model, usage_totals, image_totals,
@@ -6031,9 +6299,11 @@ class NaverBlogApp:
                     f"이웃들의 반응을 지켜보자구요!\n\n"
                     f"오늘도 정말 수고하셨어요."
                 )
+            if image_location_note:
+                body += "\n\n" + image_location_note
             self.queue.put((
                 "popup",
-                ("write", "고객 설득하기 완료", body, None),
+                ("write", "고객 설득하기 완료", body, popup_action),
             ))
             return _build_write_result(True, success, total, result_mode, ai_model, usage_totals, image_totals, post_results, failed_posts)
 
@@ -6077,14 +6347,16 @@ class NaverBlogApp:
 
             ai_model = self.ai_model_var.get()
             if ai_model == "claude":
-                text_api_key = self.claude_key_var.get()
+                text_api_key = _runtime_secret(self.claude_key_var.get())
             elif _is_openai_model(ai_model):
-                text_api_key = self.openai_key_var.get()
+                text_api_key = _runtime_secret(self.openai_key_var.get())
             else:
-                text_api_key = self.api_key_var.get()
-            image_provider = "openai" if _is_openai_model(ai_model) and self.openai_key_var.get() else "gemini"
-            image_api_key = self.openai_key_var.get() if image_provider == "openai" else self.api_key_var.get()
-            fallback_image_api_key = self.api_key_var.get() if image_provider == "openai" else self.openai_key_var.get()
+                text_api_key = _runtime_secret(self.api_key_var.get())
+            local_openai_key = _runtime_secret(self.openai_key_var.get())
+            local_gemini_key = _runtime_secret(self.api_key_var.get())
+            image_provider = "openai" if _is_openai_model(ai_model) and local_openai_key else "gemini"
+            image_api_key = local_openai_key if image_provider == "openai" else local_gemini_key
+            fallback_image_api_key = local_gemini_key if image_provider == "openai" else local_openai_key
 
             self._log(f"엑셀 파일 로드: {excel_path}")
             rows = load_bulk_rows(excel_path)

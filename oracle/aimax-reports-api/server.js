@@ -1584,6 +1584,12 @@ function yeriServerGenerationTextModel(payload = {}) {
   return normalizeYeriGeminiModel(selected);
 }
 
+function yeriGeminiFallbackModel(model) {
+  const primary = String(model || "").trim();
+  const fallback = String(YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash").trim() || "gemini-2.5-flash";
+  return primary && primary !== fallback ? fallback : "";
+}
+
 function canUseYeriServerGeneration(user) {
   if (!YERI_SERVER_GENERATION_ALLOWED_USER_IDENTIFIERS.size) return true;
   if (userAccessIdentifierVariants(user).some((identifier) => (
@@ -2014,8 +2020,9 @@ async function generateYeriGeminiArtifact(job, userId) {
     throw error;
   }
   const model = yeriServerGenerationTextModel(job.payload || {});
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-  const response = await requestYeriProviderJson("gemini", endpoint, {
+  let response;
+  let usedModel = model;
+  const requestGemini = (targetModel) => requestYeriProviderJson("gemini", `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey },
     body: {
@@ -2041,9 +2048,25 @@ async function generateYeriGeminiArtifact(job, userId) {
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
   });
+  try {
+    response = await requestGemini(model);
+  } catch (error) {
+    const fallbackModel = yeriGeminiFallbackModel(model);
+    if (!fallbackModel || !["server_generation_provider_transient", "server_generation_model_not_found"].includes(String(error?.code || ""))) {
+      throw error;
+    }
+    console.warn("[yeri-hybrid] gemini fallback", {
+      primary_model: model,
+      fallback_model: fallbackModel,
+      code: error.code || "",
+      status: Number(error.status || 0),
+    });
+    usedModel = fallbackModel;
+    response = await requestGemini(fallbackModel);
+  }
   const text = extractGeminiText(response.json);
   const parsed = parseYeriGeneratedJson(text, "yeri_gemini");
-  return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, model, yeriGeminiUsage(response.json?.usageMetadata));
+  return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, usedModel, yeriGeminiUsage(response.json?.usageMetadata));
 }
 
 async function generateYeriOpenAiArtifact(job, userId) {
@@ -2204,7 +2227,7 @@ function buildFailureDiagnostic(input = {}) {
     reason,
   });
 
-  if (/yeri_(gemini|openai|claude)_key_missing|key_missing|api_key_missing|no api key|api key.*missing|키가.*없|키.*저장/.test(text)) {
+  if (/yeri_(gemini|openai|claude)_key_missing|key_missing|api_key_missing|no api key|api key.*missing|no api key was provided|키가.*없|키.*저장/.test(text)) {
     return user(
       "api_key_missing",
       "AI/API 키 등록 필요",
@@ -2234,6 +2257,14 @@ function buildFailureDiagnostic(input = {}) {
       "로컬 실행기 시작 지연",
       "로컬 실행기가 작업을 받았지만 내부 UI 큐 또는 작업자가 제때 시작하지 못했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.",
       ["실행기 재시작", "오류 보고 보내기"],
+    );
+  }
+  if (/browser_start|chromedriver|undetected_chromedriver|application control policy|애플리케이션 제어 정책|winerror 4551/.test(text)) {
+    return user(
+      "browser_driver_policy_blocked",
+      "브라우저 드라이버 차단",
+      "Windows 보안 또는 회사 보안 정책이 브라우저 드라이버 실행을 차단했습니다.",
+      ["보안 프로그램 차단 허용", "오류 보고 보내기"],
     );
   }
   if (/server_generation_provider_transient|provider_transient|temporarily|temporary|unavailable|overloaded|timeout|timed out|일시적 오류|잠시 후/.test(text)) {
@@ -7027,16 +7058,39 @@ function sanitizeImages(raw) {
       provider: String(failure.provider || "").slice(0, 40),
       method: String(failure.method || "").slice(0, 40),
       message: redactText(String(failure.message || "")).slice(0, 180),
+      local_image_path: String(failure.local_image_path || "").slice(0, 260),
       user_actionable: Boolean(failure.user_actionable),
       admin_action_required: Boolean(failure.admin_action_required),
     };
   }) : [];
+  const localPaths = Array.isArray(images.local_paths)
+    ? images.local_paths.slice(-20).map((item) => String(item || "").slice(0, 260)).filter(Boolean)
+    : [];
+  const items = Array.isArray(images.items)
+    ? images.items.slice(-20).map((item) => {
+      const image = item && typeof item === "object" ? item : {};
+      return {
+        index: safeInt(image.index, 0, 100),
+        prompt: redactText(String(image.prompt || "")).slice(0, 500),
+        provider: String(image.provider || "").slice(0, 40),
+        model: String(image.model || "").slice(0, 80),
+        generated: Boolean(image.generated),
+        inserted: Boolean(image.inserted),
+        local_image_path: String(image.local_image_path || "").slice(0, 260),
+        stage: String(image.stage || "").slice(0, 80),
+        error_code: String(image.error_code || "").slice(0, 80),
+      };
+    })
+    : [];
   return {
     attempted: safeInt(images.attempted, 0, 100),
     generated: safeInt(images.generated, 0, 100),
     inserted: safeInt(images.inserted, 0, 100),
     failure_count: safeInt(images.failure_count || failures.length, 0, 100),
     failures,
+    local_paths: localPaths,
+    items,
+    local_folder: String(images.local_folder || "").slice(0, 260),
     shortfall_accepted: Boolean(images.shortfall_accepted),
     soft_failure_accepted: Boolean(images.soft_failure_accepted),
     image_skipped_no_key: Boolean(images.image_skipped_no_key),
@@ -7090,6 +7144,8 @@ function sanitizePostResult(raw) {
     images: sanitizeImages(post.images),
     char_count: safeInt(post.char_count, 0, 100000),
     target_char_count: safeInt(post.target_char_count, 0, 100000),
+    recovery_markdown_path: String(post.recovery_markdown_path || "").slice(0, 260),
+    recovery_manifest_path: String(post.recovery_manifest_path || "").slice(0, 260),
   };
 }
 
@@ -8117,6 +8173,47 @@ function normalizeYunmiGeneratedResult(raw, input, options = {}) {
   return result;
 }
 
+function buildYunmiInvalidJsonFallbackResult(input, options = {}) {
+  const model = normalizeYunmiAiModel(options.model);
+  const requestId = options.requestId || yunmiRequestId(options.idempotency_key);
+  const usage = sanitizeUsage(options.usage);
+  const result = {
+    ...buildYunmiScriptResult(input),
+    mode: "ai_generated_fallback",
+    stage: "yunmi_ai_invalid_json_fallback",
+    summary: "Gemini 유료 호출 응답을 윤미 대본 JSON으로 해석하지 못해, 같은 입력으로 안전한 구조형 초안을 생성했습니다.",
+    usage,
+    cost: yunmiCostFromUsage(input, model, usage),
+    paid_call: {
+      confirmed: true,
+      executed: true,
+      status: "completed_with_fallback",
+      provider: "gemini",
+      model,
+      model_label: YUNMI_AI_MODEL_PRICES[model]?.label || model,
+      request_id: requestId,
+      idempotency_key: requestId,
+      auto_retry: false,
+      resume_supported: true,
+      diagnostic: "Gemini 응답 JSON 해석 실패로 무과금 구조형 초안을 대체 반환했습니다.",
+    },
+    request_id: requestId,
+    idempotency_key: requestId,
+  };
+  result.posts = [{
+    type: "script",
+    keyword: input.topic,
+    title: input.topic || "윤미 AI 대체 초안",
+    status: "done",
+    stage: "yunmi_ai_invalid_json_fallback",
+    char_count: 0,
+    target_char_count: 0,
+  }];
+  result.copy_text = yunmiCopyText(input, result);
+  result.posts[0].char_count = result.copy_text.length;
+  return result;
+}
+
 async function buildYunmiAiGeneratedResult(payload, options = {}) {
   const input = normalizeYunmiScriptPayload(payload);
   const model = normalizeYunmiAiModel(options.model || payload.ai_model || payload.model);
@@ -8154,11 +8251,22 @@ async function buildYunmiAiGeneratedResult(payload, options = {}) {
     timeoutMs: 60000,
     maxBytes: 2 * 1024 * 1024,
   });
-  const parsed = parseYunmiGeneratedJson(extractGeminiText(response.json));
+  const usage = yunmiGeminiUsage(response.json?.usageMetadata);
+  let parsed;
+  try {
+    parsed = parseYunmiGeneratedJson(extractGeminiText(response.json));
+  } catch (error) {
+    if (error?.code !== "yunmi_ai_invalid_json") throw error;
+    return buildYunmiInvalidJsonFallbackResult(input, {
+      model,
+      requestId,
+      usage,
+    });
+  }
   return normalizeYunmiGeneratedResult(parsed, input, {
     model,
     requestId,
-    usage: yunmiGeminiUsage(response.json?.usageMetadata),
+    usage,
   });
 }
 
@@ -8329,11 +8437,15 @@ function imageCompletionIssue(job, result) {
   if (
     result.image_shortfall_accepted === true ||
     result.images?.shortfall_accepted === true ||
-    result.images?.soft_failure_accepted === true ||
-    result.images?.image_skipped_no_key === true ||
-    result.images?.mode_overridden_to_save === true
+    result.images?.soft_failure_accepted === true
   ) return "";
   const images = result.images && typeof result.images === "object" ? result.images : {};
+  if (images.image_skipped_no_key === true) {
+    return `이미지 ${requested}장을 요청했지만 이미지 생성용 로컬 API 키가 없어 이미지 없이 저장되었습니다. Mac/Windows 실행기의 AI/API 연결에 선택한 이미지 모델용 키를 저장해주세요.`;
+  }
+  if (images.mode_overridden_to_save === true) {
+    return `이미지 ${requested}장을 요청했지만 이미지 키가 없어 공개 발행/예약 대신 임시저장으로 전환되었습니다.`;
+  }
   const attempted = safeInt(images.attempted, 0, 100);
   const inserted = safeInt(images.inserted, 0, 100);
   if (inserted >= requested) return "";
@@ -8923,6 +9035,155 @@ function reportSupportMeta(report, status) {
   return isFeedbackReport(report) ? feedbackStatusMeta(status) : reportStatusMeta(status);
 }
 
+const REPORT_AUTO_GUIDANCE = {
+  image_paid_required: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "이미지 생성 단계에서 선택된 이미지 모델을 현재 API 키/요금제에서 사용할 수 없어 실패했습니다. 글쓰기 기능 전체가 고장난 것은 아니며, 이미지 생성 권한 또는 유료 이미지 모델 사용 가능 여부 확인이 필요한 상태입니다.",
+    next_update_message: "설정 > AI/API 연결에서 이미지 생성 가능한 Gemini 또는 OpenAI 키와 선택 모델 권한을 확인한 뒤, 이미지 1장짜리 새 작업 1건만 다시 시도해주세요. 급하면 이미지 0장으로 먼저 글쓰기만 진행할 수 있습니다.",
+  },
+  image_generation_failed: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "본문은 생성됐지만 이미지 생성 또는 네이버 이미지 첨부가 완료되지 않아 작업이 중단되었습니다. 생성된 원고는 로컬 실행기의 generated 폴더에 보존됩니다.",
+    next_update_message: "이미지 0장 또는 1장으로 새 작업 1건만 다시 시도해주세요. 같은 문제가 반복되면 이미지 모델/API 권한을 확인하고, generated 폴더의 원고와 이미지 파일을 수동으로 붙여넣을 수 있습니다.",
+  },
+  api_key_missing: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "AI/API 키가 저장되어 있지 않거나 실행기/웹앱에서 사용할 수 없는 상태입니다.",
+    next_update_message: "설정 > AI/API 연결에서 사용하는 제공자 키를 저장한 뒤 웹앱을 새로고침하고 새 작업 1건만 다시 시도해주세요.",
+  },
+  api_key_invalid: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "저장된 AI/API 키가 제공자 서버에서 인증 실패로 거부되었습니다. 키가 잘못 복사되었거나 폐기된 상태일 수 있습니다.",
+    next_update_message: "제공자 콘솔에서 새 API 키를 발급해 설정 > AI/API 연결에 다시 저장한 뒤 새 작업 1건만 다시 시도해주세요.",
+  },
+  quota_exceeded: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "AI 제공자의 결제/크레딧/요금제 한도 때문에 작업이 중단되었습니다. AIMAX 실행기 오류가 아니라 API 계정 상태 확인이 필요한 케이스입니다.",
+    next_update_message: "사용 중인 AI 제공자 콘솔에서 결제, 크레딧, 사용량 한도를 확인한 뒤 키를 다시 저장하거나 다른 사용 가능한 모델로 바꿔 1건만 테스트해주세요.",
+  },
+  rate_limited: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "AI 무료 사용량 또는 분당 호출 한도에 걸린 상태입니다. 같은 작업을 반복 제출하면 대기 시간이 더 길어질 수 있습니다.",
+    next_update_message: "분당 한도면 10~30분 뒤, 일일 무료 한도면 다음 날 다시 시도해주세요. 급하면 본인 유료 API 키를 등록하거나 이미지 수/글 수를 줄여 1건만 테스트해주세요.",
+  },
+  model_not_found: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "선택한 AI 모델을 현재 계정에서 사용할 수 없거나 모델명이 맞지 않아 작업이 중단되었습니다.",
+    next_update_message: "설정 > AI/API 연결에서 AIMAX 기본 모델 또는 현재 계정에서 사용 가능한 모델로 바꾼 뒤 새 작업 1건만 다시 시도해주세요.",
+  },
+  organization_verification_required: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "OpenAI 이미지 모델 사용에 필요한 조직 인증 또는 모델 권한이 완료되지 않아 이미지 생성이 중단되었습니다.",
+    next_update_message: "OpenAI 개발자 콘솔에서 조직 인증과 이미지 모델 사용 권한을 확인한 뒤, 이미지 1장짜리 새 작업 1건만 다시 시도해주세요. 급하면 이미지 0장으로 먼저 글쓰기만 진행할 수 있습니다.",
+  },
+  provider_transient: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "AI 제공자 서버가 일시적으로 응답하지 않아 실패한 건입니다. 코드나 실행기 고장보다는 외부 제공자 일시 장애 가능성이 큽니다.",
+    next_update_message: "같은 작업을 여러 번 반복하지 말고 10~30분 뒤 새 작업 1건만 다시 시도해주세요. 반복되면 이 접수 ID로 다시 알려주세요.",
+  },
+  web_login_failed: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "웹앱 로그인 이메일 또는 비밀번호가 맞지 않아 연결이 실패했습니다.",
+    next_update_message: "이메일 대소문자/공백을 확인하고 비밀번호를 다시 입력해주세요. 계속 실패하면 비밀번호 재설정 또는 운영팀 확인이 필요합니다.",
+  },
+  naver_login_required: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "네이버 로그인 또는 2단계 인증/보안 확인 화면에서 다음 단계로 넘어가지 못한 상태입니다. 네이버 계정 보안 확인이 먼저 필요합니다.",
+    next_update_message: "실행기에서 열린 브라우저에서 네이버 로그인, 2단계 인증, 새 기기 등록을 완료한 뒤 AIMAX 웹앱을 새로고침하고 새 작업 1건만 다시 시도해주세요.",
+  },
+  mac_gatekeeper: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "macOS 보안 허용 후 AIMAX 실행기가 바로 보이지 않는 상태입니다. 앱이 차단되었거나 백그라운드 실행/권한 허용이 끝나지 않았을 수 있습니다.",
+    next_update_message: "AIMAX를 완전히 종료한 뒤 최신 macOS 설치 파일을 다시 설치하고, 시스템 설정 > 개인정보 보호 및 보안에서 허용 후 앱을 한 번 더 실행해주세요. 그래도 무반응이면 접수 ID와 함께 알려주세요.",
+  },
+  runner_update_required: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
+    next_update_message: "웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
+  },
+  browser_driver_policy_blocked: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "Windows 보안 또는 회사 보안 정책이 브라우저 드라이버 실행을 차단해 네이버 글쓰기 브라우저를 시작하지 못했습니다.",
+    next_update_message: "Windows 보안 > 보호 기록 또는 사용 중인 보안 프로그램에서 chromedriver/undetected_chromedriver/AIMAX 차단 내역을 허용 또는 복원한 뒤, AIMAX와 Chrome을 모두 닫고 새 작업 1건만 다시 시도해주세요.",
+  },
+  staff_feedback_reviewing: {
+    status: "reviewing",
+    status_label: "확인 중",
+    public_message: "남겨주신 직원 피드백을 운영팀이 확인 중입니다. 기능 오류인지, 설정/사용량/계정 상태 문제인지 함께 분류합니다.",
+    next_update_message: "추가 조치가 확인되면 이 화면에 안내가 업데이트됩니다. 같은 증상은 여러 번 보내지 않아도 됩니다.",
+  },
+};
+
+function reportAutoGuidanceText(report) {
+  return [
+    report.source,
+    report.report_kind,
+    report.user_input?.work_context,
+    report.user_input?.visible_error,
+    report.user_input?.user_note,
+    report.feedback?.improve,
+    report.feedback?.good,
+    report.system?.runtime?.system,
+    report.web_context?.platform,
+    JSON.stringify(reportRecentJobs(report).slice(0, 5)),
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function classifyReportAutoGuidance(report) {
+  if (isFeedbackReport(report)) return REPORT_AUTO_GUIDANCE.staff_feedback_reviewing;
+  const text = reportAutoGuidanceText(report);
+  const rules = [
+    ["browser_driver_policy_blocked", /browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551/],
+    ["web_login_failed", /로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지/],
+    ["naver_login_required", /네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리/],
+    ["mac_gatekeeper", /macos|개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응/],
+    ["image_paid_required", /image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델/],
+    ["image_generation_failed", /image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted/],
+    ["organization_verification_required", /organization_verification_required|organization verification|verify your organization|must be verified|조직 인증/],
+    ["model_not_found", /model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가/],
+    ["runner_update_required", /update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트/],
+    ["api_key_missing", /api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안/],
+    ["api_key_invalid", /api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized/],
+    ["quota_exceeded", /quota_exceeded|insufficient_quota|billing|payment|credit|balance|크레딧|결제|요금제 한도|한도 초과/],
+    ["rate_limited", /rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일 한도/],
+    ["provider_transient", /provider_transient|temporar|unavailable|overloaded|일시적 오류|잠시 후/],
+  ];
+  for (const [key, pattern] of rules) {
+    if (pattern.test(text)) return { key, ...REPORT_AUTO_GUIDANCE[key] };
+  }
+  return null;
+}
+
+function applyReportAutoGuidance(report, storedAt) {
+  const guidance = classifyReportAutoGuidance(report);
+  if (!guidance) return null;
+  report.support = {
+    ...(report.support || {}),
+    status: guidance.status,
+    status_label: guidance.status_label,
+    public_message: guidance.public_message,
+    next_update_message: guidance.next_update_message,
+    updated_at: storedAt,
+    auto_guidance_category: guidance.key || "staff_feedback_reviewing",
+    auto_guidance_source: "handleReport",
+  };
+  return guidance;
+}
+
 function reportFeedback(report) {
   const feedback = report?.feedback && typeof report.feedback === "object" && !Array.isArray(report.feedback)
     ? report.feedback
@@ -8957,6 +9218,7 @@ function reportOs(report) {
 function reportRecentJobs(report) {
   const candidates = [
     report.system?.agent?.jobs_recent,
+    report.system?.jobs_recent,
     report.agent_context?.jobs_recent,
     report.jobs_recent,
   ];
@@ -8969,6 +9231,7 @@ function reportRecentJobs(report) {
 function reportPrimaryJob(report) {
   const jobs = reportRecentJobs(report);
   if (!jobs.length) return null;
+  if (isFeedbackReport(report)) return jobs[0];
   return jobs.find((job) => ["failed", "cancelled", "running"].includes(String(job.status || ""))) || jobs[0];
 }
 
@@ -9069,6 +9332,7 @@ function summaryFor(report, storedAt, dateKey) {
     os: reportOs(report),
     work_context: report.user_input?.work_context || "",
     visible_error: report.user_input?.visible_error || "",
+    user_note: report.user_input?.user_note || "",
     feedback_employee_code: feedback.employee_code,
     feedback_employee_label: feedback.employee_label,
     feedback_rating: feedback.rating,
@@ -9097,6 +9361,10 @@ function automationTicketId(reportId, storedAt) {
 
 function automationTicketCategory(summary, report) {
   if (isFeedbackReport(summary)) return "staff_feedback";
+  const autoGuidanceCategory = sanitizeFailedStage(report?.support?.auto_guidance_category || summary.auto_guidance_category || "");
+  if (/api_key|quota|rate_limit|provider_transient|model_not_found|image_paid_required/.test(autoGuidanceCategory)) return "user_ai_provider";
+  if (/runner_update_required/.test(autoGuidanceCategory)) return "local_runner";
+  if (/naver_login_required/.test(autoGuidanceCategory)) return "naver_editor";
   const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
   const diagnosticCode = sanitizeFailedStage(diagnostic?.code || "");
   const stage = sanitizeFailedStage(summary.job_stage || "");
@@ -9114,6 +9382,12 @@ function automationTicketPriority(summary, report) {
   if (isFeedbackReport(summary)) return summary.feedback_contact_needed ? "normal" : "low";
   const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
   if (diagnostic?.admin_action_required) return "high";
+  const text = [
+    summary.visible_error,
+    summary.user_note,
+    report?.user_input?.user_note,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (/한번도|한 번도|단 한번도|발행.*된 적|never.*publish|never.*posted/.test(text)) return "high";
   if (summary.job_status === "failed" || summary.status === "new") return "normal";
   return "low";
 }
@@ -9135,7 +9409,7 @@ function buildAutomationTicketForReport(report, storedAt, dateKey) {
   return {
     ticket_id: automationTicketId(summary.report_id, storedAt),
     source: "admin_report",
-    status: "open",
+    status: automationTicketStatusForReportStatus(summary.status),
     priority: automationTicketPriority(summary, report),
     category,
     report_id: summary.report_id || "",
@@ -9151,6 +9425,7 @@ function buildAutomationTicketForReport(report, storedAt, dateKey) {
     job_worker: summary.job_worker || "",
     job_status: summary.job_status || "",
     job_stage: summary.job_stage || "",
+    user_note: compactText(summary.user_note || "", 500),
     visible_error: compactText(summary.visible_error || summary.feedback_improve || "", 700),
     work_context: compactText(summary.work_context || "", 500),
     suggested_next_action: automationTicketNextAction(category),
@@ -9158,8 +9433,30 @@ function buildAutomationTicketForReport(report, storedAt, dateKey) {
   };
 }
 
+function automationTicketStatusForReportStatus(status) {
+  const value = normalizeReportStatus(status || "new");
+  if (value === "done") return "done";
+  if (value === "waiting_user") return "waiting_user";
+  if (value === "working") return "working";
+  return "open";
+}
+
 function appendAutomationTicket(ticket) {
   appendJsonLineDurable(AUTOMATION_TICKETS_PATH, ticket);
+  return ticket;
+}
+
+function appendAutomationTicketStatusUpdate(ticketId, reportId, status, updatedAt = nowIso()) {
+  const cleanTicketId = String(ticketId || "").trim();
+  if (!cleanTicketId) return null;
+  const ticket = {
+    ticket_id: cleanTicketId,
+    source: "admin_report",
+    status: automationTicketStatusForReportStatus(status),
+    report_id: String(reportId || "").trim(),
+    updated_at: updatedAt,
+  };
+  appendAutomationTicket(ticket);
   return ticket;
 }
 
@@ -9170,6 +9467,16 @@ function loadAutomationTickets(limit = 200) {
     .filter(Boolean)
     .slice(-limit)
     .map((line) => JSON.parse(line));
+}
+
+function latestAutomationTickets(limit = 200) {
+  const latest = new Map();
+  for (const ticket of loadAutomationTickets(limit)) {
+    const ticketId = String(ticket.ticket_id || "");
+    if (!ticketId) continue;
+    latest.set(ticketId, { ...(latest.get(ticketId) || {}), ...ticket });
+  }
+  return [...latest.values()];
 }
 
 function loadReportIndexRows(limit = 200) {
@@ -9203,6 +9510,7 @@ function publicReportSummary(row) {
     automation_ticket_id: row.automation_ticket_id || "",
     work_context: row.work_context || "",
     visible_error: row.visible_error || "",
+    user_note: row.user_note || "",
     feedback_employee_code: row.feedback_employee_code || "",
     feedback_employee_label: row.feedback_employee_label || "",
     feedback_rating: row.feedback_rating || "",
@@ -10025,7 +10333,7 @@ function handleAdminListAutomationTickets(req, res, url) {
   if (!requireAdmin(req, res)) return;
   try {
     const statusFilter = String(url.searchParams.get("status") || "").trim();
-    const rows = loadAutomationTickets(500)
+    const rows = latestAutomationTickets(500)
       .reverse()
       .filter((ticket) => !statusFilter || String(ticket.status || "") === statusFilter)
       .slice(0, 100);
@@ -10120,6 +10428,9 @@ async function handleAdminUpdateReportStatus(req, res, reportId) {
       json(req, res, 404, { ok: false, error: "report_not_found" });
       return;
     }
+    if (updatedRow.automation_ticket_id) {
+      appendAutomationTicketStatusUpdate(updatedRow.automation_ticket_id, reportId, status, updatedAt);
+    }
     json(req, res, 200, { ok: true, report: adminReportSummary(updatedRow) });
   } catch (_error) {
     json(req, res, 500, { ok: false, error: "report_update_failed" });
@@ -10179,14 +10490,23 @@ function provisionAdminUser(users, body, now) {
   user.name = String(body.name || user.name || "").trim();
   user.status = String(body.status || "active").trim();
   user.account_segment = normalizeAccountSegment(requestedSegment, user.account_segment || fallbackSegment);
-  user.entitlements = {
-    product,
-    products: productList(product),
-    status: "active",
-    source,
-    granted_at: now,
-    expires_at: body.expires_at || null,
-  };
+  if (created) {
+    user.entitlements = {
+      product,
+      products: productList(product),
+      status: "active",
+      source,
+      granted_at: now,
+      expires_at: body.expires_at || null,
+    };
+  } else {
+    grantProductToUser(user, product, now, source);
+    user.entitlements = {
+      ...(user.entitlements || {}),
+      source: user.entitlements?.source || source,
+      expires_at: body.expires_at || user.entitlements?.expires_at || null,
+    };
+  }
   user.admin_note = body.admin_note ? redactText(body.admin_note) : user.admin_note || "";
   user.updated_at = now;
 
@@ -10400,6 +10720,103 @@ async function handleAdminSendGuideEmail(req, res) {
       detail: redactText(error.message || "").slice(0, 300),
     });
   }
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function handleAdminSendGuideEmailsBatch(req, res) {
+  if (!requireAdmin(req, res)) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+
+  const rows = Array.isArray(body.guides) ? body.guides : Array.isArray(body.users) ? body.users : Array.isArray(body.emails) ? body.emails : [];
+  if (!rows.length) {
+    json(req, res, 400, { ok: false, error: "empty_batch" });
+    return;
+  }
+  if (rows.length > 200) {
+    json(req, res, 400, { ok: false, error: "batch_too_large", max: 200 });
+    return;
+  }
+
+  const normalizedRows = rows.map((row) => {
+    if (typeof row === "string") return { email: normalizeEmail(row) };
+    return {
+      email: normalizeEmail(row.email || row.to),
+      subject: String(row.subject || "").trim().slice(0, 160),
+      text: String(row.text || row.guide_text || "").trim(),
+    };
+  });
+  const seen = new Set();
+  const errors = [];
+  normalizedRows.forEach((row, index) => {
+    if (!isValidEmail(row.email)) errors.push({ index, email: row.email, error: "invalid_email" });
+    if (row.email && seen.has(row.email)) errors.push({ index, email: row.email, error: "duplicate_email" });
+    if (row.email) seen.add(row.email);
+  });
+  if (errors.length) {
+    json(req, res, 400, { ok: false, error: "invalid_batch", errors });
+    return;
+  }
+
+  const users = loadUsers();
+  const setupTokens = loadSetupTokens();
+  const userByEmail = new Map(users.users.map((user) => [user.email, user]));
+  const sent = [];
+
+  for (let index = 0; index < normalizedRows.length; index += 1) {
+    const row = normalizedRows[index];
+    const user = userByEmail.get(row.email);
+    if (!user || user.status !== "active") {
+      errors.push({ index, email: row.email, error: "user_not_found_or_inactive" });
+      continue;
+    }
+
+    const now = nowIso();
+    const product = primaryProductForEntitlements(user.entitlements || {}, user.product || "");
+    const setupLink = row.text ? null : createSetupLinkForUser(setupTokens, user, now, "admin_batch_guide_email");
+    const subject = row.subject || onboardingGuideSubject(user);
+    const text = row.text || onboardingSetupLinkText(user, setupLink.setup_url, product, setupLink.expires_at);
+
+    try {
+      const mail = await sendAdminGuideEmail({ to: row.email, subject, text });
+      const sentAt = nowIso();
+      rememberUserEmailEvent(user, {
+        type: "onboarding_guide_batch",
+        provider: mail.provider,
+        provider_message_id: mail.id,
+        to: row.email,
+        subject,
+        sent_at: sentAt,
+      });
+      sent.push({
+        email: row.email,
+        sent_at: sentAt,
+        provider: mail.provider,
+        provider_message_id: mail.id,
+      });
+      if (index < normalizedRows.length - 1) await delay(600);
+    } catch (error) {
+      errors.push({
+        index,
+        email: row.email,
+        error: error.code || error.message || "mail_send_failed",
+        detail: redactText(error.message || "").slice(0, 300),
+      });
+    }
+  }
+
+  saveUsers(users);
+  saveSetupTokens(setupTokens);
+  json(req, res, 200, {
+    ok: true,
+    sent_count: sent.length,
+    error_count: errors.length,
+    sent,
+    errors,
+  });
 }
 
 async function handleAdminProvisionBatch(req, res) {
@@ -13519,6 +13936,7 @@ async function handleReport(req, res) {
     next_update_message: supportMeta.nextUpdateMessage,
     updated_at: storedAt,
   };
+  applyReportAutoGuidance(report, storedAt);
 
   const dateKey = storedAt.slice(0, 10);
   const dayDir = path.join(REPORTS_DIR, dateKey);
@@ -13537,12 +13955,13 @@ async function handleReport(req, res) {
     ok: true,
     report_id: report.report_id,
     stored_at: storedAt,
-    status: "new",
-    status_label: supportMeta.label,
-    public_message: supportMeta.publicMessage,
-    next_update_message: supportMeta.nextUpdateMessage,
+    status: report.support.status,
+    status_label: report.support.status_label,
+    public_message: report.support.public_message,
+    next_update_message: report.support.next_update_message,
     status_updated_at: storedAt,
     automation_ticket_id: automationTicket.ticket_id,
+    auto_guidance_category: report.support.auto_guidance_category || "",
   });
 }
 
@@ -13654,6 +14073,10 @@ async function handleReportUserResponse(req, res, reportId) {
     if (!updatedRow) {
       json(req, res, 404, { ok: false, error: "report_not_found" });
       return;
+    }
+
+    if (updatedRow.automation_ticket_id) {
+      appendAutomationTicketStatusUpdate(updatedRow.automation_ticket_id, reportId, nextStatus, updatedAt);
     }
 
     if (response === "still_failing") {
@@ -14107,6 +14530,10 @@ function route(req, res) {
     handleAdminSendGuideEmail(req, res);
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/admin/users/send-guides-batch") {
+    handleAdminSendGuideEmailsBatch(req, res);
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/admin/users/provision-batch") {
     handleAdminProvisionBatch(req, res);
     return;
@@ -14323,6 +14750,7 @@ module.exports = {
     grantProductToUser,
     isJobAllowed,
     primaryProductForEntitlements,
+    provisionAdminUser,
     productList,
     publicJobKind,
     publicWorker,
@@ -14344,10 +14772,14 @@ module.exports = {
   },
   __automationTest: {
     AUTOMATION_TICKETS_PATH,
+    applyReportAutoGuidance,
     appendAutomationTicket,
+    appendAutomationTicketStatusUpdate,
     automationTicketCategory,
     automationTicketId,
+    automationTicketStatusForReportStatus,
     buildAutomationTicketForReport,
+    latestAutomationTickets,
     loadAutomationTickets,
     telegramReportAlertText,
   },
@@ -14372,6 +14804,7 @@ module.exports = {
     saveYeriArtifact,
     AGENT_CLAIMABLE_JOB_STATUSES,
     yeriServerGenerationMode,
+    yeriGeminiFallbackModel,
     markRunnerStartTimeouts,
     failStaleRunningJobs,
     findHeartbeatAgent,
@@ -14393,6 +14826,7 @@ module.exports = {
   __yunmiTest: {
     buildYunmiGenerationPrompt,
     buildYunmiScriptResult,
+    buildYunmiInvalidJsonFallbackResult,
     normalizeYunmiScriptPayload,
   },
 };
