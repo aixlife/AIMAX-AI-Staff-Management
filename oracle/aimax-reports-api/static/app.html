@@ -5648,11 +5648,31 @@
         releaseUrl: "",
         setupDownloadUrl: "/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe",
         portableDownloadUrl: "/downloads/AIMAX-Office-Manager-portable.exe",
-        downloadLabel: "Setup exe 다운로드",
-        supportedPlatforms: ["windows"],
+        downloadLabel: "설치 파일 다운로드",
+        supportedPlatforms: ["windows", "macos"],
         version: "0.1.6",
         description: "캡처, 모자이크, OCR, 화면 녹화, Windows 종료처럼 자주 쓰는 사무 작업을 조용히 처리하는 데스크톱 직원입니다.",
-        meta: ["화면 캡처", "캡처 이미지 모자이크", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+        meta: ["화면 캡처", "캡처 이미지 모자이크", "Mac 앱", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+        executionOptions: [
+          {
+            kind: "windows_download",
+            label: "Windows Setup 다운로드",
+            platforms: ["windows"],
+            status: "available",
+            url: "/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe",
+            primary: true,
+            description: "Windows용 지은 안정 버전 v0.1.6 설치 파일입니다.",
+          },
+          {
+            kind: "mac_download",
+            label: "Apple Silicon Mac 앱 다운로드",
+            platforms: ["macos"],
+            status: "available",
+            url: "/downloads/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg",
+            primary: false,
+            description: "Apple Silicon Mac용 Tauri v0.2.0 DMG입니다.",
+          },
+        ],
         resume: {
           employeeNo: "AIMAX-2026-JIEUN",
           team: "오피스지원팀",
@@ -7676,6 +7696,13 @@
       return true;
     }
 
+    function executionOptionSupportsCurrentPlatform(option) {
+      const platforms = Array.isArray(option?.platforms) ? option.platforms.filter(Boolean) : [];
+      if (!platforms.length || platforms.includes("web")) return true;
+      const platform = state.platform || detectPlatform();
+      return platforms.includes(platform);
+    }
+
     function employeeMatchesExecutionFilter(employee, filter = state.staffExecutionFilter) {
       if (filter === "all") return true;
       return employeeExecutionOptions(employee).some((option) => optionMatchesExecutionFilter(option, filter));
@@ -7704,6 +7731,23 @@
     function employeePlatformLabel(employee) {
       const platforms = employeeSupportedPlatforms(employee);
       return platforms.length ? platforms.map(platformLabel).join(", ") : "모든 환경";
+    }
+
+    function externalEmployeeDownloadOption(employee) {
+      const configured = Array.isArray(employee?.executionOptions) ? employee.executionOptions : [];
+      if (!configured.length) return null;
+      const options = employeeExecutionOptions(employee)
+        .filter((option) => option.url && String(option.kind || "").includes("download"));
+      return options.find((option) => option.status === "available" && executionOptionSupportsCurrentPlatform(option))
+        || options.find((option) => option.primary && option.status === "available")
+        || options.find((option) => option.status === "available")
+        || null;
+    }
+
+    function externalEmployeeDownloadLabel(employee) {
+      return externalEmployeeDownloadOption(employee)?.label
+        || employee?.downloadLabel
+        || "설치 파일 다운로드";
     }
 
     function requiredSettingsText(settings) {
@@ -8344,9 +8388,9 @@
           return { label: "권한 없음", action: "", disabled: true };
         }
         if (!employeeSupportsCurrentPlatform(employee)) {
-          return { label: "Windows 전용", action: "", disabled: true };
+          return { label: `${employeePlatformLabel(employee)} 전용`, action: "", disabled: true };
         }
-        return { label: employee.downloadLabel || "Setup exe 다운로드", action: "employee-download", disabled: !externalEmployeeDownloadUrl(employee) };
+        return { label: externalEmployeeDownloadLabel(employee), action: "employee-download", disabled: !externalEmployeeDownloadUrl(employee) };
       }
       if (state.me?.requires_password_change) {
         return { label: "비밀번호 변경", action: "password", disabled: false };
@@ -8356,9 +8400,9 @@
       }
       if (isExternalDownloadEmployee(employee)) {
         if (!employeeSupportsCurrentPlatform(employee)) {
-          return { label: "Windows 전용", action: "", disabled: true };
+          return { label: `${employeePlatformLabel(employee)} 전용`, action: "", disabled: true };
         }
-        return { label: employee.downloadLabel || "Setup exe 다운로드", action: "employee-download", disabled: !externalEmployeeDownloadUrl(employee) };
+        return { label: externalEmployeeDownloadLabel(employee), action: "employee-download", disabled: !externalEmployeeDownloadUrl(employee) };
       }
       if (isWebModuleEmployee(employee)) {
         return { label: "직원 업무지시", action: "quick-actions", disabled: !state.me?.can_execute };
@@ -8402,6 +8446,8 @@
     }
 
     function externalEmployeeDownloadUrl(employee) {
+      const option = externalEmployeeDownloadOption(employee);
+      if (option?.url) return option.url;
       return employee?.setupDownloadUrl || employee?.releaseUrl || employee?.repoUrl || "";
     }
 
@@ -8445,7 +8491,7 @@
         return;
       }
       if (!employeeSupportsCurrentPlatform(employee)) {
-        showToast(`${employee.name || "이 직원"}은 현재 Windows 환경에서만 설치와 사용을 지원합니다.`);
+        showToast(`${employee.name || "이 직원"}은 현재 ${employeePlatformLabel(employee)}에서만 설치와 사용을 지원합니다.`);
         return;
       }
       const url = externalEmployeeDownloadUrl(employee);
@@ -8455,7 +8501,7 @@
       }
       const directDownload = openExternalLink(url);
       showToast(directDownload
-        ? `${employee.name || "직원"} 설치 파일 다운로드를 시작했습니다.`
+        ? `${externalEmployeeDownloadLabel(employee)}를 시작했습니다.`
         : `${employee.name || "직원"} 다운로드 페이지를 열었습니다.`);
     }
 
@@ -9911,7 +9957,7 @@
         const description = [platforms, option.description || employeeExecutionLabel(employee)]
           .filter(Boolean)
           .join(" · ");
-        const disabled = option.status !== "available" || !hasEmployeeEntitlement(employee);
+        const disabled = option.status !== "available" || !hasEmployeeEntitlement(employee) || !executionOptionSupportsCurrentPlatform(option);
         return `
           <div class="execution-option ${option.primary ? "primary" : ""}">
             <div class="execution-option-copy">
@@ -9936,6 +9982,10 @@
       if (!hasEmployeeEntitlement(employee)) {
         const status = employeeStatusInfo(employee.code || state.selectedEmployee);
         showToast(status.reason || "현재 계정 권한으로는 이 직원을 사용할 수 없습니다.");
+        return;
+      }
+      if (!executionOptionSupportsCurrentPlatform(option)) {
+        showToast(`${option.label || "이 실행 방법"}은 현재 기기에서 지원하지 않습니다.`);
         return;
       }
       if (option.status === "available" && option.url) {
