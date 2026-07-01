@@ -55,6 +55,10 @@
 - `scripts/deploy_oracle.sh web --dry-run`
 - DMG mount/copy/launch local smoke
 - GitHub Actions workflow runs: none configured/found for the two PR head commits.
+- `node --check scripts/smoke_jieun_macos_download.mjs`
+- Pre-deploy production smoke intentionally fails because production still has no macOS Jieun option:
+  - `node scripts/smoke_jieun_macos_download.mjs`
+  - observed error: `Jieun supported_platforms does not include macos`
 
 ## Deployment Commands
 
@@ -70,6 +74,7 @@ scripts/deploy_oracle.sh web
 ```bash
 curl -I -L https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg
 curl -sS -L https://api.aimax.ai.kr/api/workers | rg 'AIMAX-Office-Manager-macOS|supported_platforms|execution_options|jieun'
+node scripts/smoke_jieun_macos_download.mjs
 ```
 
 Expected:
@@ -78,6 +83,7 @@ Expected:
 - Remote SHA256 matches `4f509535844595cf0d7d8c84b3c1d701b27d989d30b74695feacb1838e536a1b`.
 - `/api/workers` shows Jieun with `windows` and `macos`.
 - AIMAX web app shows a Mac download option on macOS.
+- `scripts/smoke_jieun_macos_download.mjs` exits 0 and prints `ok: true`.
 
 ## Important Release Risk
 
