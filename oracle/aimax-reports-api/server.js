@@ -441,7 +441,7 @@ const WORKERS = {
         status: "available",
         url: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg`,
         primary: false,
-        description: "Apple Silicon Mac용 Tauri v0.2.0 DMG입니다.",
+        description: "Apple Silicon Mac용 Tauri v0.2.0 DMG입니다. 첫 실행 시 macOS 보안 확인이 뜨면 시스템 설정에서 허용 후 열어주세요.",
       },
     ],
   },
