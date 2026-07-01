@@ -115,6 +115,8 @@ def generate_blog_content(keyword, api_key, style_id="info", model="gemini-2.5-f
                           cta_link=None, cta_text=None, word_count=1500,
                           image_count=3,
                           seo_brief=None,
+                          keyword_emphasis_enabled=False,
+                          style_reference_text=None,
                           return_usage=False):
     """키워드 기반 마크다운 블로그 글 생성
 
@@ -126,6 +128,8 @@ def generate_blog_content(keyword, api_key, style_id="info", model="gemini-2.5-f
         cta_link: CTA 링크 URL (선택)
         cta_text: CTA 문구/설명 (선택)
         seo_brief: 상위 글 분석 브리프 dict (선택)
+        keyword_emphasis_enabled: 중요 키워드/판단 기준을 제한적으로 굵게 표시
+        style_reference_text: 기존 작성글 스타일 참고 텍스트 (복사 금지, 톤만 참고)
         return_usage: True면 (content, usage_dict) 튜플 반환
     """
     target_chars = _normalize_target_char_count(word_count)
@@ -148,6 +152,8 @@ CTA 요청:
 
     image_count = _normalize_image_count(image_count)
     seo_instruction = format_seo_brief_for_prompt(seo_brief)
+    emphasis_instruction = _keyword_emphasis_instruction(keyword_emphasis_enabled)
+    style_reference_instruction = _style_reference_instruction(style_reference_text)
 
     prompt = f"""{style_guide}
 
@@ -174,7 +180,7 @@ CTA 요청:
 - 같은 구도나 같은 소재가 반복되지 않게 하세요.
 - [이미지] 줄을 연속으로 몰아서 쓰지 말고, 관련 본문 문단 뒤에 하나씩 분산 배치하세요.
 - 이미지가 2개 이상이면 본문 섹션들 사이에 나누어 넣어 글 사이사이에 들어가게 하세요.
-- 이미지가 0개라면 [이미지] 줄을 만들지 마세요.{seo_instruction}"""
+- 이미지가 0개라면 [이미지] 줄을 만들지 마세요.{seo_instruction}{emphasis_instruction}{style_reference_instruction}"""
 
     logger.info(f"블로그 글 생성 중: {keyword} (스타일: {style_name}, 모델: {model})")
 
@@ -246,6 +252,31 @@ def _generate_once(prompt, api_key, model):
     # 레거시 "gemini" 문자열이면 기본 모델로 폴백
     gemini_model_id = _normalize_gemini_model_id(model)
     return _generate_with_gemini(prompt, api_key, gemini_model_id)
+
+
+def _keyword_emphasis_instruction(enabled):
+    if not enabled:
+        return ""
+    return """
+
+핵심 키워드 강조:
+- 독자가 반드시 기억해야 할 핵심 키워드나 판단 기준만 **굵게** 표시하세요.
+- 굵게 표시는 전체 본문에서 3~6회만 사용하고, 한 문단에 여러 개를 몰아넣지 마세요.
+- 제목, 소제목, CTA 문장 전체를 굵게 만들지 마세요."""
+
+
+def _style_reference_instruction(reference_text):
+    text = str(reference_text or "").strip()
+    if not text:
+        return ""
+    text = text[:2400]
+    return f"""
+
+기존 작성글 스타일 참고:
+- 아래 참고글의 문장, 표현, 제목을 복사하지 말고 어투, 문장 길이, 문단 전개 방식만 참고하세요.
+- 개인정보, 업체명, 가격, 후기처럼 검증되지 않은 사실은 새 글에 옮기지 마세요.
+참고글:
+\"\"\"{text}\"\"\""""
 
 
 def _normalize_gemini_model_id(model):

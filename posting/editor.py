@@ -945,7 +945,7 @@ def _dismiss_editor_popup(driver):
         logger.debug(f"팝업 닫기 시도 중 오류: {e}")
 
 
-def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model=""):
+def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model="", stop_event=None):
     """파싱된 콘텐츠 리스트를 에디터에 입력
 
     content_list 형식:
@@ -964,6 +964,15 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
     image_local_paths = []
     image_items = []
     for i, (content_type, content_data) in enumerate(content_list):
+        if stop_event is not None and stop_event.is_set():
+            image_failures.append({
+                "stage": "user_cancelled",
+                "error": "user_cancelled",
+                "message": "사용자가 작업을 중단했습니다.",
+                "user_actionable": False,
+                "admin_action_required": False,
+            })
+            break
         if content_type == 'text':
             _input_text_block(driver, content_data)
         elif content_type == 'quote':

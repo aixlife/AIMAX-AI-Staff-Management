@@ -2500,7 +2500,7 @@ class NaverBlogApp:
 
                 if not skip_commands:
                     try:
-                        command = client.next_command(platform_label).get("command")
+                        command = client.next_command(platform_label, device_label).get("command")
                         self.web_agent_last_command_error = ""
                         if command:
                             self.queue.put(("web_agent_command", {"client": client, "command": command}))
@@ -3202,6 +3202,23 @@ class NaverBlogApp:
             threading.Thread(target=_worker, daemon=True).start()
 
         try:
+            if command_type == "stop_current_job":
+                payload = command.get("payload") if isinstance(command.get("payload"), dict) else {}
+                job_id = str(payload.get("job_id") or "").strip()
+                self._log(f"[웹앱 연결] 작업 중단 요청 수신: {job_id or '현재 작업'}")
+                self.stop_event.set()
+                self.running = False
+                if getattr(self, "driver", None):
+                    try:
+                        self.driver.quit()
+                    except Exception:
+                        pass
+                    self.driver = None
+                _send_command_update("done", "현재 작업 중단 요청을 로컬 실행기에 반영했습니다.", {
+                    "type": "job_cancelled",
+                    "job_id": job_id,
+                })
+                return
             if command_type in ("stop_agent", "quit_runner", "shutdown_agent", "stop_runner"):
                 self._handle_stop_agent_command(command, _send_command_update)
                 return
@@ -3386,7 +3403,11 @@ class NaverBlogApp:
             elif kind == "hyunju_find":
                 kwargs = self._remote_neighbor_kwargs(payload)
                 worker_started = True
-                self._worker_neighbor(**kwargs)
+                target_mode = kwargs.pop("target_mode", "keyword")
+                if target_mode == "blogger_followers":
+                    self._worker_link_neighbor(**kwargs)
+                else:
+                    self._worker_neighbor(**kwargs)
                 status = "cancelled" if self.stop_event.is_set() else "done"
                 client.update_job(job_id, status, "로컬 실행기 작업이 종료되었습니다. 상세 결과는 앱 로그를 확인해주세요.")
             else:
@@ -3434,12 +3455,20 @@ class NaverBlogApp:
             "ai_model": _normalize_ai_model(payload.get("ai_model") or payload.get("model") or self.ai_model_var.get()),
             "image_model": _normalize_image_model(payload.get("image_model"), payload.get("ai_model") or payload.get("model") or self.ai_model_var.get()),
             "seo_brief": payload.get("seo_brief") if isinstance(payload.get("seo_brief"), dict) else None,
+            "seo_research_enabled": bool(payload.get("seo_research_enabled")),
+            "seo_reference_posts": payload.get("seo_reference_posts") if isinstance(payload.get("seo_reference_posts"), list) else None,
+            "seo_reference_text": str(payload.get("seo_reference_text") or "").strip() or None,
+            "keyword_emphasis_enabled": bool(payload.get("keyword_emphasis_enabled")),
+            "style_reference_text": str(payload.get("style_reference_text") or "").strip() or None,
             "artifact": artifact if isinstance(artifact, dict) else None,
         }
 
     def _remote_neighbor_kwargs(self, payload):
         keywords = self._remote_payload_keywords(payload)
-        if not keywords:
+        target_mode = str(payload.get("target_mode") or payload.get("mode") or "keyword").strip()
+        if target_mode not in {"keyword", "blogger_followers"}:
+            target_mode = "keyword"
+        if not keywords and target_mode != "blogger_followers":
             raise ValueError("웹앱 작업에 검색 키워드가 없습니다.")
         raw_messages = payload.get("messages") or payload.get("neighbor_messages")
         if isinstance(raw_messages, list):
@@ -3468,7 +3497,21 @@ class NaverBlogApp:
         speed_mode = str(payload.get("speed_mode") or payload.get("speed") or "normal").strip()
         if speed_mode not in {"safe", "normal", "fast"}:
             speed_mode = "normal"
+        if target_mode == "blogger_followers":
+            blogger_url = str(payload.get("blogger_url") or payload.get("target_blogger_url") or "").strip()
+            if not blogger_url:
+                raise ValueError("타겟 블로거 팔로워 신청에는 블로그 URL이 필요합니다.")
+            return {
+                "target_mode": "blogger_followers",
+                "blogger_url": blogger_url,
+                "max_requests": max_per_keyword,
+                "messages": messages,
+                "speed_mode": speed_mode,
+                "cooldown_every": cooldown_every,
+                "daily_limit": daily_limit,
+            }
         return {
+            "target_mode": "keyword",
             "keywords": keywords,
             "max_per_keyword": max_per_keyword,
             "messages": messages,
@@ -4699,6 +4742,8 @@ class NaverBlogApp:
         self.schedule_date_var = ttk.StringVar()
         self.schedule_hour_var = ttk.StringVar()
         self.schedule_interval_var = ttk.StringVar()
+        self.seo_research_var = ttk.BooleanVar(value=True)
+        self.keyword_emphasis_var = ttk.BooleanVar(value=False)
 
         # 콘텐츠 설정 카드
         card = self._make_card(content)
@@ -4738,6 +4783,11 @@ class NaverBlogApp:
 
         self._make_field(card, "카테고리", self.write_category_var, 4, width=20, font=font)
         self._make_hint(card, "블로그 카테고리 이름 (비우면 기본)", 4, col=2)
+
+        option_frame = tk.Frame(card, bg=COLORS["card_bg"])
+        option_frame.grid(row=5, column=1, columnspan=2, sticky=W, pady=(0, 4))
+        ttk.Checkbutton(option_frame, text="SEO 자동조사", variable=self.seo_research_var).pack(side=LEFT, padx=(0, 12))
+        ttk.Checkbutton(option_frame, text="핵심 키워드 강조", variable=self.keyword_emphasis_var).pack(side=LEFT)
 
         # 에디터 서식 카드
         card_fmt = self._make_card(content)
@@ -5793,9 +5843,25 @@ class NaverBlogApp:
             self._log("권장 한도 초과 확인이 취소되어 실행하지 않았습니다.")
             return
 
-        self._start_worker(self._worker_write, keywords=keywords, md_file=md_file, mode=mode, style_id=style_id, category=category, cta_link=cta_link, cta_text=cta_text, schedule_date=schedule_date, schedule_hour=schedule_hour, schedule_interval=schedule_interval, word_count=word_count, font_name=font_name)
+        self._start_worker(
+            self._worker_write,
+            keywords=keywords,
+            md_file=md_file,
+            mode=mode,
+            style_id=style_id,
+            category=category,
+            cta_link=cta_link,
+            cta_text=cta_text,
+            schedule_date=schedule_date,
+            schedule_hour=schedule_hour,
+            schedule_interval=schedule_interval,
+            word_count=word_count,
+            font_name=font_name,
+            seo_research_enabled=bool(self.seo_research_var.get()),
+            keyword_emphasis_enabled=bool(self.keyword_emphasis_var.get()),
+        )
 
-    def _worker_write(self, keywords, md_file, mode, style_id="info", category=None, cta_link=None, cta_text=None, schedule_date=None, schedule_hour=None, schedule_interval=None, word_count=1500, image_count=3, font_name=None, ai_model=None, image_model=None, seo_brief=None, artifact=None):
+    def _worker_write(self, keywords, md_file, mode, style_id="info", category=None, cta_link=None, cta_text=None, schedule_date=None, schedule_hour=None, schedule_interval=None, word_count=1500, image_count=3, font_name=None, ai_model=None, image_model=None, seo_brief=None, seo_research_enabled=False, seo_reference_posts=None, seo_reference_text=None, keyword_emphasis_enabled=False, style_reference_text=None, artifact=None):
         success = 0
         total = 0
         last_error = None
@@ -5811,7 +5877,8 @@ class NaverBlogApp:
             from browser.stealth_driver import create_stealth_driver
             from auth.naver_login import login
             from content.ai_text import generate_blog_content, measure_visible_char_count
-            from content.markdown_parser import parse_markdown, parse_markdown_file
+            from content.markdown_parser import parse_markdown, parse_markdown_file, rebalance_image_blocks
+            from content.seo_research import build_auto_seo_brief
             from posting.editor import navigate_to_editor, input_title, input_content, set_font, editor_visible_text_count
             from posting.publisher import save_draft, publish_now, schedule_publish
             from utils.delays import random_delay
@@ -5919,7 +5986,10 @@ class NaverBlogApp:
             # 예약 기본 시간 파싱
             base_date = None
             base_hour = None
-            interval_hours = int(schedule_interval) if schedule_interval else 1
+            try:
+                interval_hours = max(1, min(72, int(schedule_interval))) if schedule_interval else 1
+            except (TypeError, ValueError):
+                interval_hours = 1
             if schedule_date:
                 try:
                     base_date = datetime.strptime(schedule_date, "%Y-%m-%d")
@@ -5980,6 +6050,10 @@ class NaverBlogApp:
                 effective_mode = "save" if force_save_due_to_image_skip and mode in {"publish", "schedule"} else mode
 
                 try:
+                    if self.stop_event.is_set():
+                        self.running = False
+                        self._log("사용자에 의해 중지됨")
+                        break
                     post_stage = "content_generation"
                     post_usage = {}
                     # 콘텐츠 생성/로드
@@ -6001,9 +6075,28 @@ class NaverBlogApp:
                             self._log(f"생성 원고 백업 저장: {saved_md_path}")
                     elif post["type"] == "keyword":
                         keyword = post["source"]
+                        post_seo_brief = seo_brief
+                        if seo_research_enabled and not post_seo_brief:
+                            post_stage = "seo_research"
+                            stage = post_stage
+                            self._log(f"SEO 자동조사 중: {keyword}")
+                            post_seo_brief = build_auto_seo_brief(keyword, {
+                                "seo_research_enabled": True,
+                                "seo_reference_posts": seo_reference_posts or [],
+                                "seo_reference_text": seo_reference_text or "",
+                            })
+                            if post_seo_brief:
+                                self._log(f"SEO 브리프 반영: 참고 {post_seo_brief.get('source_count', 0)}건")
+                            else:
+                                self._log("SEO 참고자료가 없어 일반 작성으로 진행합니다.")
+                            if self.stop_event.is_set():
+                                self.running = False
+                                break
+                            post_stage = "content_generation"
+                            stage = post_stage
                         cta_info = f", CTA: {cta_link}" if cta_link else ""
                         self._log(f"AI 글 생성 중: {keyword} (스타일: {style_id}, 모델: {ai_model}, 분량: {word_count}자, 이미지: {image_count}장{cta_info})")
-                        generated = generate_blog_content(keyword, text_api_key, style_id=style_id, model=ai_model, cta_link=cta_link, cta_text=cta_text, word_count=word_count, image_count=image_count, seo_brief=seo_brief, return_usage=True)
+                        generated = generate_blog_content(keyword, text_api_key, style_id=style_id, model=ai_model, cta_link=cta_link, cta_text=cta_text, word_count=word_count, image_count=image_count, seo_brief=post_seo_brief, keyword_emphasis_enabled=keyword_emphasis_enabled, style_reference_text=style_reference_text, return_usage=True)
                         if isinstance(generated, tuple):
                             content, post_usage = generated
                         else:
@@ -6030,6 +6123,9 @@ class NaverBlogApp:
                             md_content = f.read()
                         visible_char_count = measure_visible_char_count(md_content)
                         title, content_list = parse_markdown(md_content)
+                    content_list, moved_image_blocks = rebalance_image_blocks(content_list)
+                    if moved_image_blocks:
+                        self._log(f"하단에 몰린 이미지 블록 {moved_image_blocks}개를 본문 사이로 재배치했습니다.")
                     content_list, repaired_image_prompts = _repair_empty_image_prompts(content_list, title, post.get("source"))
                     if repaired_image_prompts:
                         self._log(f"빈 이미지 프롬프트 {repaired_image_prompts}개를 제목 기반 기본 프롬프트로 보정했습니다.")
@@ -6073,6 +6169,9 @@ class NaverBlogApp:
 
                             post_stage = "smart_editor_input"
                             stage = post_stage
+                            if self.stop_event.is_set():
+                                self.running = False
+                                break
                             self._log("본문 입력 중...")
                             input_stats = input_content(
                                 self.driver,
@@ -6081,6 +6180,7 @@ class NaverBlogApp:
                                 image_provider=image_provider,
                                 fallback_api_key=fallback_image_api_key,
                                 image_model=image_model,
+                                stop_event=self.stop_event,
                             ) or {}
                             image_attempted = _usage_number(input_stats.get("image_attempted")) or image_block_count
                             image_generated = _usage_number(input_stats.get("image_generated"))
@@ -6144,6 +6244,9 @@ class NaverBlogApp:
                                 )
 
                             # 발행
+                            if self.stop_event.is_set():
+                                self.running = False
+                                break
                             if effective_mode == "save":
                                 post_stage = "smart_editor_save"
                                 stage = post_stage
@@ -6186,6 +6289,10 @@ class NaverBlogApp:
                                 _reset_driver("브라우저 세션 재연결")
                                 continue
                             raise
+
+                    if not self.running or self.stop_event.is_set():
+                        self._log("사용자에 의해 중지됨")
+                        break
 
                     success += 1
                     post_results.append({

@@ -533,11 +533,47 @@
         radial-gradient(circle at 78% 28%, rgba(72, 115, 168, .18), rgba(72, 115, 168, 0) 27%),
         radial-gradient(circle at 50% 76%, rgba(246, 184, 82, .18), rgba(246, 184, 82, 0) 34%),
         linear-gradient(135deg, #f7fcfa 0%, #eef7f3 48%, #f8fbf9 100%);
-      aspect-ratio: 6 / 1;
+      width: 100%;
+      aspect-ratio: 8 / 1;
       min-height: 150px;
-      max-height: 210px;
+      max-height: 230px;
       overflow: hidden;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .62);
+    }
+
+    .aimax-floor-line {
+      position: absolute;
+      left: 8%;
+      right: 6%;
+      top: 52%;
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(15, 118, 110, .18), rgba(72, 115, 168, .44), rgba(246, 184, 82, .4));
+      z-index: 1;
+    }
+
+    .floor-status-strip {
+      position: absolute;
+      right: 18px;
+      bottom: 14px;
+      z-index: 6;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: min(46%, 520px);
+    }
+
+    .floor-status-strip span {
+      border: 1px solid rgba(15, 118, 110, .18);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .84);
+      color: var(--brand-dark);
+      padding: 6px 9px;
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      box-shadow: 0 6px 16px rgba(22, 29, 25, .08);
     }
 
     .aimax-floor::after {
@@ -1007,6 +1043,23 @@
       background: var(--brand-dark);
     }
 
+    .btn.danger {
+      border-color: #f1b8b8;
+      background: #fff7f7;
+      color: #b42318;
+    }
+
+    .btn.danger:hover {
+      border-color: #d92d20;
+      background: #fff1f1;
+    }
+
+    .btn.small-btn {
+      min-height: 32px;
+      padding: 6px 9px;
+      font-size: 12px;
+    }
+
     .btn:disabled {
       opacity: .55;
       cursor: not-allowed;
@@ -1128,6 +1181,59 @@
 
     .form-grid .wide {
       grid-column: 1 / -1;
+    }
+
+    .option-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .check-option {
+      display: inline-flex;
+      gap: 7px;
+      align-items: center;
+      font-size: 13px;
+      color: #344054;
+    }
+
+    .check-option input {
+      width: auto;
+      margin: 0;
+    }
+
+    .message-card-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .message-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 10px;
+    }
+
+    .message-card textarea {
+      min-height: 68px;
+      border: 0;
+      padding: 0;
+      resize: vertical;
+      box-shadow: none;
+    }
+
+    .message-card textarea:focus {
+      box-shadow: none;
+    }
+
+    .message-card-remove {
+      min-height: 30px;
+      padding: 5px 8px;
     }
 
     .job-workspace {
@@ -3557,10 +3663,29 @@
         max-height: none;
       }
 
+      .aimax-floor-line {
+        left: 12%;
+        right: 12%;
+        top: 50%;
+      }
+
       .floor-employee {
         width: clamp(58px, 17vw, 76px);
         height: clamp(58px, 17vw, 76px);
         border-width: 3px;
+      }
+
+      .floor-status-strip {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        max-width: none;
+        justify-content: center;
+      }
+
+      .floor-status-strip span {
+        font-size: 11px;
+        padding: 5px 7px;
       }
 
       .floor-employee:nth-child(1) { --x: 22%; --y: 35%; --float-x: 18px; --float-y: -12px; }
@@ -3745,10 +3870,17 @@
               <p>예리는 글을 쓰고, 현주는 고객을 찾고, 송이는 자료를 조사합니다. 사용자는 직원을 고르고 일을 맡기면, AIMAX가 설정 상태와 실행 흐름을 이어서 관리합니다.</p>
             </div>
             <div class="aimax-floor" aria-label="AIMAX 직원들이 업무를 오가는 미리보기">
+              <div class="aimax-floor-line" aria-hidden="true"></div>
               <img class="floor-employee" src="/assets/avatar_yeri_circle.png" alt="예리">
               <img class="floor-employee" src="/assets/avatar_hyunju_circle.png" alt="현주">
               <img class="floor-employee" src="/assets/avatar_songi.jpg" alt="송이">
               <img class="floor-employee" src="/assets/avatar_yunmi.jpg" alt="윤미">
+              <div class="floor-status-strip" aria-hidden="true">
+                <span>키워드 조사</span>
+                <span>글쓰기</span>
+                <span>고객 찾기</span>
+                <span>결과 기록</span>
+              </div>
             </div>
           </div>
           <aside class="brain-card" aria-label="AIMAX Brain 미리보기">
@@ -4035,12 +4167,31 @@
                         <input id="yeriScheduleHour" type="number" min="0" max="23" placeholder="0-23">
                       </div>
                       <div class="field">
+                        <label for="yeriScheduleInterval">예약 간격</label>
+                        <input id="yeriScheduleInterval" type="number" min="1" max="72" value="1">
+                      </div>
+                      <div class="field">
                         <label for="yeriCtaLink">CTA 링크</label>
                         <input id="yeriCtaLink" placeholder="선택">
                       </div>
                       <div class="field">
                         <label for="yeriCtaText">CTA 문구</label>
                         <input id="yeriCtaText" placeholder="선택">
+                      </div>
+                      <div class="field wide">
+                        <label>작성 품질 옵션</label>
+                        <div class="option-row">
+                          <label class="check-option"><input id="yeriSeoResearch" type="checkbox" checked> SEO 자동조사</label>
+                          <label class="check-option"><input id="yeriKeywordEmphasis" type="checkbox"> 핵심 키워드 강조</label>
+                        </div>
+                      </div>
+                      <div class="field wide">
+                        <label for="yeriSeoReferences">SEO 참고자료</label>
+                        <textarea id="yeriSeoReferences" placeholder="선택 입력: 상위글 URL 또는 참고 본문을 붙여넣으세요. 여러 글은 --- 로 구분합니다."></textarea>
+                      </div>
+                      <div class="field wide">
+                        <label for="yeriStyleReference">기존 작성글 스타일</label>
+                        <textarea id="yeriStyleReference" placeholder="선택 입력: 예전에 쓴 글을 붙이면 문장 길이와 어투만 참고합니다."></textarea>
                       </div>
                     </div>
                     <div id="yeriCostEstimate" class="notice ok small"></div>
@@ -4062,9 +4213,20 @@
                 <div class="job-workspace">
                   <section class="job-input-panel">
                     <div class="form-grid">
+                      <div class="field">
+                        <label for="hyunjuTargetMode">타겟 방식</label>
+                        <select id="hyunjuTargetMode">
+                          <option value="keyword" selected>키워드 검색</option>
+                          <option value="blogger_followers">타겟 블로거 팔로워</option>
+                        </select>
+                      </div>
                       <div class="field wide">
                         <label for="hyunjuKeywords">검색 키워드</label>
-                        <input id="hyunjuKeywords" placeholder="예: 강남 피부관리, 웨딩 준비" required>
+                        <input id="hyunjuKeywords" placeholder="예: 강남 피부관리, 웨딩 준비">
+                      </div>
+                      <div class="field wide hidden" id="hyunjuBloggerUrlField">
+                        <label for="hyunjuBloggerUrl">타겟 블로거 URL</label>
+                        <input id="hyunjuBloggerUrl" placeholder="예: https://blog.naver.com/example">
                       </div>
                       <div class="field">
                         <label for="hyunjuCount">키워드당 신청 수</label>
@@ -4080,7 +4242,9 @@
                       </div>
                       <div class="field wide">
                         <label for="hyunjuMessages">서로이웃 신청 멘트</label>
-                        <textarea id="hyunjuMessages" placeholder="한 줄에 하나씩 입력합니다. 비워두면 로컬 앱에 저장된 멘트를 사용합니다."></textarea>
+                        <textarea id="hyunjuMessages" class="hidden" placeholder="한 줄에 하나씩 입력합니다. 비워두면 로컬 앱에 저장된 멘트를 사용합니다."></textarea>
+                        <div id="hyunjuMessageCards" class="message-card-list"></div>
+                        <button id="hyunjuAddMessageBtn" class="btn small-btn" type="button">멘트 칸 추가</button>
                       </div>
                     </div>
                     <button id="hyunjuSubmitBtn" class="btn primary" type="submit">현주에게 업무지시</button>
@@ -4431,7 +4595,9 @@
             </div>
             <div class="field span-12">
               <label for="settingsNeighborMessages">댓글/서로이웃 멘트</label>
-              <textarea id="settingsNeighborMessages" placeholder="한 줄에 하나씩 입력합니다. 현주 작업에서 사용할 수 있습니다."></textarea>
+              <textarea id="settingsNeighborMessages" class="hidden" placeholder="한 줄에 하나씩 입력합니다. 현주 작업에서 사용할 수 있습니다."></textarea>
+              <div id="settingsNeighborMessageCards" class="message-card-list"></div>
+              <button id="settingsAddNeighborMessageBtn" class="btn small-btn" type="button">멘트 칸 추가</button>
             </div>
             <div class="span-12 actions">
               <button id="generateNeighborMessagesBtn" class="btn" type="button">멘트 초안 만들기</button>
@@ -6727,6 +6893,11 @@
       return escapeHtml(job.label || "-");
     }
 
+    function jobCancelButtonHtml(job) {
+      if (!job?.id || !isLiveJobStatus(job.status) || job.kind === "songi_research") return "";
+      return `<button class="btn danger small-btn" type="button" data-cancel-job="${escapeHtml(job.id)}">중단</button>`;
+    }
+
     function sanitizeMessageList(value) {
       const rows = Array.isArray(value)
         ? value
@@ -6736,6 +6907,69 @@
         .filter(Boolean)
         .slice(0, 20)
         .map((item) => item.slice(0, 220));
+    }
+
+    function readMessageCards(containerSelector, fallbackSelector = "") {
+      const container = $(containerSelector);
+      if (!container) return sanitizeMessageList($(fallbackSelector)?.value || "");
+      const values = Array.from(container.querySelectorAll("[data-message-card-input]"))
+        .map((field) => field.value || "");
+      return sanitizeMessageList(values);
+    }
+
+    function syncMessageTextarea(textareaSelector, messages) {
+      const textarea = $(textareaSelector);
+      if (textarea) textarea.value = sanitizeMessageList(messages).join("\n");
+    }
+
+    function renderMessageCards(containerSelector, textareaSelector, messages, options = {}) {
+      const container = $(containerSelector);
+      if (!container) return;
+      const rows = (Array.isArray(messages) ? messages : String(messages || "").split(/\r?\n/))
+        .map((item) => String(item || "").replace(/\s+/g, " ").trim().slice(0, 220))
+        .slice(0, 20);
+      const minRows = Number(options.minRows || 1);
+      while (rows.length < minRows) rows.push("");
+      container.innerHTML = rows.map((message, index) => `
+        <div class="message-card" data-message-card="${index}">
+          <textarea data-message-card-input placeholder="멘트 ${index + 1}">${escapeHtml(message)}</textarea>
+          <button class="btn danger small-btn message-card-remove" type="button" data-message-card-remove="${index}" aria-label="멘트 삭제">삭제</button>
+        </div>
+      `).join("");
+      syncMessageTextarea(textareaSelector, rows);
+      container.querySelectorAll("[data-message-card-input]").forEach((field) => {
+        field.addEventListener("input", () => {
+          const current = readMessageCards(containerSelector, textareaSelector);
+          syncMessageTextarea(textareaSelector, current);
+          if (containerSelector === "#settingsNeighborMessageCards") markWebSettingsDirty();
+          renderHyunjuJobPreview();
+        });
+      });
+      container.querySelectorAll("[data-message-card-remove]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const current = readMessageCards(containerSelector, textareaSelector);
+          const index = Number(button.dataset.messageCardRemove || 0);
+          current.splice(index, 1);
+          renderMessageCards(containerSelector, textareaSelector, current, options);
+          if (containerSelector === "#settingsNeighborMessageCards") markWebSettingsDirty();
+          renderHyunjuJobPreview();
+        });
+      });
+    }
+
+    function addMessageCard(containerSelector, textareaSelector, options = {}) {
+      const rows = readMessageCards(containerSelector, textareaSelector);
+      rows.push("");
+      renderMessageCards(containerSelector, textareaSelector, rows, options);
+    }
+
+    function markWebSettingsDirty() {
+      state.webSettingsDirty = true;
+      const status = $("#webSettingsStatus");
+      if (status) {
+        status.textContent = "저장 필요";
+        status.className = "pill warn";
+      }
     }
 
     function defaultWebSettings() {
@@ -6842,11 +7076,12 @@
     }
 
     function readWebSettingsForm() {
+      const messages = readMessageCards("#settingsNeighborMessageCards", "#settingsNeighborMessages");
       return sanitizeWebSettings({
         ai_model: $("#settingsAiModel")?.value || selectedAiModel(),
         image_model: selectedYeriImageModel(),
         blog_profile: $("#settingsBlogProfile")?.value || "",
-        neighbor_messages: $("#settingsNeighborMessages")?.value || "",
+        neighbor_messages: messages,
       });
     }
 
@@ -6859,8 +7094,10 @@
       renderYunmiModelSelect("#yunmiAiModel", DEFAULT_AI_MODEL);
       if ($("#settingsBlogProfile")) $("#settingsBlogProfile").value = settings.blog_profile || "";
       if ($("#settingsNeighborMessages")) $("#settingsNeighborMessages").value = webNeighborMessages().join("\n");
+      renderMessageCards("#settingsNeighborMessageCards", "#settingsNeighborMessages", webNeighborMessages(), { minRows: 3 });
       if ($("#hyunjuMessages") && !$("#hyunjuMessages").value.trim()) {
         $("#hyunjuMessages").value = webNeighborMessages().join("\n");
+        renderMessageCards("#hyunjuMessageCards", "#hyunjuMessages", webNeighborMessages(), { minRows: 3 });
       }
       renderYeriCostEstimate();
       renderSongiCostEstimate();
@@ -9258,11 +9495,14 @@
       const imageModel = normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel());
       const wordCount = $("#yeriWordCount")?.value || "1500";
       const imageCount = normalizeImageCount($("#yeriImageCount")?.value || 3);
+      const scheduleInterval = Math.max(1, Math.min(72, Number($("#yeriScheduleInterval")?.value || 1)));
       const schedule = mode === "schedule"
-        ? [$("#yeriScheduleDate")?.value, $("#yeriScheduleHour")?.value ? `${$("#yeriScheduleHour").value}시` : ""].filter(Boolean).join(" ")
+        ? [$("#yeriScheduleDate")?.value, $("#yeriScheduleHour")?.value ? `${$("#yeriScheduleHour").value}시` : "", keywords.length > 1 ? `${scheduleInterval}시간 간격` : ""].filter(Boolean).join(" ")
         : "예약 없음";
       const cta = [$("#yeriCtaText")?.value, $("#yeriCtaLink")?.value].filter(Boolean).join(" · ") || "선택 안 함";
       const aiState = aiKeyOperationalState(model);
+      const seoEnabled = $("#yeriSeoResearch")?.checked !== false;
+      const styleRef = String($("#yeriStyleReference")?.value || "").trim();
       target.innerHTML = `
         <h4>예리 작업 요약</h4>
         ${jobSummaryRowsHtml([
@@ -9271,6 +9511,8 @@
           ["글쓰기", `${aiModelLabel(model)} · ${Number(wordCount || 0).toLocaleString("ko-KR")}자`],
           ["이미지", `${imageModelLabel(imageModel)} · ${imageCount}장`],
           ["예약", schedule],
+          ["SEO", seoEnabled ? "자동조사 켜짐" : "일반 작성"],
+          ["강조/스타일", [$("#yeriKeywordEmphasis")?.checked ? "키워드 강조" : "", styleRef ? "스타일 참고" : ""].filter(Boolean).join(" · ") || "기본"],
           ["CTA", cta],
           ["AI 연결", aiState.detail || aiState.status || "확인 중"],
           ["최근 작업", recentJobSummary("yeri_write")],
@@ -9281,16 +9523,20 @@
     function renderHyunjuJobPreview() {
       const target = $("#hyunjuJobPreview");
       if (!target) return;
+      const targetMode = $("#hyunjuTargetMode")?.value || "keyword";
+      $("#hyunjuBloggerUrlField")?.classList.toggle("hidden", targetMode !== "blogger_followers");
       const keywords = splitKeywords($("#hyunjuKeywords")?.value || "");
+      const bloggerUrl = String($("#hyunjuBloggerUrl")?.value || "").trim();
       const count = Number($("#hyunjuCount")?.value || 10);
       const speed = $("#hyunjuSpeed")?.value || "normal";
-      const messages = sanitizeMessageList($("#hyunjuMessages")?.value || webNeighborMessages());
+      const messages = readMessageCards("#hyunjuMessageCards", "#hyunjuMessages");
       const status = employeeStatusInfo("hyunju");
       target.innerHTML = `
         <h4>현주 작업 요약</h4>
         ${jobSummaryRowsHtml([
-          ["검색 키워드", keywords.length ? keywords.join(", ") : "입력 대기"],
-          ["신청 수", `키워드당 ${Math.max(1, count).toLocaleString("ko-KR")}명`],
+          ["타겟", targetMode === "blogger_followers" ? "타겟 블로거 팔로워" : "키워드 검색"],
+          ["검색 키워드", targetMode === "keyword" ? (keywords.length ? keywords.join(", ") : "입력 대기") : (bloggerUrl || "URL 입력 대기")],
+          ["신청 수", `${Math.max(1, count).toLocaleString("ko-KR")}명`],
           ["속도", hyunjuSpeedLabel(speed)],
           ["멘트", messages.length ? `${messages.length}개 준비됨` : "기본 멘트 사용"],
           ["실행 상태", status.reason || status.label || "확인 중"],
@@ -9302,6 +9548,17 @@
     function renderJobPreviews() {
       renderYeriJobPreview();
       renderHyunjuJobPreview();
+    }
+
+    function yeriSeoReferencePayload() {
+      const raw = String($("#yeriSeoReferences")?.value || "").trim();
+      if (!raw) return {};
+      const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const urls = lines.filter((line) => /^https?:\/\//i.test(line)).slice(0, 5);
+      return {
+        seo_reference_text: raw,
+        seo_reference_urls: urls,
+      };
     }
 
     function renderQuickActions() {
@@ -11033,7 +11290,7 @@
                 <strong>${escapeHtml(job.label)}</strong><br>
                 ${jobFailureSummaryHtml(job, 1) || `<span class="small muted">${formatTime(job.updated_at || job.created_at)}</span>`}
               </span>
-              ${statusPill(job.status)}
+              <span class="actions">${statusPill(job.status)}${jobCancelButtonHtml(job)}</span>
             </div>
           `).join("")
           : `<div class="empty">아직 일 맡긴 기록이 없습니다.</div>`;
@@ -11049,6 +11306,7 @@
                   <th>비용</th>
                   <th>생성</th>
                   <th>최근 로그</th>
+                  <th>작업</th>
                 </tr>
             </thead>
             <tbody>
@@ -11060,6 +11318,7 @@
                   <td>${jobCostHtml(job)}</td>
                   <td>${formatTime(job.created_at)}</td>
                   <td>${latestJobLogHtml(job)}</td>
+                  <td>${jobCancelButtonHtml(job)}</td>
                 </tr>
               `).join("")}
             </tbody>
@@ -11090,6 +11349,9 @@
           renderAll();
           $("#yunmiJobResult")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
         });
+      });
+      $$("[data-cancel-job]").forEach((button) => {
+        button.addEventListener("click", () => cancelJob(button.dataset.cancelJob));
       });
     }
 
@@ -12555,6 +12817,23 @@
       }
     }
 
+    async function cancelJob(jobId) {
+      const id = String(jobId || "").trim();
+      if (!id) return;
+      if (!window.confirm("진행 중인 작업을 중단할까요? 이미 생성된 원고나 복구 파일은 가능한 한 보존됩니다.")) return;
+      try {
+        await api(`/api/jobs/${encodeURIComponent(id)}/cancel`, {
+          method: "POST",
+          body: JSON.stringify({ reason: "user_cancelled" }),
+        });
+        showToast("작업 중단 요청을 보냈습니다.");
+        await refreshAll();
+        startAgentStatusWatch(60000);
+      } catch (error) {
+        showToast(error?.body?.error || error?.message || "작업 중단 요청에 실패했습니다.");
+      }
+    }
+
     function splitKeywords(value) {
       return String(value || "")
         .split(",")
@@ -13013,6 +13292,11 @@
           cta_text: nonEmpty($("#yeriCtaText")?.value),
           schedule_date: nonEmpty($("#yeriScheduleDate")?.value),
           schedule_hour: nonEmpty($("#yeriScheduleHour")?.value),
+          schedule_interval: String(Math.max(1, Math.min(72, Number($("#yeriScheduleInterval")?.value || 1)))),
+          seo_research_enabled: $("#yeriSeoResearch")?.checked !== false,
+          keyword_emphasis_enabled: Boolean($("#yeriKeywordEmphasis")?.checked),
+          style_reference_text: nonEmpty($("#yeriStyleReference")?.value),
+          ...yeriSeoReferencePayload(),
         });
       } catch (error) {
         console.error("yeri submit failed", error);
@@ -13028,14 +13312,22 @@
           showToast("현주 업무 화면을 다시 불러와 주세요. 입력란을 찾지 못했습니다.");
           return;
         }
+        const targetMode = $("#hyunjuTargetMode")?.value || "keyword";
         const keywords = splitKeywords(keywordsField.value);
-        if (!keywords.length) {
+        const bloggerUrl = String($("#hyunjuBloggerUrl")?.value || "").trim();
+        if (targetMode === "keyword" && !keywords.length) {
           showToast("현주에게 전달할 검색 키워드를 입력해주세요.");
           return;
         }
-        const messages = sanitizeMessageList($("#hyunjuMessages")?.value || webNeighborMessages());
+        if (targetMode === "blogger_followers" && !bloggerUrl) {
+          showToast("타겟 블로거 URL을 입력해주세요.");
+          return;
+        }
+        const messages = readMessageCards("#hyunjuMessageCards", "#hyunjuMessages");
         const payload = {
           keywords,
+          target_mode: targetMode,
+          blogger_url: bloggerUrl,
           max_per_keyword: Number($("#hyunjuCount")?.value || 10),
           speed_mode: $("#hyunjuSpeed")?.value || "normal",
         };
@@ -13712,15 +14004,22 @@
         renderYeriJobPreview();
       });
     });
-    ["#yeriKeywords", "#yeriMode", "#yeriCategory", "#yeriScheduleDate", "#yeriScheduleHour", "#yeriCtaLink", "#yeriCtaText"].forEach((selector) => {
+    ["#yeriKeywords", "#yeriMode", "#yeriCategory", "#yeriScheduleDate", "#yeriScheduleHour", "#yeriScheduleInterval", "#yeriCtaLink", "#yeriCtaText", "#yeriSeoResearch", "#yeriKeywordEmphasis", "#yeriSeoReferences", "#yeriStyleReference"].forEach((selector) => {
       const field = $(selector);
       if (field) field.addEventListener("input", renderYeriJobPreview);
       if (field) field.addEventListener("change", renderYeriJobPreview);
     });
-    ["#hyunjuKeywords", "#hyunjuCount", "#hyunjuSpeed", "#hyunjuMessages"].forEach((selector) => {
+    ["#hyunjuTargetMode", "#hyunjuKeywords", "#hyunjuBloggerUrl", "#hyunjuCount", "#hyunjuSpeed", "#hyunjuMessages"].forEach((selector) => {
       const field = $(selector);
       if (field) field.addEventListener("input", renderHyunjuJobPreview);
       if (field) field.addEventListener("change", renderHyunjuJobPreview);
+    });
+    $("#hyunjuAddMessageBtn")?.addEventListener("click", () => {
+      addMessageCard("#hyunjuMessageCards", "#hyunjuMessages", { minRows: 3 });
+    });
+    $("#settingsAddNeighborMessageBtn")?.addEventListener("click", () => {
+      addMessageCard("#settingsNeighborMessageCards", "#settingsNeighborMessages", { minRows: 3 });
+      markWebSettingsDirty();
     });
     ["#yunmiAiModel"].forEach((selector) => {
       const field = $(selector);
@@ -13731,31 +14030,30 @@
       if (field) field.addEventListener("input", renderYunmiCostEstimate);
     });
     $("#settingsBlogProfile").addEventListener("input", () => {
-      state.webSettingsDirty = true;
-      $("#webSettingsStatus").textContent = "저장 필요";
-      $("#webSettingsStatus").className = "pill warn";
+      markWebSettingsDirty();
     });
     $("#settingsNeighborMessages").addEventListener("input", () => {
-      state.webSettingsDirty = true;
-      $("#webSettingsStatus").textContent = "저장 필요";
-      $("#webSettingsStatus").className = "pill warn";
+      markWebSettingsDirty();
     });
     $("#generateNeighborMessagesBtn").addEventListener("click", () => {
       const profile = $("#settingsBlogProfile").value;
       const messages = generateNeighborMessageDrafts(profile);
       $("#settingsNeighborMessages").value = messages.join("\n");
+      renderMessageCards("#settingsNeighborMessageCards", "#settingsNeighborMessages", messages, { minRows: 3 });
       saveWebSettings({
         ai_model: $("#settingsAiModel").value || selectedAiModel(),
         blog_profile: profile,
         neighbor_messages: messages,
       });
       $("#hyunjuMessages").value = messages.join("\n");
+      renderMessageCards("#hyunjuMessageCards", "#hyunjuMessages", messages, { minRows: 3 });
       renderAll();
       showToast("멘트 초안을 만들었습니다.");
     });
     $("#applyMessagesToJobBtn").addEventListener("click", () => {
-      const messages = sanitizeMessageList($("#settingsNeighborMessages").value || webNeighborMessages());
+      const messages = readMessageCards("#settingsNeighborMessageCards", "#settingsNeighborMessages");
       $("#hyunjuMessages").value = messages.join("\n");
+      renderMessageCards("#hyunjuMessageCards", "#hyunjuMessages", messages, { minRows: 3 });
       saveWebSettings({
         ai_model: $("#settingsAiModel").value || selectedAiModel(),
         blog_profile: $("#settingsBlogProfile").value || "",
