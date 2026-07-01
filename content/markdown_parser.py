@@ -87,6 +87,43 @@ def parse_markdown_file(file_path):
     return parse_markdown(content)
 
 
+def rebalance_image_blocks(content_list):
+    """Move tail-stacked image blocks back between text sections.
+
+    AI models sometimes place all ``[이미지]`` lines at the end. The Smart Editor
+    input function preserves list order, so rebalancing here keeps images near
+    the related body instead of inserting them as a bottom pile.
+    """
+    items = list(content_list or [])
+    if len(items) < 3:
+        return items, 0
+
+    tail_images = []
+    while items and items[-1][0] == "image":
+        tail_images.insert(0, items.pop())
+    if len(tail_images) < 2:
+        return content_list, 0
+
+    target_indexes = [
+        index for index, item in enumerate(items)
+        if item and item[0] in {"text", "quote"}
+    ]
+    if len(target_indexes) < 2:
+        return content_list, 0
+
+    insert_after = target_indexes[: max(1, len(target_indexes) - 1)]
+    buckets = {index: [] for index in target_indexes}
+    for image_index, image in enumerate(tail_images):
+        slot = min(len(insert_after) - 1, int(image_index * len(insert_after) / len(tail_images)))
+        buckets.setdefault(insert_after[slot], []).append(image)
+
+    rebalanced = []
+    for index, item in enumerate(items):
+        rebalanced.append(item)
+        rebalanced.extend(buckets.get(index, []))
+    return rebalanced, len(tail_images)
+
+
 def _strip_list_marker(line):
     """줄 앞의 - 또는 * 리스트 마커를 제거하여 일반 텍스트로 변환
 

@@ -47,6 +47,8 @@ const YERI_SERVER_GENERATION_REAL_TEST_ONLY = envFlag("AIMAX_YERI_SERVER_GENERAT
 const YERI_SERVER_GENERATION_REAL_TEST_MAX_WORD_COUNT = Number(process.env.AIMAX_YERI_SERVER_GENERATION_REAL_TEST_MAX_WORD_COUNT || 500);
 const YERI_SERVER_GENERATION_REAL_TEST_MAX_IMAGE_COUNT = Number(process.env.AIMAX_YERI_SERVER_GENERATION_REAL_TEST_MAX_IMAGE_COUNT || 1);
 const YERI_READY_FOR_PUBLISH_CLAIM_ENABLED = envFlag("AIMAX_YERI_READY_FOR_PUBLISH_CLAIM_ENABLED");
+const NAVER_SEARCH_CLIENT_ID = String(process.env.AIMAX_NAVER_SEARCH_CLIENT_ID || "").trim();
+const NAVER_SEARCH_CLIENT_SECRET = String(process.env.AIMAX_NAVER_SEARCH_CLIENT_SECRET || "").trim();
 const PUBLIC_BASE_URL = String(process.env.AIMAX_PUBLIC_BASE_URL || "https://api.aimax.ai.kr").replace(/\/+$/, "");
 const MAIL_WEBHOOK_URL = String(process.env.AIMAX_MAIL_WEBHOOK_URL || "").trim();
 const MAIL_WEBHOOK_SECRET = String(process.env.AIMAX_MAIL_WEBHOOK_SECRET || "").trim();
@@ -237,7 +239,7 @@ const YUNMI_AI_MODEL_PRICES = {
   claude: { provider: "claude", inputUsdPer1m: 3.00, outputUsdPer1m: 15.00, label: "Claude Sonnet" },
 };
 const IMPORTABLE_USER_SECRET_PROVIDERS = ["gemini", "apify", "openai", "claude"];
-const AGENT_COMMAND_TYPES = new Set(["open_settings", "import_local_provider_secrets", "songi_youtube_discovery"]);
+const AGENT_COMMAND_TYPES = new Set(["open_settings", "import_local_provider_secrets", "songi_youtube_discovery", "stop_current_job"]);
 const LATEST_AGENT_VERSION = String(process.env.AIMAX_LATEST_AGENT_VERSION || "v1.0.51").trim();
 const MIN_AGENT_VERSION = String(process.env.AIMAX_MIN_AGENT_VERSION || "v1.0.44").trim();
 const PLATFORM_AGENT_VERSIONS = {
@@ -1685,6 +1687,203 @@ function yeriPayloadStyle(payload) {
   return "정보성";
 }
 
+function yeriSeoResearchEnabled(payload = {}) {
+  return payload?.seo_research_enabled !== false && payload?.seo_research_enabled !== "0";
+}
+
+function stripInlineHtml(value) {
+  return decodeHtmlEntities(String(value || "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+}
+
+function yeriReferenceTextChunks(text) {
+  const clean = cleanMultilineText(text, 12000);
+  if (!clean) return [];
+  const chunks = clean.split(/\n\s*---+\s*\n/).map((item) => item.trim()).filter(Boolean);
+  return (chunks.length ? chunks : [clean]).slice(0, 8);
+}
+
+function yeriCoerceSeoReferencePost(item, rank) {
+  if (typeof item === "string") {
+    const text = cleanMultilineText(item, 6000);
+    if (!text) return null;
+    return {
+      rank,
+      title: compactText(text.split(/\n/).find(Boolean) || "사용자 참고글", 160),
+      body_text: text,
+      headings: text.split(/\n/).filter((line) => /^#+\s+/.test(line.trim())).map((line) => compactText(line.replace(/^#+\s+/, ""), 120)).slice(0, 10),
+      images: [],
+    };
+  }
+  if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+  const title = compactText(item.title || "", 160);
+  const bodyText = cleanMultilineText(item.body_text || item.text || item.content || item.description || "", 6000);
+  if (!title && !bodyText) return null;
+  return {
+    rank: safeInt(item.rank, rank, 1, 100),
+    title,
+    url: compactText(item.url || item.link || "", 300),
+    body_text: bodyText,
+    headings: Array.isArray(item.headings) ? item.headings.map((line) => compactText(line, 120)).filter(Boolean).slice(0, 10) : [],
+    images: Array.isArray(item.images) ? item.images.slice(0, 12) : [],
+  };
+}
+
+async function fetchYeriReferenceUrlPost(rawUrl, rank) {
+  try {
+    const response = await requestResearchUrl(rawUrl, { timeoutMs: 5000, maxBytes: 512 * 1024 });
+    const contentType = String(response.headers?.["content-type"] || "").toLowerCase();
+    if (contentType.includes("text/html") || /<html|<title|<meta/i.test(response.text)) {
+      const title = extractHtmlMeta(response.text, ["og:title", "twitter:title"]) || extractHtmlTitle(response.text);
+      const description = extractHtmlMeta(response.text, ["description", "og:description", "twitter:description"]);
+      const bodyText = htmlToResearchText(response.text);
+      return {
+        rank,
+        title: title || compactText(rawUrl, 160),
+        url: response.finalUrl || rawUrl,
+        body_text: cleanMultilineText([description, bodyText].filter(Boolean).join("\n\n"), 6000),
+        headings: [],
+        images: [],
+      };
+    }
+    return {
+      rank,
+      title: compactText(rawUrl, 160),
+      url: response.finalUrl || rawUrl,
+      body_text: cleanMultilineText(response.text, 6000),
+      headings: [],
+      images: [],
+    };
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function fetchNaverSearchSeoPosts(keyword) {
+  if (!NAVER_SEARCH_CLIENT_ID || !NAVER_SEARCH_CLIENT_SECRET || !keyword) return [];
+  const url = new URL("https://openapi.naver.com/v1/search/blog.json");
+  url.searchParams.set("query", keyword);
+  url.searchParams.set("display", "5");
+  url.searchParams.set("sort", "sim");
+  return new Promise((resolve) => {
+    const req = https.request(url, {
+      method: "GET",
+      timeout: 5000,
+      headers: {
+        "X-Naver-Client-Id": NAVER_SEARCH_CLIENT_ID,
+        "X-Naver-Client-Secret": NAVER_SEARCH_CLIENT_SECRET,
+        "User-Agent": "AIMAX-YeriSEO/1.0",
+        accept: "application/json",
+      },
+    }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        if (Number(res.statusCode || 0) < 200 || Number(res.statusCode || 0) >= 300) {
+          resolve([]);
+          return;
+        }
+        try {
+          const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          resolve((Array.isArray(data.items) ? data.items : []).slice(0, 5).map((item, index) => ({
+            rank: index + 1,
+            title: stripInlineHtml(item.title || ""),
+            url: compactText(item.link || "", 300),
+            body_text: stripInlineHtml(item.description || ""),
+            headings: [],
+            images: [],
+          })).filter((item) => item.title || item.body_text));
+        } catch (_error) {
+          resolve([]);
+        }
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("naver_search_timeout")));
+    req.on("error", () => resolve([]));
+    req.end();
+  });
+}
+
+function yeriWordCount(text) {
+  return (String(text || "").match(/[0-9A-Za-z가-힣]+/g) || []).length;
+}
+
+function yeriKeywordCount(keyword, text) {
+  if (!keyword) return 0;
+  return (String(text || "").match(new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")) || []).length;
+}
+
+function buildYeriSeoBrief(keyword, posts) {
+  const rows = (posts || []).filter(Boolean).slice(0, 8).map((post, index) => {
+    const text = `${post.title || ""}\n${post.body_text || ""}`;
+    const headings = Array.isArray(post.headings) ? post.headings.filter(Boolean) : [];
+    const images = Array.isArray(post.images) ? post.images : [];
+    return {
+      rank: safeInt(post.rank, index + 1, 1, 100),
+      title: compactText(post.title || "", 160),
+      url: compactText(post.url || "", 240),
+      word_count: yeriWordCount(text),
+      heading_count: headings.length,
+      image_count: images.length,
+      keyword_count: yeriKeywordCount(keyword, text),
+      title_has_keyword: Boolean(keyword && String(post.title || "").toLowerCase().includes(String(keyword).toLowerCase())),
+      image_roles: [],
+    };
+  });
+  if (!rows.length) return null;
+  const average = (key) => Math.round(rows.reduce((sum, row) => sum + safeInt(row[key], 0, 100000), 0) / rows.length);
+  const recommendedImages = Math.max(1, Math.min(6, average("image_count") || 3));
+  return {
+    keyword,
+    source_count: rows.length,
+    recommended_image_count: recommendedImages,
+    averages: {
+      word_count: average("word_count"),
+      heading_count: average("heading_count"),
+      image_count: average("image_count"),
+      keyword_count: average("keyword_count"),
+    },
+    top_posts: rows,
+    writing_guidance: [
+      `정확한 키워드 '${keyword}'는 제목과 첫 문단에 자연스럽게 넣되 과반복하지 마세요.`,
+      "상위 글의 제목과 문장을 복사하지 말고 검색 의도와 구조만 참고하세요.",
+      "상위 글보다 더 구체적인 경험, 기준, 체크포인트를 추가하세요.",
+    ],
+    source: {
+      mode: "safe_auto",
+      official_search_api: Boolean(NAVER_SEARCH_CLIENT_ID && NAVER_SEARCH_CLIENT_SECRET),
+      browser_scraping: false,
+    },
+  };
+}
+
+async function buildYeriSeoBriefFromPayload(payload) {
+  if (payload?.seo_brief && typeof payload.seo_brief === "object" && !Array.isArray(payload.seo_brief)) {
+    return payload.seo_brief;
+  }
+  if (!yeriSeoResearchEnabled(payload)) return null;
+  const keyword = yeriPayloadFirstKeyword(payload);
+  const posts = [];
+  if (Array.isArray(payload?.seo_reference_posts)) {
+    payload.seo_reference_posts.slice(0, 8).forEach((item, index) => {
+      const post = yeriCoerceSeoReferencePost(item, index + 1);
+      if (post) posts.push(post);
+    });
+  }
+  for (const chunk of yeriReferenceTextChunks(payload?.seo_reference_text || "")) {
+    const post = yeriCoerceSeoReferencePost(chunk, posts.length + 1);
+    if (post) posts.push(post);
+  }
+  const urls = Array.isArray(payload?.seo_reference_urls)
+    ? payload.seo_reference_urls
+    : String(payload?.seo_reference_urls || "").split(/[\n,]+/);
+  for (const rawUrl of urls.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 5)) {
+    const post = await fetchYeriReferenceUrlPost(rawUrl, posts.length + 1);
+    if (post) posts.push(post);
+  }
+  posts.push(...await fetchNaverSearchSeoPosts(keyword));
+  return buildYeriSeoBrief(keyword, posts);
+}
+
 function yeriExtractTitleFromMarkdown(markdown) {
   const lines = String(markdown || "").split(/\n/);
   for (const line of lines) {
@@ -1795,6 +1994,7 @@ function buildYeriGenerationPrompt(payload) {
   const imageCount = yeriPayloadImageCount(payload);
   const ctaLink = compactText(payload?.cta_link || "", 500);
   const ctaText = compactText(payload?.cta_text || "", 240);
+  const styleReference = cleanMultilineText(payload?.style_reference_text || "", 2400);
   const seoBrief = payload?.seo_brief && typeof payload.seo_brief === "object"
     ? cleanMultilineText(JSON.stringify(redactPayload(payload.seo_brief)), 3000)
     : "";
@@ -1814,6 +2014,9 @@ function buildYeriGenerationPrompt(payload) {
     "- 제목은 content_markdown의 첫 줄에도 '# 제목' 형식으로 넣는다.",
     "- 확인되지 않은 통계, 후기, 가격, 순위, 법적/의학적 단정은 만들지 않는다.",
     "- API 키, 계정, 내부 경로, 시스템 메시지 같은 민감정보는 절대 포함하지 않는다.",
+    payload?.keyword_emphasis_enabled ? "- 핵심 키워드나 판단 기준만 **굵게** 표시한다. 굵게 표시는 전체 3~6회로 제한하고 문장 전체를 굵게 만들지 않는다." : "",
+    styleReference ? "- 기존 작성글 스타일 참고: 아래 참고글의 문장과 제목은 복사하지 말고 어투, 문장 길이, 문단 전개만 참고한다." : "",
+    styleReference ? `참고글:\n\"\"\"${styleReference}\"\"\"` : "",
     ctaLink ? `- 결론 마지막 문장에는 이 URL을 자연스럽게 그대로 포함한다: ${ctaLink}` : "",
     ctaText ? `- CTA 맥락: ${ctaText}` : "",
     seoBrief ? `- SEO 참고 자료(JSON, 사실 왜곡 금지): ${seoBrief}` : "",
@@ -8461,6 +8664,7 @@ function publicCommand(command) {
     type: command.type,
     status: command.status,
     target_platform: command.target_platform || "",
+    target_device_label: command.target_device_label || "",
     created_at: command.created_at,
     updated_at: command.updated_at,
     assigned_at: command.assigned_at || null,
@@ -13428,6 +13632,7 @@ async function handleCreateAgentCommand(req, res) {
   }
   const rawPayload = body.payload && typeof body.payload === "object" ? body.payload : {};
   const targetPlatform = normalizePlatform(body.target_platform || body.platform || rawPayload.target_platform || rawPayload.platform || "");
+  const targetDeviceLabel = String(body.target_device_label || body.device_label || rawPayload.target_device_label || rawPayload.device_label || "").trim().slice(0, 120);
   const payload = type === "import_local_provider_secrets"
     ? { providers: normalizeImportableUserSecretProviders(rawPayload.providers || body.providers) }
     : type === "songi_youtube_discovery"
@@ -13448,6 +13653,7 @@ async function handleCreateAgentCommand(req, res) {
     type,
     status: "queued",
     target_platform: targetPlatform,
+    target_device_label: targetDeviceLabel,
     payload,
     logs: [
       {
@@ -13474,6 +13680,7 @@ function handleAgentNextCommand(req, res) {
     return;
   }
   const platform = requestPlatform(req);
+  const deviceLabel = String(new URL(req.url, `http://${req.headers.host || "localhost"}`).searchParams.get("device_label") || "").trim();
   const commands = loadCommands();
   const command = commands.commands
     .filter((item) => item.user_id === auth.user.id && item.status === "queued")
@@ -13481,6 +13688,11 @@ function handleAgentNextCommand(req, res) {
       const target = normalizePlatform(item.target_platform || "");
       if (!target) return true;
       return platform && target === platform;
+    })
+    .filter((item) => {
+      const targetDevice = String(item.target_device_label || "").trim();
+      if (!targetDevice) return true;
+      return deviceLabel && targetDevice === deviceLabel;
     })
     .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))[0];
   if (command) {
@@ -13552,6 +13764,9 @@ async function handleCreateJob(req, res) {
   const body = await readJsonBody(req, res);
   if (!body) return;
   const kind = String(body.kind || "").trim();
+  const jobPayload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
+    ? { ...body.payload }
+    : {};
   if (!isJobAllowed(auth.user, kind)) {
     json(req, res, 403, { ok: false, error: "job_not_allowed" });
     return;
@@ -13586,7 +13801,7 @@ async function handleCreateJob(req, res) {
     return;
   }
   const yeriProviderIssue = requestedYeriServerGeneration
-    ? yeriServerGenerationProviderIssue(body.payload || {}, yeriGenerationMode)
+    ? yeriServerGenerationProviderIssue(jobPayload, yeriGenerationMode)
     : null;
   if (yeriProviderIssue) {
     json(req, res, 400, {
@@ -13607,7 +13822,7 @@ async function handleCreateJob(req, res) {
     return;
   }
   if (yeriGenerationMode === "gemini") {
-    const limitIssue = yeriRealTestLimitIssue(body.payload || {});
+    const limitIssue = yeriRealTestLimitIssue(jobPayload);
     if (limitIssue) {
       json(req, res, 400, {
         ok: false,
@@ -13617,6 +13832,10 @@ async function handleCreateJob(req, res) {
       });
       return;
     }
+  }
+  if (kind === "yeri_write" && yeriSeoResearchEnabled(jobPayload) && !jobPayload.seo_brief) {
+    const seoBrief = await buildYeriSeoBriefFromPayload(jobPayload);
+    if (seoBrief) jobPayload.seo_brief = seoBrief;
   }
 
   const jobs = loadJobs();
@@ -13646,7 +13865,7 @@ async function handleCreateJob(req, res) {
     server_generation: yeriGenerationMode || "",
     target_platform: targetPlatform,
     target_device_label: targetDeviceLabel,
-    payload: redactPayload(body.payload || {}),
+    payload: redactPayload(jobPayload),
     logs: [
       {
         at: now,
@@ -13679,6 +13898,63 @@ function handleListJobs(req, res) {
     .slice(0, 50)
     .map(publicJob);
   json(req, res, 200, { ok: true, jobs: rows });
+}
+
+async function handleCancelJob(req, res, jobId) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const jobs = loadJobs();
+  const job = jobs.jobs.find((item) => item.id === jobId && item.user_id === auth.user.id);
+  if (!job || !jobVisibleToUser(job, auth.user)) {
+    json(req, res, 404, { ok: false, error: "job_not_found" });
+    return;
+  }
+  if (TERMINAL_JOB_STATUSES.has(job.status)) {
+    json(req, res, 200, { ok: true, job: publicJob(job), command: null, already_terminal: true });
+    return;
+  }
+
+  const now = nowIso();
+  const previousStatus = String(job.status || "");
+  job.status = "cancelled";
+  job.cancelled_at = now;
+  job.finished_at = job.finished_at || now;
+  job.updated_at = now;
+  job.failed_stage = job.failed_stage || "user_cancelled";
+  job.failed_reason = "사용자가 작업을 중단했습니다.";
+  job.logs = job.logs || [];
+  job.logs.push({
+    at: now,
+    level: "warn",
+    message: redactText(body.reason || "사용자가 작업을 중단했습니다."),
+  });
+
+  let command = null;
+  if (["running", "ready_for_publish", "generating"].includes(previousStatus)) {
+    const commands = loadCommands();
+    command = {
+      id: crypto.randomUUID(),
+      user_id: auth.user.id,
+      type: "stop_current_job",
+      status: "queued",
+      target_platform: normalizePlatform(job.target_platform || body.target_platform || ""),
+      target_device_label: String(job.target_device_label || body.target_device_label || "").trim().slice(0, 120),
+      payload: {
+        job_id: job.id,
+        reason: compactText(body.reason || "user_cancelled", 120),
+      },
+      logs: [{ at: now, level: "info", message: "작업 중단 명령이 생성되었습니다." }],
+      created_at: now,
+      updated_at: now,
+    };
+    commands.commands.push(command);
+    saveCommands(commands);
+  }
+
+  saveJobs(jobs);
+  json(req, res, 200, { ok: true, job: publicJob(job), command: command ? publicCommand(command) : null });
 }
 
 async function handleRetryJob(req, res, jobId) {
@@ -13848,6 +14124,10 @@ async function handleAgentJobUpdate(req, res) {
   const nextStatus = String(body.status || job.status);
   if (!JOB_STATUSES.has(nextStatus)) {
     json(req, res, 400, { ok: false, error: "invalid_status" });
+    return;
+  }
+  if (TERMINAL_JOB_STATUSES.has(job.status) && job.status !== nextStatus) {
+    json(req, res, 200, { ok: true, ignored: true, job: publicJob(job) });
     return;
   }
   const now = nowIso();
@@ -14678,6 +14958,11 @@ function route(req, res) {
   if (req.method === "POST" && url.pathname.startsWith("/api/jobs/") && url.pathname.endsWith("/retry")) {
     const rawId = url.pathname.slice("/api/jobs/".length, -"/retry".length);
     handleRetryJob(req, res, decodeURIComponent(rawId));
+    return;
+  }
+  if (req.method === "POST" && url.pathname.startsWith("/api/jobs/") && url.pathname.endsWith("/cancel")) {
+    const rawId = url.pathname.slice("/api/jobs/".length, -"/cancel".length);
+    handleCancelJob(req, res, decodeURIComponent(rawId));
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/jobs") {

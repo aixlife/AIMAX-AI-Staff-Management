@@ -147,6 +147,17 @@ try {
         image_count: 2,
         style_id: "info",
         ai_model: "gemini-2.5-flash",
+        schedule_interval: "3",
+        seo_research_enabled: true,
+        seo_reference_posts: [{
+          rank: 1,
+          title: "서버 mock 예리 상위글 구조",
+          body_text: "서버 mock 예리 키워드를 제목과 첫 문단에 자연스럽게 넣고 비교 기준을 제시합니다.",
+          headings: ["핵심 요약", "비교 기준"],
+          images: ["process", "comparison"],
+        }],
+        keyword_emphasis_enabled: true,
+        style_reference_text: "짧은 문장으로 시작하고, 독자가 바로 실행할 수 있는 체크포인트를 이어서 설명합니다.",
       },
     }),
   });
@@ -162,6 +173,12 @@ try {
   const stored = readJson(artifactPath);
   assert(stored.artifact.content_markdown.includes("# 서버 mock 예리 실전 정리"), "artifact_markdown_title_missing");
   assert((stored.artifact.content_markdown.match(/\[이미지\]/g) || []).length === 2, "artifact_image_count_mismatch");
+  const jobsFile = readJson(path.join(tmpDir, "jobs.json"));
+  const storedJob = jobsFile.jobs.find((job) => job.id === created.job.id);
+  assert(storedJob?.payload?.schedule_interval === "3", "schedule_interval_not_preserved");
+  assert(storedJob?.payload?.seo_research_enabled === true, "seo_flag_not_preserved");
+  assert(storedJob?.payload?.seo_brief?.source_count >= 1, "seo_brief_not_built");
+  assert(storedJob?.payload?.keyword_emphasis_enabled === true, "keyword_emphasis_not_preserved");
 
   const next = await request("/api/agent/next-job", { headers: agentAuth });
   assert(!next.job, "ready_for_publish_must_not_be_claimable_before_local_support");

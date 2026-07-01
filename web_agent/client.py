@@ -357,8 +357,14 @@ class AimaxWebAgentClient:
             payload=command_payload,
         )
 
-    def next_command(self, platform_label: str | None = None) -> dict[str, Any]:
-        params = {"platform": platform_label} if platform_label else None
+    def next_command(self, platform_label: str | None = None, device_label: str | None = None) -> dict[str, Any]:
+        params = {}
+        if platform_label:
+            params["platform"] = platform_label
+        if device_label:
+            params["device_label"] = device_label
+        if not params:
+            params = None
         return self._request("GET", "/api/agent/next-command", params=params)
 
     def update_command(self, command_id: str, status: str, log: str, result: dict[str, Any] | None = None) -> dict[str, Any]:
