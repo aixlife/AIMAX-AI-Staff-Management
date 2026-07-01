@@ -25,6 +25,15 @@
 
 - Branch: `https://github.com/aixlife/AIMAX-AI-Staff-Management/tree/codex/jieun-macos-download`
 - Commit: `475e3b6 Prepare Jieun macOS download rollout`
+- Draft PR: `https://github.com/aixlife/AIMAX-AI-Staff-Management/pull/1`
+
+## Prepared Jieun App Source Branch
+
+- Branch: `https://github.com/aixlife/aimax-viseo/tree/feature/jieun-tauri-macos-v017`
+- Commit: `441c481 Add Tauri macOS distribution build`
+- Draft PR: `https://github.com/aixlife/aimax-viseo/pull/5`
+- Base branch: `feature/windows-shutdown-button`
+- Note: the Windows v0.1.6 chain PRs are still open upstream, so this Tauri PR intentionally targets the Windows shutdown branch rather than `main`.
 
 ## Changes To Deploy
 
@@ -45,6 +54,7 @@
 - `scripts/deploy_oracle.sh external-staff --dry-run`
 - `scripts/deploy_oracle.sh web --dry-run`
 - DMG mount/copy/launch local smoke
+- GitHub Actions workflow runs: none configured/found for the two PR head commits.
 
 ## Deployment Commands
 
@@ -83,4 +93,3 @@ APPLE_TEAM_ID="<TEAMID>" \
 NOTARIZE=1 \
 npm run tauri:build:mac-dmg
 ```
-
