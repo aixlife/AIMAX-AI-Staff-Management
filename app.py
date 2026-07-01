@@ -484,6 +484,7 @@ def _safe_image_failures(raw, limit=20):
             "local_image_path": str(item.get("local_image_path") or "")[:260],
             "user_actionable": bool(item.get("user_actionable")),
             "admin_action_required": bool(item.get("admin_action_required")),
+            "diagnostics": _safe_image_diagnostics(item.get("diagnostics")),
         })
     return failures
 
@@ -500,6 +501,41 @@ def _safe_local_image_paths(raw, limit=20):
         seen.add(path)
         paths.append(path[:260])
     return paths
+
+
+def _safe_image_diagnostics(raw):
+    if not isinstance(raw, dict):
+        return {}
+    diagnostics = {
+        "before_image_count": _usage_number(raw.get("before_image_count")),
+        "after_image_count": _usage_number(raw.get("after_image_count")),
+        "upload_method": str(raw.get("upload_method") or "")[:80],
+        "debug_html_path": str(raw.get("debug_html_path") or "")[:260],
+        "screenshot_path": str(raw.get("screenshot_path") or "")[:260],
+        "browser_name": str(raw.get("browser_name") or "")[:60],
+        "browser_version": str(raw.get("browser_version") or "")[:80],
+        "chromedriver_version": str(raw.get("chromedriver_version") or "")[:120],
+        "current_url": str(raw.get("current_url") or "")[:260],
+    }
+    attempts = raw.get("attempts")
+    if isinstance(attempts, list):
+        diagnostics["attempts"] = [
+            {
+                "method": str(item.get("method") or "")[:80],
+                "uploaded": bool(item.get("uploaded")),
+            }
+            for item in attempts[:8]
+            if isinstance(item, dict)
+        ]
+    selector_counts = raw.get("selector_counts")
+    if isinstance(selector_counts, dict):
+        diagnostics["selector_counts"] = {
+            str(key)[:120]: _usage_number(value)
+            for key, value in list(selector_counts.items())[:20]
+        }
+    if raw.get("selector_error"):
+        diagnostics["selector_error"] = str(raw.get("selector_error"))[:180]
+    return {key: value for key, value in diagnostics.items() if value not in ("", [], {})}
 
 
 def _safe_image_items(raw, limit=20):
@@ -519,6 +555,8 @@ def _safe_image_items(raw, limit=20):
             "local_image_path": str(item.get("local_image_path") or "")[:260],
             "stage": str(item.get("stage") or "")[:80],
             "error_code": str(item.get("error_code") or "")[:80],
+            "method": str(item.get("method") or "")[:80],
+            "diagnostics": _safe_image_diagnostics(item.get("diagnostics")),
         })
     return items
 

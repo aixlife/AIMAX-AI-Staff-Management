@@ -7249,6 +7249,46 @@ function sanitizeUsage(raw) {
   };
 }
 
+function sanitizeImageDiagnostics(raw) {
+  const diagnostics = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const attempts = Array.isArray(diagnostics.attempts)
+    ? diagnostics.attempts.slice(-8).map((item) => {
+      const attempt = item && typeof item === "object" ? item : {};
+      return {
+        method: String(attempt.method || "").slice(0, 80),
+        uploaded: Boolean(attempt.uploaded),
+      };
+    })
+    : [];
+  const selectorCounts = diagnostics.selector_counts && typeof diagnostics.selector_counts === "object"
+    ? Object.fromEntries(Object.entries(diagnostics.selector_counts).slice(0, 20).map(([key, value]) => [
+      String(key).slice(0, 120),
+      safeInt(value, -1, 100000),
+    ]))
+    : {};
+  const result = {
+    before_image_count: safeInt(diagnostics.before_image_count, 0, 1000),
+    after_image_count: safeInt(diagnostics.after_image_count, 0, 1000),
+    upload_method: String(diagnostics.upload_method || "").slice(0, 80),
+    debug_html_path: String(diagnostics.debug_html_path || "").slice(0, 260),
+    screenshot_path: String(diagnostics.screenshot_path || "").slice(0, 260),
+    browser_name: String(diagnostics.browser_name || "").slice(0, 60),
+    browser_version: String(diagnostics.browser_version || "").slice(0, 80),
+    chromedriver_version: String(diagnostics.chromedriver_version || "").slice(0, 120),
+    current_url: String(diagnostics.current_url || "").slice(0, 260),
+    selector_error: redactText(String(diagnostics.selector_error || "")).slice(0, 180),
+    attempts,
+    selector_counts: selectorCounts,
+  };
+  return Object.fromEntries(
+    Object.entries(result).filter(([, value]) => {
+      if (Array.isArray(value)) return value.length;
+      if (value && typeof value === "object") return Object.keys(value).length;
+      return value !== "" && value !== 0;
+    })
+  );
+}
+
 function sanitizeImages(raw) {
   const images = raw && typeof raw === "object" ? raw : {};
   const providers = images.provider_counts && typeof images.provider_counts === "object" ? images.provider_counts : {};
@@ -7264,6 +7304,7 @@ function sanitizeImages(raw) {
       local_image_path: String(failure.local_image_path || "").slice(0, 260),
       user_actionable: Boolean(failure.user_actionable),
       admin_action_required: Boolean(failure.admin_action_required),
+      diagnostics: sanitizeImageDiagnostics(failure.diagnostics),
     };
   }) : [];
   const localPaths = Array.isArray(images.local_paths)
@@ -7282,6 +7323,8 @@ function sanitizeImages(raw) {
         local_image_path: String(image.local_image_path || "").slice(0, 260),
         stage: String(image.stage || "").slice(0, 80),
         error_code: String(image.error_code || "").slice(0, 80),
+        method: String(image.method || "").slice(0, 80),
+        diagnostics: sanitizeImageDiagnostics(image.diagnostics),
       };
     })
     : [];
