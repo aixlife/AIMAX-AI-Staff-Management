@@ -419,11 +419,31 @@ const WORKERS = {
     releaseUrl: "",
     setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe`,
     portableDownloadUrl: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-portable.exe`,
-    downloadLabel: "Setup exe 다운로드",
-    supportedPlatforms: ["windows"],
+    downloadLabel: "설치 파일 다운로드",
+    supportedPlatforms: ["windows", "macos"],
     version: "0.1.6",
     shortDescription: "캡처, 모자이크, OCR, 화면 녹화, Windows 종료처럼 자주 쓰는 사무 작업을 조용히 처리하는 데스크톱 직원입니다.",
-    capabilities: ["화면 캡처", "캡처 이미지 모자이크", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+    capabilities: ["화면 캡처", "캡처 이미지 모자이크", "Mac 앱", "Windows 종료", "OCR 텍스트 캡처", "화면 녹화", "블로그 글쓰기 진입"],
+    executionOptions: [
+      {
+        kind: "windows_download",
+        label: "Windows Setup 다운로드",
+        platforms: ["windows"],
+        status: "available",
+        url: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe`,
+        primary: true,
+        description: "Windows용 지은 안정 버전 v0.1.6 설치 파일입니다.",
+      },
+      {
+        kind: "mac_download",
+        label: "Apple Silicon Mac 앱 다운로드",
+        platforms: ["macos"],
+        status: "available",
+        url: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg`,
+        primary: false,
+        description: "Apple Silicon Mac용 Tauri v0.2.0 DMG입니다. 첫 실행 시 macOS 보안 확인이 뜨면 시스템 설정에서 허용 후 열어주세요.",
+      },
+    ],
   },
   eunseo: {
     code: "eunseo",
@@ -542,6 +562,7 @@ const PUBLIC_DOWNLOAD_FILES = new Set([
   "AIMAX-Office-Manager-Setup-0.1.4.exe",
   "AIMAX-Office-Manager-Setup-0.1.5.exe",
   "AIMAX-Office-Manager-Setup-0.1.6.exe",
+  "AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg",
   "AIMAX-Office-Manager-portable.exe",
   "Pencil-Setup-1.0.0.exe",
   "Pencil-portable.exe",
@@ -9920,7 +9941,9 @@ function workerCatalogContractIssues() {
       issues.push({ code: "web_module_requires_naver_account", worker: worker.code });
     }
     if (worker.execution === "external_download") {
-      if (!worker.setupDownloadUrl && !worker.releaseUrl) {
+      const hasDownloadOption = Array.isArray(worker.executionOptions)
+        && worker.executionOptions.some((option) => option && option.url && String(option.kind || "").includes("download"));
+      if (!worker.setupDownloadUrl && !worker.releaseUrl && !hasDownloadOption) {
         issues.push({ code: "external_download_url_missing", worker: worker.code });
       }
       if (!Array.isArray(worker.supportedPlatforms) || !worker.supportedPlatforms.length) {
