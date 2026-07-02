@@ -87,6 +87,9 @@ Type: files; Name: "{commonstartup}\{#AppDisplayName}.lnk"
 ; 사용자 데이터는 %APPDATA%\NaverBlogAuto 에 있어 {app} 하위 정리는 안전하며,
 ; unins000.* (언인스톨러)는 {app} 루트의 비코드 파일이라 아래 규칙에 걸리지 않는다.
 Type: filesandordirs; Name: "{app}\_internal"
+; 구세대 페이로드가 설치 폴더 루트에 남긴 oracle\ 잔재(실측: orphan 12개 파일).
+; 새 페이로드 루트에는 oracle 이 없으므로 통째로 정리해도 안전하다.
+Type: filesandordirs; Name: "{app}\oracle"
 ; 옛 레이아웃(PyInstaller 5 이하)이 {app} 루트에 남긴 코드 파일도 정리한다.
 ; 새 페이로드는 루트에 exe/txt 만 두므로(코드 파일은 전부 _internal) 안전하다.
 Type: files; Name: "{app}\*.dll"
@@ -149,6 +152,17 @@ begin
     Sleep(500);
     WaitedMS := WaitedMS + 500;
   end;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  // Inno 는 이 함수가 True 를 반환한 "직후" AppMutex 를 검사한다. 정상 경로에선
+  // 여기서 앱을 먼저 종료해 뮤텍스를 없애 두어 "AIMAX를 닫으십시오" 프롬프트 없이
+  // (silent 설치 포함) 매끄럽게 진행되고, taskkill 이 실패한 비정상 경우에만
+  // AppMutex 가 최후 방어선으로 설치(부분 교체)를 막는다.
+  KillAllTargetProcesses;
+  WaitForTargetProcessesExit(10000);
+  Result := True;
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
