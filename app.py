@@ -1164,6 +1164,26 @@ def _save_secret_setting(key, value, *, delete_when_blank=False):
     _mark_secret_cleared(key)
 
 
+def _stamp_naver_account_saved_at(data, naver_id, naver_pw):
+    """네이버 자격증명(ID+비밀번호)이 실제로 저장될 때 그 시각(ISO 8601)을 기록한다.
+
+    서버는 readiness.naver_account.saved_at 을 마지막 로그인 실패 시각과 비교해
+    네이버 로그인 가드 자동 해제(M-2)에 쓴다. 빈 값 저장(기존 키 보존)일 때는
+    갱신하지 않아, 실제 자격증명이 저장된 시점만 반영되게 한다.
+    """
+    if (naver_id or "").strip() and (naver_pw or "").strip():
+        data["naver_account_saved_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def load_naver_account_saved_at():
+    """로컬 설정에 기록된 네이버 자격증명 저장 시각(ISO 8601). 없으면 None."""
+    data = _load_settings_data()
+    if not isinstance(data, dict):
+        return None
+    value = str(data.get("naver_account_saved_at") or "").strip()
+    return value or None
+
+
 def save_settings(naver_id, naver_pw, api_key, ai_model=_DEFAULT_AI_MODEL, claude_key="", openai_key="", apify_key=""):
     # 민감 정보는 로컬 보안 저장소에만 저장한다. 일반 저장에서 빈 값은 기존 키 보존으로 처리한다.
     _save_secret_setting("naver_pw", naver_pw)
@@ -1174,6 +1194,7 @@ def save_settings(naver_id, naver_pw, api_key, ai_model=_DEFAULT_AI_MODEL, claud
     data = _load_settings_data()
     data["naver_id"] = naver_id
     data["ai_model"] = _normalize_ai_model(ai_model)
+    _stamp_naver_account_saved_at(data, naver_id, naver_pw)
     _save_settings_data(data)
 
 
@@ -1184,6 +1205,7 @@ def save_local_security_settings(naver_id, naver_pw, ai_model=None):
     data["naver_id"] = naver_id
     if ai_model is not None:
         data["ai_model"] = _normalize_ai_model(ai_model)
+    _stamp_naver_account_saved_at(data, naver_id, naver_pw)
     _save_settings_data(data)
 
 
@@ -2401,6 +2423,9 @@ class NaverBlogApp:
                 "status": self._web_agent_status_value(naver_ready),
                 "has_id": bool(naver_id),
                 "has_password": bool(naver_pw),
+                # 네이버 자격증명이 로컬 설정에 저장된 시각(ISO 8601). 없으면 null.
+                # 서버는 이 값이 마지막 로그인 실패 이후이면 로그인 가드를 자동 해제(M-2).
+                "saved_at": load_naver_account_saved_at(),
             },
             "ai_keys": {
                 "gemini": self._web_agent_status_value(has_gemini),
