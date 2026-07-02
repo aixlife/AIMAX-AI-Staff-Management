@@ -163,6 +163,7 @@ const USER_SECRETS_PATH = path.join(DATA_DIR, "user-secrets.json");
 const USER_SECRET_KEY_PATH = path.join(DATA_DIR, "user-secret-master.key");
 const SETUP_TOKENS_PATH = path.join(DATA_DIR, "setup-tokens.json");
 const JOBS_PATH = path.join(DATA_DIR, "jobs.json");
+const JOB_GUARDS_PATH = path.join(DATA_DIR, "job-guards.json");
 const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts");
 const AGENTS_PATH = path.join(DATA_DIR, "agents.json");
 const COMMANDS_PATH = path.join(DATA_DIR, "agent-commands.json");
@@ -2186,18 +2187,24 @@ function sleepMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// transient(일시 오류/타임아웃/5xx/과부하) 분류 시에만 자동 재시도. 대기는 2초, 8초.
+// 인증 실패·결제/한도 오류는 classifyYeriProviderError 가 transient=false 로 분류하므로
+// 이 경로에서 절대 재시도되지 않는다.
+const YERI_PROVIDER_RETRY_DELAYS_MS = [2000, 8000];
+
 async function requestYeriProviderJson(provider, rawUrl, options = {}) {
+  const { onTransientRetry, ...requestOptions } = options;
   const maxAttemptsRaw = Number(YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
   const maxAttempts = Math.max(1, Math.min(5, Number.isFinite(maxAttemptsRaw) ? maxAttemptsRaw : 3));
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      return await requestExternalJson(rawUrl, options);
+      return await requestExternalJson(rawUrl, requestOptions);
     } catch (error) {
       const classified = classifyYeriProviderError(provider, error);
       lastError = classified;
       if (classified.transient && attempt < maxAttempts) {
-        const delay = Math.min(20000, 4000 * attempt);
+        const delay = YERI_PROVIDER_RETRY_DELAYS_MS[Math.min(attempt - 1, YERI_PROVIDER_RETRY_DELAYS_MS.length - 1)];
         console.warn("[yeri-hybrid] provider retry", {
           provider,
           attempt,
@@ -2206,6 +2213,13 @@ async function requestYeriProviderJson(provider, rawUrl, options = {}) {
           status: classified.status || 0,
           delay_ms: delay,
         });
+        if (typeof onTransientRetry === "function") {
+          try {
+            onTransientRetry({ attempt, maxAttempts, delayMs: delay, error: classified });
+          } catch (_noticeError) {
+            // 재시도 로그 기록 실패가 생성 재시도 자체를 막으면 안 된다.
+          }
+        }
         await sleepMs(delay);
         continue;
       }
@@ -2213,6 +2227,37 @@ async function requestYeriProviderJson(provider, rawUrl, options = {}) {
     }
   }
   throw lastError || yeriProviderError(provider, "server_generation_provider_error", "AI 글 생성 오류가 발생했습니다.");
+}
+
+// 서버 글 생성 재시도 내역을 잡 logs 에 남기기 위한 헬퍼.
+// load-mutate-save 가 완전 동기라 다른 jobs.json 쓰기 경로와의 lost-update 창을 넓히지 않는다.
+function appendJobLogById(jobId, userId, level, message) {
+  try {
+    const jobs = loadJobs();
+    const job = jobs.jobs.find((item) => item.id === jobId && (!userId || item.user_id === userId));
+    if (!job) return false;
+    const now = nowIso();
+    appendJobLog(job, level, message, now);
+    job.updated_at = now;
+    saveJobs(jobs);
+    return true;
+  } catch (error) {
+    console.warn("[job-log] append by id failed", error?.code || error?.message || error);
+    return false;
+  }
+}
+
+function yeriTransientRetryLogger(provider, job, userId) {
+  const label = yeriProviderLabel(provider);
+  return ({ attempt, maxAttempts, delayMs }) => {
+    const totalRetries = Math.max(1, maxAttempts - 1);
+    appendJobLogById(
+      job?.id,
+      userId,
+      "warn",
+      `${label} 일시 오류 - ${Math.round(delayMs / 1000)}초 후 자동 재시도 ${attempt}/${totalRetries}`,
+    );
+  };
 }
 
 async function generateYeriGeminiArtifact(job, userId) {
@@ -2250,6 +2295,7 @@ async function generateYeriGeminiArtifact(job, userId) {
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
+    onTransientRetry: yeriTransientRetryLogger("gemini", job, userId),
   });
   try {
     response = await requestGemini(model);
@@ -2294,6 +2340,7 @@ async function generateYeriOpenAiArtifact(job, userId) {
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
+    onTransientRetry: yeriTransientRetryLogger("openai", job, userId),
   });
   const text = extractOpenAiText(response.json);
   const parsed = parseYeriGeneratedJson(text, "yeri_openai");
@@ -2321,6 +2368,7 @@ async function generateYeriClaudeArtifact(job, userId) {
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
+    onTransientRetry: yeriTransientRetryLogger("claude", job, userId),
   });
   const text = extractClaudeText(response.json);
   const parsed = parseYeriGeneratedJson(text, "yeri_claude");
@@ -2602,6 +2650,7 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
     delete target.claim_expires_at;
     appendJobLog(target, "error", `서버 글 생성에 실패했습니다: ${failureMessage}`, target.updated_at);
     saveJobs(fresh);
+    recordJobFailureGuard(target);
     return { ok: false, error: failureCode, job: target };
   }
 }
@@ -2702,6 +2751,7 @@ function markRunnerStartTimeouts(jobs, options = {}) {
       error: "runner_start_not_reported",
     };
     appendJobLog(job, "error", "실행기가 작업을 받은 뒤 시작 상태를 보내지 않아 작업을 실패 처리했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.", now);
+    recordJobFailureGuard(job);
     recovered += 1;
   }
   return recovered;
@@ -2763,6 +2813,7 @@ function failStaleRunningJobs(jobs, options = {}) {
       error: "runner_stopped_heartbeating_or_timed_out",
     };
     appendJobLog(job, "error", "실행기가 작업 도중 응답을 멈춰 작업을 실패 처리했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.", now);
+    recordJobFailureGuard(job);
     recovered += 1;
   }
   return recovered;
@@ -2790,6 +2841,218 @@ function loadCommands() {
 
 function saveCommands(data) {
   writeJsonAtomic(COMMANDS_PATH, { version: 1, commands: arrayFieldOrThrow(COMMANDS_PATH, data, "commands") });
+}
+
+// ---------------------------------------------------------------------------
+// 연속 실패 가드 (재시도 루프 차단)
+// 같은 사용자·같은 잡 종류에서 같은 오류 시그니처가 연속되면 잡 생성/재시도를 잠시 멈추고
+// 조치 안내를 돌려준다. 저장소는 독립 파일(job-guards.json)이라 jobs.json/users.json
+// 쓰기 경로에 끼어들지 않는다.
+// ---------------------------------------------------------------------------
+const JOB_GUARD_PAUSE_THRESHOLD = 3;
+const JOB_GUARD_RUNNER_NOT_STARTED_THRESHOLD = 5;
+
+function loadJobGuards() {
+  const data = readJsonFile(JOB_GUARDS_PATH, { version: 1, guards: [] });
+  return {
+    version: 1,
+    guards: arrayFieldOrThrow(JOB_GUARDS_PATH, data, "guards"),
+  };
+}
+
+function saveJobGuards(data) {
+  writeJsonAtomic(JOB_GUARDS_PATH, { version: 1, guards: arrayFieldOrThrow(JOB_GUARDS_PATH, data, "guards") });
+}
+
+// 실패 메시지/스테이지를 정규화해 오류 시그니처 클래스로 분류한다.
+// buildFailureDiagnostic 의 패턴 순서를 따르되, 가드 목적에 맞게 클래스만 축약한다.
+function classifyJobFailureSignature(input = {}) {
+  const text = [
+    input.stage,
+    input.reason,
+    input.error,
+    input.visible_error,
+    input.diagnostic_code,
+    input.diagnostic_message,
+    input.message,
+  ].filter(Boolean).join(" ").toLowerCase();
+  if (!text.trim()) return "other";
+  if (/naver_login|네이버 로그인|네이버.*(아이디|비밀번호|로그인|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
+  if (/server_generation_auth_failed|api_key_invalid|api_key_missing|key_missing|invalid.*api.*key|invalid x-api-key|unauthorized|permission denied|authentication|api 키 인증|키 인증 실패/.test(text)) return "ai_key_invalid";
+  if (/server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|out of credit|balance|결제|크레딧|잔액|요금제/.test(text)) return "billing_quota";
+  if (/runner_start_timeout|runner_start_not_reported|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim/.test(text)) return "runner_not_started";
+  if (/server_generation_provider_transient|provider_transient|server_generation_rate_limited|rate.?limit|resource_exhausted|temporar|unavailable|overloaded|timeout|timed.?out|try again|일시적|잠시 후|server_generation_interrupted/.test(text)) return "transient";
+  if (/로그인|login/.test(text)) return "naver_login_failed";
+  return "other";
+}
+
+function jobFailureSignatureClass(job) {
+  return classifyJobFailureSignature({
+    stage: job?.failed_stage || "",
+    reason: job?.failed_reason || "",
+    error: job?.result?.error || "",
+    visible_error: job?.result?.visible_error || "",
+    diagnostic_code: job?.diagnostic?.code || "",
+    diagnostic_message: job?.diagnostic?.message || "",
+  });
+}
+
+function jobGuardPauseThreshold(signature) {
+  // runner_not_started 는 실행기 기동 타이밍 문제일 수 있어 임계를 5회로 완화한다.
+  return signature === "runner_not_started" ? JOB_GUARD_RUNNER_NOT_STARTED_THRESHOLD : JOB_GUARD_PAUSE_THRESHOLD;
+}
+
+function jobGuardMessage(guard) {
+  const signature = String(guard?.signature || "other");
+  const threshold = jobGuardPauseThreshold(signature);
+  if (signature === "naver_login_failed") {
+    return `네이버 아이디/비밀번호가 ${threshold}회 연속 거부되었습니다. 실행기 로컬 설정에서 네이버 계정을 다시 저장한 뒤 재시도해주세요.`;
+  }
+  if (signature === "ai_key_invalid") {
+    return `AI API 키 인증이 ${threshold}회 연속 실패했습니다. 설정 탭의 AI/API 연결에서 키를 다시 저장한 뒤 재시도해주세요.`;
+  }
+  if (signature === "billing_quota") {
+    return `결제/요금제 한도 오류가 ${threshold}회 연속 발생했습니다. AI 제공자의 결제/크레딧 상태를 확인한 뒤 재시도해주세요.`;
+  }
+  if (signature === "runner_not_started") {
+    return `실행기가 작업을 ${threshold}회 연속 시작하지 못했습니다. 실행기를 완전히 종료했다가 다시 실행한 뒤 재시도해주세요.`;
+  }
+  return `같은 오류가 ${threshold}회 연속 발생했습니다. 업데이트 및 오류보고 탭의 안내를 확인하고 원인을 해결한 뒤 재시도해주세요.`;
+}
+
+function publicJobGuard(row) {
+  const signature = String(row?.signature || "other");
+  return {
+    job_kind: String(row?.job_kind || ""),
+    guard_class: signature,
+    consecutive_count: safeInt(row?.consecutive_count, 0, 1000000),
+    threshold: jobGuardPauseThreshold(signature),
+    paused: Boolean(row?.paused),
+    last_error_at: row?.last_error_at || "",
+    last_message: redactText(String(row?.last_message || "")).slice(0, 300),
+    message: row?.paused ? jobGuardMessage(row) : "",
+  };
+}
+
+// 잡이 failed 로 확정될 때 호출. 같은 시그니처 연속이면 count+1, 다른 시그니처면 1로 리셋.
+// transient 는 1번(자동 재시도)이 흡수하므로 가드 대상에서 제외한다.
+// 가드 기록 실패가 잡 실패 처리 자체를 막으면 안 되므로 내부에서 오류를 삼킨다.
+function recordJobFailureGuard(job) {
+  try {
+    if (!job || !job.user_id || !job.kind) return null;
+    const signature = jobFailureSignatureClass(job);
+    if (signature === "transient") return null;
+    const data = loadJobGuards();
+    const now = nowIso();
+    let guard = data.guards.find((row) => row.user_id === job.user_id && row.job_kind === job.kind);
+    if (!guard) {
+      guard = {
+        user_id: job.user_id,
+        job_kind: job.kind,
+        signature,
+        consecutive_count: 0,
+        paused: false,
+        created_at: now,
+      };
+      data.guards.push(guard);
+    }
+    if (guard.signature === signature) {
+      guard.consecutive_count = safeInt(guard.consecutive_count, 0, 1000000) + 1;
+    } else {
+      guard.signature = signature;
+      guard.consecutive_count = 1;
+      guard.paused = false;
+    }
+    guard.last_error_at = now;
+    guard.last_message = redactText(String(job.failed_reason || job.result?.visible_error || job.diagnostic?.message || "")).slice(0, 300);
+    guard.updated_at = now;
+    if (guard.consecutive_count >= jobGuardPauseThreshold(signature)) guard.paused = true;
+    saveJobGuards(data);
+    return guard;
+  } catch (error) {
+    console.warn("[job-guard] record failed", error?.code || error?.message || error);
+    return null;
+  }
+}
+
+// 성공(done) 시 해당 user+kind 가드를 삭제한다.
+function clearJobGuardOnSuccess(userId, kind) {
+  try {
+    if (!userId || !kind) return 0;
+    const data = loadJobGuards();
+    const before = data.guards.length;
+    data.guards = data.guards.filter((row) => !(row.user_id === userId && row.job_kind === kind));
+    if (data.guards.length === before) return 0;
+    saveJobGuards(data);
+    return before - data.guards.length;
+  } catch (error) {
+    console.warn("[job-guard] clear on success failed", error?.code || error?.message || error);
+    return 0;
+  }
+}
+
+// 사용자가 관련 시크릿을 저장했을 때 해당 클래스 가드를 자동 삭제한다.
+function releaseJobGuardsForClasses(userId, classes = []) {
+  try {
+    if (!userId || !classes.length) return 0;
+    const targets = new Set(classes);
+    const data = loadJobGuards();
+    const before = data.guards.length;
+    data.guards = data.guards.filter((row) => !(row.user_id === userId && targets.has(String(row.signature || ""))));
+    if (data.guards.length === before) return 0;
+    saveJobGuards(data);
+    return before - data.guards.length;
+  } catch (error) {
+    console.warn("[job-guard] release failed", error?.code || error?.message || error);
+    return 0;
+  }
+}
+
+// 생성/재시도 차단 판정. 저장소 오류 시에는 기존 동작을 보존(차단하지 않음)한다.
+function pausedJobGuard(userId, kind) {
+  try {
+    if (!userId || !kind) return null;
+    const data = loadJobGuards();
+    return data.guards.find((row) => row.user_id === userId && row.job_kind === kind && row.paused === true) || null;
+  } catch (error) {
+    console.warn("[job-guard] lookup failed", error?.code || error?.message || error);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 구버전 러너 차단 (preflight)
+// 러너가 필요한 잡 종류에 한해, 사용자의 최신 agent 버전이 다운로드 카탈로그의 MIN 보다
+// 낮으면 잡 생성을 차단한다. MIN 미설정/에이전트 정보 없음이면 기존 동작을 보존한다.
+// ---------------------------------------------------------------------------
+function jobKindRequiresRunner(kind) {
+  const config = JOB_KINDS[kind] || {};
+  if (config.queue === false) return false;
+  const worker = WORKERS[config.workerCode || ""] || {};
+  return worker.execution === "local_agent" || worker.type === "local_agent";
+}
+
+function runnerUpdateRequirement(userId, kind, platformValue = "") {
+  try {
+    if (!jobKindRequiresRunner(kind)) return null;
+    const agents = loadAgents();
+    const agent = findAgentForUser(agents, userId, platformValue);
+    const currentVersion = String(agent?.version || "").trim();
+    if (!currentVersion) return null; // 에이전트 정보 없음 → 차단하지 않음 (기존 동작 보존)
+    const config = platformVersionConfig(agent.platform || platformValue || "");
+    const minVersion = String(config.min || "").trim();
+    if (!minVersion) return null; // MIN 미설정 → 차단하지 않음
+    if (compareVersions(currentVersion, minVersion) >= 0) return null;
+    return {
+      current_version: currentVersion,
+      min_version: minVersion,
+      platform: config.platform || "",
+      message: `실행기 버전(${currentVersion})이 최소 지원 버전(${minVersion})보다 낮아 작업을 시작할 수 없습니다. 업데이트 및 오류보고 탭에서 실행기를 업데이트한 뒤 다시 시도해주세요.`,
+    };
+  } catch (error) {
+    console.warn("[job-guard] runner preflight failed", error?.code || error?.message || error);
+    return null; // 판단 불가 시 기존 동작 보존
+  }
 }
 
 function loadCafe24Orders() {
@@ -11840,6 +12103,10 @@ async function handlePutUserSecret(req, res, provider) {
     json(req, res, statusCode, { ok: false, error: result.error });
     return;
   }
+  // AI 키를 새로 저장했으므로 키 인증/결제 한도 관련 연속 실패 가드를 자동 해제한다.
+  if (["gemini", "openai", "claude"].includes(result.config.provider)) {
+    releaseJobGuardsForClasses(auth.user.id, ["ai_key_invalid", "billing_quota"]);
+  }
   json(req, res, 200, {
     ok: true,
     verification,
@@ -13637,7 +13904,14 @@ async function handleAgentHeartbeat(req, res) {
   agent.version = String(body.version || "").slice(0, 80);
   agent.platform = platform;
   agent.device_label = deviceLabel;
+  const previousNaverStatus = String(agent.readiness?.naver_account?.status || "");
   agent.readiness = sanitizeReadiness(body.readiness);
+  // 네이버 계정이 (재)저장되어 준비 상태로 전환되면 네이버 로그인 가드를 자동 해제한다.
+  // 이미 ready 였던 계정을 같은 값으로 재저장한 경우는 전이가 없어 여기서 못 잡는다 —
+  // 그 경우는 acknowledge(조치했어요) 경로로 해제한다.
+  if (String(agent.readiness?.naver_account?.status || "") === "ready" && previousNaverStatus !== "ready") {
+    releaseJobGuardsForClasses(auth.user.id, ["naver_login_failed"]);
+  }
   const readinessDiagnostics = body.readiness && typeof body.readiness === "object" ? body.readiness.diagnostics : null;
   agent.diagnostics = sanitizeAgentDiagnostics(body.diagnostics || readinessDiagnostics || {});
   agent.last_seen_at = now;
@@ -13824,6 +14098,32 @@ async function handleCreateJob(req, res) {
     });
     return;
   }
+  // 연속 실패 가드 — 같은 오류가 반복 중이면 조치 안내와 함께 생성 자체를 차단한다.
+  const pausedGuard = pausedJobGuard(auth.user.id, kind);
+  if (pausedGuard) {
+    json(req, res, 409, {
+      ok: false,
+      error: "guard_paused",
+      guard_class: String(pausedGuard.signature || "other"),
+      consecutive_count: safeInt(pausedGuard.consecutive_count, 0, 1000000),
+      message: jobGuardMessage(pausedGuard),
+    });
+    return;
+  }
+  // 구버전 러너 preflight — 러너가 필요한 잡 종류만 검사한다.
+  const runnerRequirement = runnerUpdateRequirement(
+    auth.user.id,
+    kind,
+    normalizePlatform(body.target_platform || body.platform || ""),
+  );
+  if (runnerRequirement) {
+    json(req, res, 409, {
+      ok: false,
+      error: "runner_update_required",
+      ...runnerRequirement,
+    });
+    return;
+  }
   const explicitYeriServerGeneration = kind === "yeri_write" && body.server_generation === true;
   // 자동 서버생성: 웹 AI 키를 가진(서버가 복호화 가능한) 사용자는 서버생성을 기본으로 한다.
   // 러너가 웹키를 'ai_keys ready'로 보고해 웹이 로컬생성으로 보내지만, 러너 로컬엔 실제 키 값이
@@ -13891,6 +14191,9 @@ async function handleCreateJob(req, res) {
     if (!created.existing) {
       jobs.jobs.push(created.job);
       saveJobs(jobs);
+      // 윤미는 생성 시점에 터미널 상태로 확정될 수 있어 여기서 가드를 갱신한다.
+      if (created.job?.status === "failed") recordJobFailureGuard(created.job);
+      else if (created.job?.status === "done") clearJobGuardOnSuccess(auth.user.id, kind);
     }
     json(req, res, created.existing ? 200 : 201, { ok: true, existing: Boolean(created.existing), job: publicJob(created.job) });
     return;
@@ -14028,6 +14331,34 @@ async function handleRetryJob(req, res, jobId) {
     json(req, res, 429, { ok: false, error: "retry_limit_reached", retry_limit: YERI_RETRY_LIMIT, job: publicJob(job) });
     return;
   }
+  // 연속 실패 가드 — 같은 오류 반복 재시도를 차단한다.
+  const pausedGuard = pausedJobGuard(auth.user.id, job.kind);
+  if (pausedGuard) {
+    json(req, res, 409, {
+      ok: false,
+      error: "guard_paused",
+      guard_class: String(pausedGuard.signature || "other"),
+      consecutive_count: safeInt(pausedGuard.consecutive_count, 0, 1000000),
+      message: jobGuardMessage(pausedGuard),
+      job: publicJob(job),
+    });
+    return;
+  }
+  // 구버전 러너 preflight — 재시도도 러너로 다시 가므로 동일하게 검사한다.
+  const runnerRequirement = runnerUpdateRequirement(
+    auth.user.id,
+    job.kind,
+    normalizePlatform(job.target_platform || body.target_platform || ""),
+  );
+  if (runnerRequirement) {
+    json(req, res, 409, {
+      ok: false,
+      error: "runner_update_required",
+      ...runnerRequirement,
+      job: publicJob(job),
+    });
+    return;
+  }
 
   const now = nowIso();
   const stage = sanitizeFailedStage(body.failed_stage || job.failed_stage || "");
@@ -14109,6 +14440,47 @@ async function handleRetryJob(req, res, jobId) {
   json(req, res, 200, { ok: true, reused_artifact: hasReusableArtifact, job: publicJob(job) });
 }
 
+// 본인 활성 가드 조회 — 본인 것만 반환한다.
+function handleListJobGuards(req, res) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  let guards = [];
+  try {
+    guards = loadJobGuards().guards.filter((row) => row.user_id === auth.user.id);
+  } catch (error) {
+    console.warn("[job-guard] list failed", error?.code || error?.message || error);
+    guards = [];
+  }
+  json(req, res, 200, { ok: true, guards: guards.map(publicJobGuard) });
+}
+
+// 명시적 가드 해제 — paused 를 풀고 count=0 으로 리셋해, 다음 실패 시 즉시 재차단이 아니라
+// 다시 연속 임계 기준이 적용되도록 한다.
+async function handleAcknowledgeJobGuard(req, res) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const kind = String(body.job_kind || body.kind || "").trim();
+  if (!kind) {
+    json(req, res, 400, { ok: false, error: "job_kind_required" });
+    return;
+  }
+  const data = loadJobGuards();
+  const guard = data.guards.find((row) => row.user_id === auth.user.id && row.job_kind === kind);
+  if (!guard) {
+    json(req, res, 404, { ok: false, error: "guard_not_found" });
+    return;
+  }
+  const now = nowIso();
+  guard.paused = false;
+  guard.consecutive_count = 0;
+  guard.acknowledged_at = now;
+  guard.updated_at = now;
+  saveJobGuards(data);
+  json(req, res, 200, { ok: true, guard: publicJobGuard(guard) });
+}
+
 function handleAgentNextJob(req, res) {
   const auth = requireSession(req, res);
   if (!auth) return;
@@ -14173,6 +14545,7 @@ async function handleAgentJobUpdate(req, res) {
     json(req, res, 200, { ok: true, ignored: true, job: publicJob(job) });
     return;
   }
+  const previousStatus = String(job.status || "");
   const now = nowIso();
   job.status = nextStatus;
   job.updated_at = now;
@@ -14225,6 +14598,13 @@ async function handleAgentJobUpdate(req, res) {
     }
   }
   saveJobs(jobs);
+  // 연속 실패 가드 갱신 — 같은 failed 상태의 중복 보고로 이중 집계되지 않도록
+  // 상태 전이(비-failed → failed / 비-done → done)에서만 반영한다.
+  if (job.status === "failed" && previousStatus !== "failed") {
+    recordJobFailureGuard(job);
+  } else if (job.status === "done" && previousStatus !== "done") {
+    clearJobGuardOnSuccess(job.user_id, job.kind);
+  }
   json(req, res, 200, { ok: true, job: publicJob(job) });
 }
 
@@ -14998,6 +15378,14 @@ function route(req, res) {
     handleAgentJobUpdate(req, res);
     return;
   }
+  if (req.method === "GET" && url.pathname === "/api/jobs/guards") {
+    handleListJobGuards(req, res);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/jobs/guard/acknowledge") {
+    handleAcknowledgeJobGuard(req, res);
+    return;
+  }
   if (req.method === "POST" && url.pathname.startsWith("/api/jobs/") && url.pathname.endsWith("/retry")) {
     const rawId = url.pathname.slice("/api/jobs/".length, -"/retry".length);
     handleRetryJob(req, res, decodeURIComponent(rawId));
@@ -15156,5 +15544,23 @@ module.exports = {
     buildYunmiScriptResult,
     buildYunmiInvalidJsonFallbackResult,
     normalizeYunmiScriptPayload,
+  },
+  __jobGuardTest: {
+    JOB_GUARDS_PATH,
+    appendJobLogById,
+    classifyJobFailureSignature,
+    clearJobGuardOnSuccess,
+    jobFailureSignatureClass,
+    jobGuardMessage,
+    jobGuardPauseThreshold,
+    jobKindRequiresRunner,
+    loadJobGuards,
+    pausedJobGuard,
+    publicJobGuard,
+    recordJobFailureGuard,
+    releaseJobGuardsForClasses,
+    requestYeriProviderJson,
+    runnerUpdateRequirement,
+    saveJobGuards,
   },
 };
