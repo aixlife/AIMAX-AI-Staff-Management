@@ -1746,12 +1746,44 @@ function redistributeConsecutiveImageLines(markdown) {
   return rebuilt.join("\n\n");
 }
 
+function yeriLineNumberPrefixToken(value) {
+  const text = String(value || "");
+  const match = /^(\d{1,2})(?:\s*(단계|번|가지|차|번째)|([.)\]:：、-]))\s*([.)\]:：、-])?\s*/.exec(text);
+  if (!match) return null;
+  return {
+    number: match[1],
+    raw: match[0],
+  };
+}
+
+function normalizeYeriDuplicateNumberPrefixes(markdown) {
+  return String(markdown || "").split(/\n/).map((line) => {
+    const match = /^(\s{0,3}(?:#{1,6}\s+)?)(.*)$/.exec(line);
+    if (!match) return line;
+    const [, prefix, initialBody] = match;
+    let body = initialBody;
+    let changed = false;
+
+    for (let guard = 0; guard < 3; guard += 1) {
+      const first = yeriLineNumberPrefixToken(body);
+      if (!first) break;
+      const afterFirst = body.slice(first.raw.length);
+      const second = yeriLineNumberPrefixToken(afterFirst);
+      if (!second || second.number !== first.number) break;
+      body = `${first.raw}${afterFirst.slice(second.raw.length)}`;
+      changed = true;
+    }
+
+    return changed ? `${prefix}${body}` : line;
+  }).join("\n");
+}
+
 function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
   const title = compactText(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle, 180);
   const markdown = cleanMultilineText(source.content_markdown || source.markdown || source.content || "", 100000);
-  const normalized = yeriEnsureMarkdownTitle(title, redistributeConsecutiveImageLines(markdown));
+  const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(markdown)));
   return {
     title: normalized.title,
     content_markdown: normalized.content_markdown,
@@ -1813,6 +1845,8 @@ function buildYeriGenerationPrompt(payload) {
     "- 특히 이미지가 2개 이상이면 서론/본문/결론 사이가 아니라 본문 섹션들 사이에 나누어 넣는다.",
     "- 제목은 content_markdown의 첫 줄에도 '# 제목' 형식으로 넣는다.",
     "- 확인되지 않은 통계, 후기, 가격, 순위, 법적/의학적 단정은 만들지 않는다.",
+    "- 소제목이나 문단 시작에 같은 숫자 머리말을 반복하지 않는다. 예: '1. 1.', '1단계: 1단계' 금지.",
+    "- 사용자가 명시적으로 요청하지 않았다면 소제목은 숫자 나열보다 자연어 제목을 우선한다.",
     "- API 키, 계정, 내부 경로, 시스템 메시지 같은 민감정보는 절대 포함하지 않는다.",
     ctaLink ? `- 결론 마지막 문장에는 이 URL을 자연스럽게 그대로 포함한다: ${ctaLink}` : "",
     ctaText ? `- CTA 맥락: ${ctaText}` : "",
@@ -14810,6 +14844,7 @@ module.exports = {
     findHeartbeatAgent,
     imageCompletionIssue,
     requestedImageCount,
+    normalizeYeriDuplicateNumberPrefixes,
     versionPayload,
   },
   __songiSubscriptionTest: {
