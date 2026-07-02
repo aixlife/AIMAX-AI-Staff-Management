@@ -366,6 +366,69 @@ async function scenarioGarbageReportId() {
   }
 }
 
+// C-1(redaction): handleReport 가 세션 계정을 포함한 리포트에 redactPayload 를 적용해
+// row.account_email 이 마스킹("*")된 정상 세션 오류보고 + 유효한 account_user_id →
+// 정본 유저 이메일로 발송(스텁이 받은 수신자가 시드된 정본 주소인지 확인).
+async function scenarioMaskedEmailSends() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-masked-"));
+  const canonical = "canonical@example.test";
+  const reportId = "rep-masked";
+  seedUsers(tmpDir, [{ id: "user-masked", email: canonical }]);
+  seedIndex(tmpDir, [
+    reportRow({ report_id: reportId, account_email: "c***@e***.test", account_user_id: "user-masked" }),
+  ]);
+  const stub = await startMailStub({ status: 200 });
+  const port = nextPort();
+  const { child, logs } = bootServer(tmpDir, port, { AIMAX_MAIL_WEBHOOK_URL: stub.url });
+  try {
+    await waitForServer(port, logs);
+    await waitFor(() => readIndexRows(tmpDir).some((r) => r.report_id === reportId && r.user_notified_at), "masked_sent");
+    assert(stub.received.length === 1, `expected_1_mail_got_${stub.received.length}`);
+    assert(stub.received[0].to === canonical, `expected_canonical_recipient:${stub.received[0].to}`);
+    console.log("PASS 10) 마스킹된 account_email + 유효 user_id → 정본 이메일로 발송 (redaction)");
+  } finally {
+    child.kill("SIGTERM");
+    await stub.close();
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// 스킵 마커 재평가: 이전 스윕에서 user_notify_skipped:"unverified_account" 로 얼어붙은 행이
+// 이제 검증을 통과하면(마스킹 이메일 + 유효 user_id) 다음 스윕에서 발송되고 스킵 필드가 지워진다.
+async function scenarioSkipReeval() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-reeval-"));
+  const canonical = "reeval@example.test";
+  const reportId = "rep-reeval";
+  seedUsers(tmpDir, [{ id: "user-reeval", email: canonical }]);
+  seedIndex(tmpDir, [
+    reportRow({
+      report_id: reportId,
+      account_email: "r***@e***.test",
+      account_user_id: "user-reeval",
+      user_notify_skipped: "unverified_account",
+      user_notify_skipped_at: isoDaysAgo(1),
+    }),
+  ]);
+  const stub = await startMailStub({ status: 200 });
+  const port = nextPort();
+  const { child, logs } = bootServer(tmpDir, port, { AIMAX_MAIL_WEBHOOK_URL: stub.url });
+  try {
+    await waitForServer(port, logs);
+    const row = await waitFor(
+      () => readIndexRows(tmpDir).find((r) => r.report_id === reportId && r.user_notified_at),
+      "reeval_sent",
+    );
+    assert(stub.received.length === 1 && stub.received[0].to === canonical, `expected_canonical:${JSON.stringify(stub.received.map((m) => m.to))}`);
+    assert(!row.user_notify_skipped, `skip_marker_must_be_cleared:${row.user_notify_skipped}`);
+    assert(!row.user_notify_skipped_at, `skip_marker_at_must_be_cleared:${row.user_notify_skipped_at}`);
+    console.log("PASS 11) 스킵된 행 재평가 통과 → 발송 + 스킵 마커 제거");
+  } finally {
+    child.kill("SIGTERM");
+    await stub.close();
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
 try {
   await scenarioSendAndDedup();
   await scenarioSkips();
@@ -373,6 +436,8 @@ try {
   await scenarioKillSwitch();
   await scenarioUnverifiedAccount();
   await scenarioGarbageReportId();
+  await scenarioMaskedEmailSends();
+  await scenarioSkipReeval();
   console.log("WAITING_USER_MAIL_SMOKE_OK");
 } catch (error) {
   console.error("WAITING_USER_MAIL_SMOKE_FAILED");

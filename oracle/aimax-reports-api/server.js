@@ -10647,8 +10647,17 @@ async function sweepWaitingUserReportMail() {
       if (sent >= WAITING_USER_MAIL_PER_SWEEP) break;
       if (normalizeReportStatus(row?.status || "") !== "waiting_user") continue;
       if (isFeedbackReport(row)) continue; // 오류보고만 (피드백 리포트 제외)
-      // 이미 발송/실패확정/스킵된 행은 재발송하지 않는다 (같은 보고가 다시 waiting_user 여도 배너가 커버).
-      if (row?.user_notified_at || row?.user_notify_failed_at || row?.user_notify_skipped) continue;
+      // 발송 완료(user_notified_at)/실패 확정(user_notify_failed_at) 행은 영구 스킵한다.
+      // user_notify_skipped 만 있는 행은 매 스윕 재평가한다: 이제 검증을 통과하면 이 스윕에서 발송하며
+      // 스킵 마커를 지우고, 여전히 같은 이유로 실패하면 마커를 다시 쓰지 않고 조용히 건너뛴다(5분마다 파일 churn 방지).
+      if (row?.user_notified_at || row?.user_notify_failed_at) continue;
+      const priorSkip = String(row?.user_notify_skipped || "");
+      // 스킵 마커를 남기되, 같은 이유로 이미 마킹돼 있으면 재기록하지 않는다(파일 churn 방지). 이유가 바뀌면 갱신한다.
+      const applySkip = (reason) => {
+        skipped += 1;
+        if (priorSkip === reason) return;
+        setPatch(row.report_id, { user_notify_skipped: reason, user_notify_skipped_at: nowIso() });
+      };
       // C-2: report_id 가 비면 마커를 남길 방법이 없어 스윕마다 재발송될 수 있다 → 발송 전에 건너뛴다.
       const cleanId = cleanReportId(row?.report_id);
       if (!cleanId) continue;
@@ -10657,22 +10666,29 @@ async function sweepWaitingUserReportMail() {
       const statusUpdatedMs = Date.parse(String(row?.status_updated_at || row?.stored_at || ""));
       // 시각 파싱 불가 또는 룩백 초과 행은 오발송 방지를 위해 건너뛴다.
       if (!Number.isFinite(statusUpdatedMs) || statusUpdatedMs < cutoffMs) continue;
-      // C-1: account_user_id 로 실제 유저를 조회하고, 저장된 이메일이 정본과 일치할 때만 발송한다.
+      // C-1: account_user_id 로 실제 유저를 조회한다. handleReport 는 서버가 주입한 세션 계정을
+      // 포함한 리포트 전체에 redactPayload 를 적용하므로, 저장된 row.account_email 은 마스킹돼 있다
+      // (예: "a***@b***.com"). 따라서 이메일 문자열 비교는 세션 오류보고 행에서 절대 통과하지 못한다.
+      // 대신 서버가 세션 리포트에 심는 account_user_id(추측 불가한 UUID)를 신뢰 앵커로 삼는다.
+      // 유저가 존재하고 다음 중 하나면 검증 통과: (1) row 이메일이 비어 있음, (2) row 이메일이 "*"를
+      // 포함(마스킹돼 비교 불가 → user_id 앵커 신뢰), (3) 마스킹 안 된 이메일이 정본과 일치.
+      // 발송은 어떤 경우든 정본 user.email 로만 한다.
       const accountUserId = String(row?.account_user_id || "").trim();
       const rowEmail = normalizeEmail(row?.account_email || "");
       const user = accountUserId ? usersById.get(accountUserId) : null;
-      const verified = Boolean(user) && rowEmail && normalizeEmail(user.email) === rowEmail;
+      const rowEmailMasked = rowEmail.includes("*");
+      const verified = Boolean(user) && (
+        !rowEmail || rowEmailMasked || normalizeEmail(user.email) === rowEmail
+      );
       if (!verified) {
-        // 리포트 토큰 경로가 저장한 미검증 account 필드 → 발송 금지, 스킵 마커만 남긴다.
-        setPatch(row.report_id, { user_notify_skipped: "unverified_account", user_notify_skipped_at: nowIso() });
-        skipped += 1;
+        // 유저 부재이거나, 마스킹 안 된 이메일이 정본과 불일치 → 발송 금지, 스킵 마커.
+        applySkip("unverified_account");
         continue;
       }
       const recipient = String(user.email || "").trim(); // 정본 이메일로만 보낸다(클라이언트 원본 값 아님).
       const email = normalizeEmail(recipient);
       if (!isValidEmail(recipient)) {
-        setPatch(row.report_id, { user_notify_skipped: "invalid_email", user_notify_skipped_at: nowIso() });
-        skipped += 1;
+        applySkip("invalid_email");
         continue;
       }
       // 같은 이메일이 6시간 내 발송됐으면 이번 스윕은 건너뛰고 다음 스윕에서 재평가한다(실패 마킹 안 함).
@@ -10708,11 +10724,17 @@ async function sweepWaitingUserReportMail() {
       waitingUserMailSentReportIds.add(cleanId);
       waitingUserMailLastSentByEmail.set(email, Date.parse(notifiedAt) || nowMs);
       lastNotifiedByEmail.set(email, Date.parse(notifiedAt) || nowMs);
-      setPatch(row.report_id, {
+      const notifiedPatch = {
         user_notified_at: notifiedAt,
         user_notified_channel: "email",
         user_notified_id: String(result?.id || "").slice(0, 160),
-      });
+      };
+      // 이전 스윕에서 스킵 마커가 있던 행이 재평가로 통과했다면, 발송 마커와 같은 패치에서 스킵 필드를 지운다.
+      if (priorSkip) {
+        notifiedPatch.user_notify_skipped = "";
+        notifiedPatch.user_notify_skipped_at = "";
+      }
+      setPatch(row.report_id, notifiedPatch);
       sentReportIds.push(cleanId);
       eventsToRecord.push({
         email,
