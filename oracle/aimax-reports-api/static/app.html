@@ -361,12 +361,6 @@
       gap: 10px;
     }
 
-    .setup-list {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-    }
-
     #setupChecklist,
     #settingsStatus {
       max-height: 310px;
@@ -489,39 +483,6 @@
       color: var(--muted);
       line-height: 1.6;
       overflow-wrap: anywhere;
-    }
-
-    .aimax-story-points {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .aimax-story-point {
-      min-width: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 12px;
-      display: grid;
-      gap: 5px;
-    }
-
-    .aimax-story-point strong,
-    .aimax-story-point span {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .aimax-story-point strong {
-      color: var(--brand-dark);
-      line-height: 1.35;
-    }
-
-    .aimax-story-point span {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
     }
 
     .aimax-floor {
@@ -649,15 +610,6 @@
       line-height: 1.5;
     }
 
-    .brain-map {
-      position: relative;
-      min-height: 300px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #f7fcfa;
-      overflow: hidden;
-    }
-
     .brain-video-wrap {
       min-width: 0;
       border: 1px solid var(--line);
@@ -673,133 +625,6 @@
       height: 100%;
       object-fit: cover;
       background: #f7fcfa;
-    }
-
-    .brain-link {
-      position: absolute;
-      height: 1px;
-      background: #bfd5cb;
-      transform-origin: left center;
-    }
-
-    .brain-link.one {
-      left: 26%;
-      top: 38%;
-      width: 180px;
-      transform: rotate(18deg);
-    }
-
-    .brain-link.two {
-      left: 31%;
-      top: 54%;
-      width: 170px;
-      transform: rotate(-20deg);
-    }
-
-    .brain-link.three {
-      left: 47%;
-      top: 42%;
-      width: 150px;
-      transform: rotate(34deg);
-    }
-
-    .brain-link.four {
-      left: 43%;
-      top: 63%;
-      width: 155px;
-      transform: rotate(-34deg);
-    }
-
-    .brain-node {
-      position: absolute;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 76px;
-      min-height: 34px;
-      border: 1px solid #c9dcd3;
-      border-radius: 999px;
-      background: #ffffff;
-      color: #243128;
-      padding: 6px 11px;
-      font-size: 13px;
-      font-weight: 700;
-      box-shadow: 0 8px 18px rgba(22, 29, 25, .08);
-      white-space: nowrap;
-    }
-
-    .brain-node.core {
-      left: 50%;
-      top: 50%;
-      min-width: 98px;
-      min-height: 42px;
-      background: var(--brand);
-      color: #ffffff;
-      border-color: var(--brand);
-      transform: translate(-50%, -50%);
-    }
-
-    .brain-node.node-a {
-      left: 10%;
-      top: 22%;
-    }
-
-    .brain-node.node-b {
-      right: 9%;
-      top: 22%;
-    }
-
-    .brain-node.node-c {
-      left: 8%;
-      bottom: 18%;
-    }
-
-    .brain-node.node-d {
-      right: 10%;
-      bottom: 18%;
-    }
-
-    .brain-node.node-e {
-      left: 37%;
-      top: 10%;
-      background: var(--accent-soft);
-      border-color: #c9d9ec;
-    }
-
-    .guide-agent {
-      display: grid;
-      grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.25fr);
-      gap: 16px;
-      align-items: stretch;
-    }
-
-    .guide-current {
-      min-width: 0;
-      border: 1px solid #cbded8;
-      border-radius: 8px;
-      background: #f7fcfa;
-      padding: 16px;
-      display: grid;
-      gap: 12px;
-      align-content: start;
-    }
-
-    .guide-current h3 {
-      margin: 0;
-      font-size: 18px;
-      line-height: 1.35;
-    }
-
-    .guide-current p {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.55;
-    }
-
-    .guide-steps {
-      min-width: 0;
-      display: grid;
-      gap: 10px;
     }
 
     .guide-step {
@@ -824,143 +649,6 @@
     .guide-step span {
       min-width: 0;
       overflow-wrap: anywhere;
-    }
-
-    .overview-metrics {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
-    }
-
-    .overview-staff-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      margin-top: 14px;
-    }
-
-    .overview-employee-card {
-      min-width: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 13px;
-      display: grid;
-      grid-template-columns: 52px minmax(0, 1fr);
-      gap: 12px;
-      align-items: start;
-      box-shadow: var(--shadow-soft);
-    }
-
-    .overview-employee-card img {
-      width: 52px;
-      height: 52px;
-      border-radius: 999px;
-      object-fit: cover;
-      border: 1px solid var(--line);
-      background: #eef2f7;
-    }
-
-    .overview-employee-copy {
-      min-width: 0;
-      display: grid;
-      gap: 6px;
-    }
-
-    .overview-employee-copy strong,
-    .overview-employee-copy span {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .overview-employee-action {
-      justify-self: start;
-      margin-top: 2px;
-    }
-
-    .metric-card {
-      min-width: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      padding: 15px;
-      box-shadow: 0 1px 0 rgba(22, 29, 25, .04);
-    }
-
-    .metric-card strong {
-      display: block;
-      font-size: 30px;
-      line-height: 1.1;
-      color: var(--brand-dark);
-    }
-
-    .metric-card span {
-      display: block;
-      margin-top: 5px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.35;
-    }
-
-    .blocker-list {
-      display: grid;
-      gap: 10px;
-    }
-
-    .blocker-item {
-      min-width: 0;
-      display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: center;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-soft);
-      padding: 12px;
-    }
-
-    .blocker-item strong,
-    .blocker-item span {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .shortcut-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .shortcut-card {
-      min-height: 86px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #ffffff;
-      color: var(--ink);
-      padding: 12px;
-      text-align: left;
-      cursor: pointer;
-      display: grid;
-      align-content: space-between;
-      gap: 8px;
-      box-shadow: 0 1px 0 rgba(22, 29, 25, .04);
-    }
-
-    .shortcut-card:hover {
-      border-color: var(--brand);
-      background: #f2fbf8;
-    }
-
-    .shortcut-card strong,
-    .shortcut-card span {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .shortcut-card span {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.35;
     }
 
     .step-list {
@@ -1413,18 +1101,6 @@
       padding-bottom: 6px;
     }
 
-    .employee-layout {
-      display: grid;
-      grid-template-columns: minmax(260px, 360px) 1fr;
-      gap: 18px;
-      align-items: stretch;
-    }
-
-    .employee-list {
-      display: grid;
-      gap: 10px;
-    }
-
     .employee-card {
       width: 100%;
       min-height: 92px;
@@ -1492,15 +1168,6 @@
       background: var(--panel-soft);
     }
 
-    .employee-photo {
-      width: 100%;
-      aspect-ratio: 1;
-      border-radius: 8px;
-      object-fit: cover;
-      border: 1px solid var(--line);
-      background: #eef2f7;
-    }
-
     .employee-detail h3 {
       margin: 0;
       font-size: 22px;
@@ -1529,13 +1196,6 @@
 
     .employee-detail-head p {
       margin: 4px 0 0;
-    }
-
-    .employee-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 14px;
     }
 
     .staff-summary {
@@ -1989,26 +1649,6 @@
       padding: 4px 8px;
     }
 
-    .resume-video {
-      min-height: 104px;
-      border: 1px solid #c9d9ec;
-      border-radius: 8px;
-      background: var(--accent-soft);
-      padding: 13px;
-      display: grid;
-      align-content: center;
-      gap: 5px;
-    }
-
-    .resume-video strong {
-      color: #1d4f84;
-    }
-
-    .resume-video span {
-      color: #42617e;
-      font-size: 13px;
-      line-height: 1.45;
-    }
 
     .staff-resume-prompt {
       position: fixed;
@@ -2408,16 +2048,6 @@
       font-size: 13px;
       line-height: 1.45;
       overflow-wrap: anywhere;
-    }
-
-    .songi-planning-brief {
-      border: 1px solid #cfe6dc;
-      border-radius: 8px;
-      background: #f2fbf8;
-      padding: 13px;
-      white-space: pre-wrap;
-      color: #2f3834;
-      line-height: 1.55;
     }
 
     .songi-output-grid {
@@ -3485,13 +3115,7 @@
 
       .next-action,
       .aimax-studio,
-      .aimax-story-points,
-      .guide-agent,
-      .overview-metrics,
-      .blocker-item,
       .guide-step,
-      .shortcut-grid,
-      .employee-layout,
       .employee-detail,
       .job-selector,
       .staff-summary,
@@ -3517,7 +3141,6 @@
       .songi-sequence-list,
       .api-guide-list,
       .api-secret-list,
-      .setup-list,
       .resume-grid,
       .resume-profile-grid,
       .resume-career-item,
@@ -3694,7 +3317,6 @@
       .floor-employee:nth-child(3) { --x: 63%; --y: 34%; --float-x: 16px; --float-y: 14px; }
       .floor-employee:nth-child(4) { --x: 78%; --y: 66%; --float-x: -18px; --float-y: -12px; }
 
-      .brain-map,
       .brain-video-wrap {
         min-height: 260px;
       }
@@ -3747,10 +3369,6 @@
 
       .employee-detail {
         align-items: start;
-      }
-
-      .employee-photo {
-        max-width: 220px;
       }
 
       .form-grid {
@@ -7997,10 +7615,6 @@
       };
     }
 
-    function aiKeySettingDetail(model = selectedAiModel()) {
-      return aiKeyOperationalState(model).detail;
-    }
-
     function settingState(setting) {
       const r = readiness();
       if (setting === "naver_account") {
@@ -8168,10 +7782,6 @@
       if (!jobKinds[kind]) return false;
       const products = new Set(productsForUser());
       return products.has(jobKinds[kind].required);
-    }
-
-    function isResearchJobKind(kind) {
-      return kind === "songi_research";
     }
 
     function isWebModuleJobKind(kind) {
@@ -10125,12 +9735,6 @@
       return state.researchProjects.find((project) => project.id === selectedValue) || null;
     }
 
-    function currentSongiDiscoveryProject() {
-      const selectedValue = $("#songiDiscoveryProjectSelect")?.value || state.selectedResearchProjectId;
-      if (!selectedValue || selectedValue === NEW_SONGI_PROJECT_VALUE) return null;
-      return state.researchProjects.find((project) => project.id === selectedValue) || null;
-    }
-
     function sameResearchProfileUrl(project, profileUrl) {
       return String(project?.instagram_profile_url || "").trim() === String(profileUrl || "").trim();
     }
@@ -10899,27 +10503,6 @@
       return `<p>${songiTextHtml(value)}</p>`;
     }
 
-    function songiPlanningCardsHtml(item) {
-      const panels = [];
-      if (item.personalized_plan) {
-        panels.push(`
-          <section class="songi-output-panel wide">
-            <h5>내 계정 적용 아이디어</h5>
-            ${songiStructuredValueHtml(parseSongiJsonText(item.personalized_plan) || item.personalized_plan)}
-          </section>
-        `);
-      }
-      if (item.script_brief) {
-        panels.push(`
-          <section class="songi-output-panel wide">
-            <h5>다음 직원 전달 브리프</h5>
-            ${songiScriptBriefHtml(parseSongiJsonText(item.script_brief) || item.script_brief)}
-          </section>
-        `);
-      }
-      return panels.length ? `<div class="songi-output-grid">${panels.join("")}</div>` : "";
-    }
-
     function songiSourcePreviewHtml(value) {
       if (!value) return "";
       return `
@@ -11147,27 +10730,6 @@
         buttons.push(`<button class="btn" type="button" data-songi-report-error data-item-id="${escapeHtml(item.id)}">오류 보고 보내기</button>`);
       }
       return buttons.length ? `<div class="actions">${buttons.join("")}</div>` : "";
-    }
-
-    function researchHtmlViewUrl(rawUrl) {
-      const url = new URL(rawUrl || "/research-html/index.html", window.location.origin);
-      if (state.token) url.searchParams.set("token", state.token);
-      return `${url.pathname}${url.search}${url.hash}`;
-    }
-
-    function songiPaidActionButtons(item) {
-      if (!item) return "";
-      const integrations = state.researchIntegrations || {};
-      const actions = [];
-      const apifyNeeded = needsApifyCollection(item);
-      if (apifyNeeded && integrations.apify?.configured) {
-        actions.push(`<button class="btn" type="button" data-songi-paid-action="apify" data-item-id="${escapeHtml(item.id)}">Apify로 SNS 읽기</button>`);
-      }
-      if (!apifyNeeded && integrations.gemini?.configured) {
-        const label = item.ai_analysis_status === "completed" ? "Gemini AI 재분석" : "Gemini AI 분석";
-        actions.push(`<button class="btn" type="button" data-songi-paid-action="ai" data-item-id="${escapeHtml(item.id)}">${escapeHtml(label)}</button>`);
-      }
-      return actions.length ? `<div class="actions" style="margin-top:10px;">${actions.join("")}</div>` : "";
     }
 
     function renderResearchConsole() {
@@ -11797,24 +11359,6 @@
       state.lastSongiItemId = "";
       await loadResearchData();
       renderAll();
-    }
-
-    async function updateResearchStorage(dataDir) {
-      const response = await api("/api/research/storage", {
-        method: "POST",
-        body: JSON.stringify({ data_dir: dataDir }),
-      });
-      state.researchIntegrations = response.integrations || {
-        ...(state.researchIntegrations || {}),
-        storage: response.storage,
-      };
-      state.selectedResearchProjectId = "";
-      state.selectedResearchItemId = "";
-      state.lastSongiItemId = "";
-      state.researchItems = [];
-      await loadResearchData();
-      renderAll();
-      return response.storage;
     }
 
     async function createResearchItem(payload) {
@@ -12473,14 +12017,6 @@
       } finally {
         state.refreshInFlight = null;
       }
-    }
-
-    function filenameFromDisposition(value) {
-      const text = String(value || "");
-      const encoded = text.match(/filename\*=UTF-8''([^;]+)/i);
-      if (encoded) return decodeURIComponent(encoded[1]);
-      const plain = text.match(/filename="([^"]+)"/i);
-      return plain ? plain[1] : "aimax-installer";
     }
 
     function downloadButtons() {
