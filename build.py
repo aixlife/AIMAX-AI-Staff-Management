@@ -242,6 +242,10 @@ def _preflight_build_guard() -> None:
          "번들 매니페스트 검증 모듈 누락(무결성 자기검사 무력화)"),
         (ROOT / "app.py", "_probe_critical_imports",
          "핵심 모듈 임포트 조기 감지 누락(부분 교체 시 잡 실행 중 ImportError 회귀)"),
+        (ROOT / "local_agent" / "worker_watchdog.py", "evaluate_worker_watchdog",
+         "워커 기동 감시(2차 좀비보호) 판정 누락"),
+        (ROOT / "app.py", "_restart_runner_process",
+         "워커 미기동 시 실행기 자체 재시작(2차 좀비보호) 누락"),
     ]
     for path, marker, why in checks:
         try:
