@@ -17,6 +17,9 @@ from datetime import datetime, timezone
 # 프로젝트 루트를 sys.path에 추가
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 수신→워커 기동 사각지대(2차 좀비보호) 판정/라벨 순수 함수.
+from local_agent.worker_watchdog import evaluate_worker_watchdog, progress_stage_label
+
 
 def _ensure_tcl_tk_library():
     """uv/venv 로 실행 시 Tcl 이 base Python 의 tcl/tk 라이브러리를 못 찾아
@@ -2005,6 +2008,7 @@ class NaverBlogApp:
                     platform_label=current_platform_label(),
                     device_label=default_device_label(),
                     readiness=self._collect_web_agent_readiness(),
+                    progress_stage=self._current_progress_stage(),
                 )
                 self.queue.put(("log", "[웹앱 연결] 설정 변경 상태를 대시보드에 즉시 반영했습니다."))
             except Exception as error:
@@ -2260,6 +2264,33 @@ class NaverBlogApp:
         self.web_agent_active_job_stage = str(stage or "")[:80]
         if error:
             self.web_agent_active_job_latest_stage_error = str(error)[:200]
+        # 계측(2차 좀비보호 근거): 수신→워커 기동 구간의 각 단계 전이를 로그로 남긴다.
+        # self._log 은 큐 경유라 폴링/워커/UI 어느 스레드에서 호출해도 안전하다.
+        try:
+            jid = str(self.web_agent_active_job_id or "-")[:80]
+            label = progress_stage_label(self.web_agent_active_job_stage)
+            line = f"[웹앱 작업][단계] {self.web_agent_active_job_stage} ({label}) job={jid}"
+            if error:
+                line += f" 오류={str(error)[:120]}"
+            self._log(line)
+        except Exception:
+            pass
+
+    def _mark_web_agent_progress(self, stage):
+        """실행 워커 안에서 진행 단계(로그인/작성중/발행중 등)를 갱신한다.
+
+        원격 잡을 물고 있을 때만 갱신하여 로컬(UI 버튼) 작업의 진단을 오염시키지 않는다.
+        갱신된 단계는 하트비트 progress_stage 로 서버에 전송된다.
+        """
+        if not getattr(self, "web_agent_active_job_id", None):
+            return
+        self._set_web_agent_active_job_stage(stage)
+
+    def _current_progress_stage(self):
+        """하트비트로 보낼 현재 진행 단계(한국어). 활성 잡이 없으면 None."""
+        if not getattr(self, "web_agent_active_job_id", None):
+            return None
+        return progress_stage_label(getattr(self, "web_agent_active_job_stage", ""))
 
     def _web_agent_active_job_diagnostics(self):
         job_id = str(getattr(self, "web_agent_active_job_id", "") or "")[:80]
@@ -2529,6 +2560,7 @@ class NaverBlogApp:
                         platform_label=platform_label,
                         device_label=device_label,
                         readiness=self._collect_web_agent_readiness(),
+                        progress_stage=self._current_progress_stage(),
                     )
                     if version_status:
                         self.queue.put(("web_agent_status", (f"웹앱 연결됨. {version_status}.", "#C0392B")))
@@ -6019,6 +6051,7 @@ class NaverBlogApp:
                 self._log("스텔스 브라우저 시작...")
                 self.driver = create_stealth_driver()
                 stage = "naver_login"
+                self._mark_web_agent_progress("login")
                 self._log("네이버 로그인 중...")
                 login(self.driver, nid, npw)
 
@@ -6094,6 +6127,7 @@ class NaverBlogApp:
                         self._log("사용자에 의해 중지됨")
                         break
                     post_stage = "content_generation"
+                    self._mark_web_agent_progress("writing")
                     post_usage = {}
                     # 콘텐츠 생성/로드
                     if post["type"] == "artifact":
@@ -6286,6 +6320,7 @@ class NaverBlogApp:
                             if self.stop_event.is_set():
                                 self.running = False
                                 break
+                            self._mark_web_agent_progress("publishing")
                             if effective_mode == "save":
                                 post_stage = "smart_editor_save"
                                 stage = post_stage
