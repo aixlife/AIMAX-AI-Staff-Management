@@ -309,9 +309,59 @@ async function versionGateScenario() {
   }
 }
 
+// 레드팀 H-2: 좀비 타임아웃 실패가 transient 로 오분류되지 않고 실행기 계열로 집계되는지.
+async function signatureUnitScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-sig-unit-"));
+  process.env.AIMAX_REPORT_DATA_DIR = tmpDir;
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const { __jobGuardTest } = require(path.join(repoRoot, "oracle/aimax-reports-api/server.js"));
+  const cls = __jobGuardTest.classifyJobFailureSignature;
+  assert(cls({ reason: "runner_stopped_heartbeating_or_timed_out" }) === "runner_not_started",
+    "zombie_timeout_must_be_runner_not_started");
+  assert(cls({ reason: "runner_start_not_reported" }) === "runner_not_started", "start_not_reported_class");
+  assert(cls({ visible_error: "로그인 실패: 아이디 또는 비밀번호를 확인해주세요." }) === "naver_login_failed", "login_class");
+  assert(cls({ visible_error: "Gemini 일시적 오류 - 잠시 후 다시 시도해주세요." }) === "transient", "transient_class");
+  assert(cls({ visible_error: "Gemini 결제/요금제 한도 초과" }) === "billing_quota", "billing_class");
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  console.log("PASS 8) 시그니처 분류 단위 검증 (좀비 타임아웃 = runner_not_started)");
+}
+
+// 레드팀 H-1: job-guards.json 손상 상태에서 acknowledge 가 503 으로 응답하고 서버가 살아있는지.
+async function corruptGuardStoreScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-corrupt-smoke-"));
+  const port = 22300 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+    fs.writeFileSync(path.join(tmpDir, "job-guards.json"), "{corrupt!!", "utf8");
+    const broken = await request("/api/jobs/guard/acknowledge", {
+      method: "POST",
+      headers: auth,
+      body: JSON.stringify({ job_kind: "yeri_write" }),
+      expectStatus: 503,
+    });
+    assert(broken.error === "guard_store_unavailable", `expected_store_unavailable:${JSON.stringify(broken)}`);
+    const health = await request("/api/reports/health");
+    assert(health.ok === true, "server_must_survive_corrupt_guard_store");
+    // 손상 파일이 있어도 잡 생성은 fail-open 으로 계속 허용되어야 한다.
+    const created = await createJob(request, auth, "손상 상태 생성 허용");
+    assert(created.ok === true, "expected_create_with_corrupt_store");
+    console.log("PASS 9) 가드 저장소 손상 시 503 + 서버 생존 + 생성 fail-open");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
 try {
   await mainScenario();
   await versionGateScenario();
+  await signatureUnitScenario();
+  await corruptGuardStoreScenario();
   console.log("P1_GUARDRAILS_SMOKE_OK");
 } catch (error) {
   console.error("P1_GUARDRAILS_SMOKE_FAILED");

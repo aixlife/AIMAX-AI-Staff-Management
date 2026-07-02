@@ -2880,7 +2880,9 @@ function classifyJobFailureSignature(input = {}) {
   if (/naver_login|네이버 로그인|네이버.*(아이디|비밀번호|로그인|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
   if (/server_generation_auth_failed|api_key_invalid|api_key_missing|key_missing|invalid.*api.*key|invalid x-api-key|unauthorized|permission denied|authentication|api 키 인증|키 인증 실패/.test(text)) return "ai_key_invalid";
   if (/server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|out of credit|balance|결제|크레딧|잔액|요금제/.test(text)) return "billing_quota";
-  if (/runner_start_timeout|runner_start_not_reported|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim/.test(text)) return "runner_not_started";
+  // runner_stopped_heartbeating_or_timed_out 은 timeout 이라는 단어 때문에 transient 로
+  // 오분류되기 쉬워 transient 검사보다 먼저 실행기 계열로 분류한다.
+  if (/runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim|실행기.*(멈춰|재시작|시작되지 않)/.test(text)) return "runner_not_started";
   if (/server_generation_provider_transient|provider_transient|server_generation_rate_limited|rate.?limit|resource_exhausted|temporar|unavailable|overloaded|timeout|timed.?out|try again|일시적|잠시 후|server_generation_interrupted/.test(text)) return "transient";
   if (/로그인|login/.test(text)) return "naver_login_failed";
   return "other";
@@ -13914,6 +13916,13 @@ async function handleAgentHeartbeat(req, res) {
   }
   const readinessDiagnostics = body.readiness && typeof body.readiness === "object" ? body.readiness.diagnostics : null;
   agent.diagnostics = sanitizeAgentDiagnostics(body.diagnostics || readinessDiagnostics || {});
+  // 하트비트 공백 3분 이상 후 재개 = 실행기 재시작으로 간주한다.
+  // runner_not_started 가드의 조치 안내가 "실행기 재시작"이므로, 재시작이 감지되면
+  // 가드를 자동 해제해 사용자가 acknowledge 버튼까지 찾아가지 않아도 되게 한다.
+  const previousSeenMs = Date.parse(agent.last_seen_at || "");
+  if (!Number.isFinite(previousSeenMs) || Date.now() - previousSeenMs > 3 * 60 * 1000) {
+    releaseJobGuardsForClasses(auth.user.id, ["runner_not_started"]);
+  }
   agent.last_seen_at = now;
   agent.updated_at = now;
   saveAgents(agents);
@@ -14466,19 +14475,26 @@ async function handleAcknowledgeJobGuard(req, res) {
     json(req, res, 400, { ok: false, error: "job_kind_required" });
     return;
   }
-  const data = loadJobGuards();
-  const guard = data.guards.find((row) => row.user_id === auth.user.id && row.job_kind === kind);
-  if (!guard) {
-    json(req, res, 404, { ok: false, error: "guard_not_found" });
-    return;
+  // 가드 저장소 손상이 서버 프로세스를 죽이면 안 된다(레드팀 H-1).
+  // 읽기/쓰기 실패 시 503으로 응답하고 프로세스는 살린다.
+  try {
+    const data = loadJobGuards();
+    const guard = data.guards.find((row) => row.user_id === auth.user.id && row.job_kind === kind);
+    if (!guard) {
+      json(req, res, 404, { ok: false, error: "guard_not_found" });
+      return;
+    }
+    const now = nowIso();
+    guard.paused = false;
+    guard.consecutive_count = 0;
+    guard.acknowledged_at = now;
+    guard.updated_at = now;
+    saveJobGuards(data);
+    json(req, res, 200, { ok: true, guard: publicJobGuard(guard) });
+  } catch (error) {
+    console.warn("[job-guard] acknowledge failed", error?.code || error?.message || error);
+    json(req, res, 503, { ok: false, error: "guard_store_unavailable" });
   }
-  const now = nowIso();
-  guard.paused = false;
-  guard.consecutive_count = 0;
-  guard.acknowledged_at = now;
-  guard.updated_at = now;
-  saveJobGuards(data);
-  json(req, res, 200, { ok: true, guard: publicJobGuard(guard) });
 }
 
 function handleAgentNextJob(req, res) {
