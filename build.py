@@ -216,6 +216,8 @@ def _preflight_build_guard() -> None:
          "업데이트 팝업 재진입 가드 누락(무한로딩 회귀)"),
         (ROOT / "content" / "ai_text.py", "_normalize_gemini_model_id",
          "모델 정규화 누락(Pro 모델 계약 불일치)"),
+        (ROOT / "app.py", "AIMAXAgentAppMutex",
+         "설치기 AppMutex 뮤텍스 생성 누락(설치기가 실행 중 앱을 감지 못해 부분 교체 회귀)"),
     ]
     for path, marker, why in checks:
         try:

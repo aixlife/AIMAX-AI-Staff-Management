@@ -111,6 +111,31 @@ def _preacquire_agent_lock():
 _preacquire_agent_lock()
 
 
+_APP_MUTEX_HANDLE = None
+
+
+def _create_app_mutex():
+    """Windows 에서 설치기(Inno Setup AppMutex 지시어)가 '앱 실행 중'을 감지할 수 있게
+    이름 있는 뮤텍스를 만든다. 설치기는 이 뮤텍스가 살아 있으면 종료를 유도/강제한 뒤
+    파일을 교체한다(업데이트 부분 교체 방지 1층). 맥/리눅스에서는 no-op.
+    이름은 packaging/windows/aimax_installer.iss 의 AppMutex 값과 반드시 일치해야 한다."""
+    global _APP_MUTEX_HANDLE
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        # 핸들은 프로세스 종료까지 유지해야 하므로 전역에 보관한다(닫으면 설치기가 감지 불능).
+        # 이미 같은 이름이 있어도(중복 실행) CreateMutexW 는 성공하므로 단일 실행 강제는
+        # 기존 single_instance 락이 계속 담당한다.
+        _APP_MUTEX_HANDLE = ctypes.windll.kernel32.CreateMutexW(None, False, "AIMAXAgentAppMutex")
+    except Exception:
+        _APP_MUTEX_HANDLE = None
+
+
+_create_app_mutex()
+
+
 def _hidden_subprocess_kwargs():
     if os.name != "nt":
         return {}
