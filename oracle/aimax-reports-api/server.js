@@ -10049,6 +10049,8 @@ function adminReportSummary(row) {
     app_version: row.app_version || "",
     os: row.os || "",
     automation_ticket_id: row.automation_ticket_id || "",
+    user_notified_at: row.user_notified_at || "",
+    user_notify_failed_at: row.user_notify_failed_at || "",
   };
 }
 
@@ -10297,7 +10299,14 @@ function guideHtmlFromText(text) {
 </html>`;
 }
 
-async function sendAdminGuideEmail({ to, subject, text }) {
+// 메일 발송 설정 여부 — 웹훅(Apps Script) 또는 Resend 중 하나라도 있으면 발송 가능.
+function isMailConfigured() {
+  return Boolean(MAIL_WEBHOOK_URL || RESEND_API_KEY);
+}
+
+// 공용 트랜잭션 메일 발송 — Apps Script 웹훅 우선, 없으면 Resend.
+// sendAdminGuideEmail(온보딩)과 waiting_user 오류보고 알림이 함께 쓰는 단일 경로다.
+async function sendTransactionalEmail({ to, subject, text, tags = null, emailType = "onboarding_guide" }) {
   if (!isValidEmail(to)) {
     throw Object.assign(new Error("invalid_email"), { statusCode: 400, code: "invalid_email" });
   }
@@ -10305,7 +10314,9 @@ async function sendAdminGuideEmail({ to, subject, text }) {
     throw Object.assign(new Error("empty_mail_body"), { statusCode: 400, code: "empty_mail_body" });
   }
   const html = guideHtmlFromText(text);
-  const tags = [{ name: "email_type", value: "onboarding_guide" }];
+  const mailTags = Array.isArray(tags) && tags.length
+    ? tags
+    : [{ name: "email_type", value: String(emailType || "onboarding_guide").slice(0, 80) }];
   if (MAIL_WEBHOOK_URL) {
     const data = await postJsonUrl(MAIL_WEBHOOK_URL, {
       secret: MAIL_WEBHOOK_SECRET,
@@ -10315,7 +10326,7 @@ async function sendAdminGuideEmail({ to, subject, text }) {
       subject,
       text,
       html,
-      tags,
+      tags: mailTags,
     });
     return {
       provider: "apps_script",
@@ -10332,7 +10343,7 @@ async function sendAdminGuideEmail({ to, subject, text }) {
         subject,
         html,
         text,
-        tags,
+        tags: mailTags,
         reply_to: MAIL_REPLY_TO,
       },
       { authorization: `Bearer ${RESEND_API_KEY}` },
@@ -10344,6 +10355,198 @@ async function sendAdminGuideEmail({ to, subject, text }) {
     };
   }
   throw Object.assign(new Error("mail_not_configured"), { statusCode: 503, code: "mail_not_configured" });
+}
+
+// 기존 온보딩 안내 메일 — 공용 발송 함수를 감싸 호출부 동작을 보존한다.
+async function sendAdminGuideEmail({ to, subject, text }) {
+  return sendTransactionalEmail({ to, subject, text, emailType: "onboarding_guide" });
+}
+
+// ---------------------------------------------------------------------------
+// waiting_user 오류보고 이메일 알림 스윕
+// 오류보고가 waiting_user 로 바뀌는 경로 중 오라클 auto-guidance 스크립트는 서버 API 를
+// 거치지 않고 reports-index.jsonl 을 직접 수정한다. 따라서 전이 훅으로는 못 잡고,
+// 주기 스윕으로 미발송 waiting_user 오류보고를 찾아 접수자에게 1회 안내 메일을 보낸다.
+// 전체를 try/catch 로 감싸 스토어/메일 오류가 프로세스를 죽이지 않는다(H-1 교훈).
+// ---------------------------------------------------------------------------
+const WAITING_USER_MAIL_ENABLED = String(process.env.AIMAX_WAITING_USER_MAIL ?? "1").trim() !== "0";
+const WAITING_USER_MAIL_LOOKBACK_DAYS = safeInt(process.env.AIMAX_WAITING_USER_MAIL_LOOKBACK_DAYS || "7", 1, 3650);
+const WAITING_USER_MAIL_PER_SWEEP = safeInt(process.env.AIMAX_WAITING_USER_MAIL_PER_SWEEP || "10", 1, 1000);
+const WAITING_USER_MAIL_INTERVAL_MS = safeInt(process.env.AIMAX_WAITING_USER_MAIL_INTERVAL_MS || "300000", 1000, 24 * 60 * 60 * 1000);
+const WAITING_USER_MAIL_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const WAITING_USER_MAIL_MAX_ATTEMPTS = 3;
+const WAITING_USER_MAIL_INITIAL_DELAY_MS = Math.min(60 * 1000, WAITING_USER_MAIL_INTERVAL_MS);
+let waitingUserMailSweepBusy = false;
+let waitingUserMailNotConfiguredWarned = false;
+
+// stored_at 등 ISO 시각을 KST(UTC+9) 표기 문자열로 수동 변환한다.
+function waitingUserMailKstTimestamp(value) {
+  const ms = Date.parse(String(value || ""));
+  if (!Number.isFinite(ms)) return "";
+  const kst = new Date(ms + 9 * 60 * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const mo = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(kst.getUTCDate()).padStart(2, "0");
+  const h = String(kst.getUTCHours()).padStart(2, "0");
+  const mi = String(kst.getUTCMinutes()).padStart(2, "0");
+  return `${y}-${mo}-${d} ${h}:${mi} (KST)`;
+}
+
+// 메일 본문 구성 — 이모지 금지, redactText 적용 필드만 사용, 시크릿/원문 로그 인용 금지.
+function buildWaitingUserReportMail(row) {
+  const jobKind = String(row?.job_kind || "").trim();
+  const kindLabel = (JOB_KINDS[jobKind] && JOB_KINDS[jobKind].label) || "작업";
+  const subject = `[AIMAX] 오류 보고에 확인이 필요합니다 — ${kindLabel}`;
+  const storedAtKst = waitingUserMailKstTimestamp(row?.stored_at || row?.status_updated_at || "");
+  const publicMessage = redactText(String(row?.public_message || "")).trim();
+  const checklist = reportActionChecklist(row);
+  const lines = [];
+  lines.push("안녕하세요, AIMAX입니다.");
+  lines.push("");
+  if (storedAtKst) lines.push(`접수 시각: ${storedAtKst}`);
+  lines.push(`작업: ${kindLabel}`);
+  lines.push("");
+  lines.push("진행 중이던 작업에 확인이 필요한 오류가 접수되었습니다.");
+  if (publicMessage) {
+    lines.push("");
+    lines.push(publicMessage);
+  }
+  if (checklist.length) {
+    lines.push("");
+    lines.push("확인 방법:");
+    checklist.forEach((item, index) => {
+      lines.push(`${index + 1}. ${redactText(String(item || "")).trim()}`);
+    });
+  }
+  lines.push("");
+  lines.push(`앱에 접속해 오류보고 탭에서 자세한 안내를 확인해주세요: ${PUBLIC_BASE_URL}/app`);
+  lines.push("조치 후 상단 배너의 '조치했어요, 다시 시도' 버튼을 누르거나 작업을 다시 시도해주세요.");
+  lines.push("");
+  lines.push(`문의는 이 메일에 회신해주세요 (${MAIL_REPLY_TO}).`);
+  return { subject, text: lines.join("\n") };
+}
+
+// 발송 성공 시 해당 유저의 email_events 에 기존 관례대로 기록한다. 유저를 못 찾으면
+// 행 마커(user_notified_at)만으로 dedup 이 충분하므로 조용히 생략한다.
+function recordWaitingUserMailEvent(email, event) {
+  try {
+    const normalized = normalizeEmail(email);
+    if (!normalized) return;
+    const users = loadUsers();
+    const user = users.users.find((item) => normalizeEmail(item.email) === normalized);
+    if (!user) return;
+    rememberUserEmailEvent(user, {
+      type: "error_report_waiting_user",
+      provider: event.provider,
+      provider_message_id: event.provider_message_id,
+      to: normalized,
+      subject: event.subject,
+      sent_at: event.sent_at,
+    });
+    saveUsers(users);
+  } catch (error) {
+    console.warn("[waiting-user-mail] email_event record failed", error?.code || error?.message || error);
+  }
+}
+
+async function sweepWaitingUserReportMail() {
+  if (!WAITING_USER_MAIL_ENABLED) return { sent: 0, skipped: 0, disabled: true };
+  if (waitingUserMailSweepBusy) return { sent: 0, skipped: 0, busy: true };
+  waitingUserMailSweepBusy = true;
+  try {
+    if (!isMailConfigured()) {
+      if (!waitingUserMailNotConfiguredWarned) {
+        console.warn("[waiting-user-mail] mail not configured — sweep skipped");
+        waitingUserMailNotConfiguredWarned = true;
+      }
+      return { sent: 0, skipped: 0, mail_not_configured: true };
+    }
+    const rows = loadReportIndexRows(Number.MAX_SAFE_INTEGER);
+    const nowMs = Date.now();
+    const cutoffMs = nowMs - WAITING_USER_MAIL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+    // 쿨다운 판단용: 같은 이메일 주소가 마지막으로 발송된 시각(ms). 다른 행의 user_notified_at 도 포함.
+    const lastNotifiedByEmail = new Map();
+    for (const row of rows) {
+      const notifiedMs = Date.parse(String(row?.user_notified_at || ""));
+      if (!Number.isFinite(notifiedMs)) continue;
+      const email = normalizeEmail(row?.account_email || "");
+      if (!email) continue;
+      if (notifiedMs > (lastNotifiedByEmail.get(email) || 0)) lastNotifiedByEmail.set(email, notifiedMs);
+    }
+    let sent = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      if (sent >= WAITING_USER_MAIL_PER_SWEEP) break;
+      if (normalizeReportStatus(row?.status || "") !== "waiting_user") continue;
+      if (isFeedbackReport(row)) continue; // 오류보고만 (피드백 리포트 제외)
+      // 이미 발송/실패확정/스킵된 행은 재발송하지 않는다 (같은 보고가 다시 waiting_user 여도 배너가 커버).
+      if (row?.user_notified_at || row?.user_notify_failed_at || row?.user_notify_skipped) continue;
+      const statusUpdatedMs = Date.parse(String(row?.status_updated_at || row?.stored_at || ""));
+      // 시각 파싱 불가 또는 룩백 초과 행은 오발송 방지를 위해 건너뛴다.
+      if (!Number.isFinite(statusUpdatedMs) || statusUpdatedMs < cutoffMs) continue;
+      const email = normalizeEmail(row?.account_email || "");
+      if (!isValidEmail(email)) {
+        updateReportIndexSummary(row.report_id, { user_notify_skipped: "invalid_email", user_notify_skipped_at: nowIso() });
+        skipped += 1;
+        continue;
+      }
+      // 같은 이메일이 6시간 내 발송됐으면 이번 스윕은 건너뛰고 다음 스윕에서 재평가한다(실패 마킹 안 함).
+      const lastNotifiedMs = lastNotifiedByEmail.get(email) || 0;
+      if (lastNotifiedMs && nowMs - lastNotifiedMs < WAITING_USER_MAIL_COOLDOWN_MS) {
+        skipped += 1;
+        continue;
+      }
+      const built = buildWaitingUserReportMail(row);
+      try {
+        const result = await sendTransactionalEmail({
+          to: email,
+          subject: built.subject,
+          text: built.text,
+          emailType: "error_report_waiting_user",
+        });
+        const notifiedAt = nowIso();
+        updateReportIndexSummary(row.report_id, {
+          user_notified_at: notifiedAt,
+          user_notified_channel: "email",
+          user_notified_id: String(result?.id || "").slice(0, 160),
+        });
+        recordWaitingUserMailEvent(email, {
+          provider: result?.provider || "",
+          provider_message_id: result?.id || "",
+          subject: built.subject,
+          sent_at: notifiedAt,
+        });
+        lastNotifiedByEmail.set(email, Date.parse(notifiedAt) || nowMs);
+        sent += 1;
+      } catch (error) {
+        const attempts = safeInt(row?.user_notify_attempts, 0, 1000) + 1;
+        const patch = { user_notify_attempts: attempts, user_notify_last_error_at: nowIso() };
+        if (attempts >= WAITING_USER_MAIL_MAX_ATTEMPTS) patch.user_notify_failed_at = nowIso();
+        updateReportIndexSummary(row.report_id, patch);
+        console.warn("[waiting-user-mail] send failed", row?.report_id || "", error?.code || error?.message || "send_failed");
+      }
+    }
+    return { sent, skipped };
+  } catch (error) {
+    console.warn("[waiting-user-mail] sweep failed", error?.code || error?.message || error);
+    return { sent: 0, skipped: 0, error: true };
+  } finally {
+    waitingUserMailSweepBusy = false;
+  }
+}
+
+function startWaitingUserReportMailSweep() {
+  if (!WAITING_USER_MAIL_ENABLED) return null;
+  const runSweep = () => {
+    sweepWaitingUserReportMail().catch((error) => {
+      console.warn("[waiting-user-mail] sweep failed", error?.code || error?.message || error);
+    });
+  };
+  const initial = setTimeout(runSweep, WAITING_USER_MAIL_INITIAL_DELAY_MS);
+  if (typeof initial.unref === "function") initial.unref();
+  const timer = setInterval(runSweep, WAITING_USER_MAIL_INTERVAL_MS);
+  if (typeof timer.unref === "function") timer.unref();
+  return timer;
 }
 
 function telegramAlertsConfigured() {
@@ -15451,6 +15654,7 @@ function startServer() {
   });
 
   startSongiDiscoverySubscriptionPoller();
+  startWaitingUserReportMailSweep();
   server.listen(PORT, HOST, () => {
     console.log(`aimax-reports-api listening on http://${HOST}:${PORT}`);
   });
