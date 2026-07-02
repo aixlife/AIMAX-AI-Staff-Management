@@ -309,7 +309,7 @@ async function versionGateScenario() {
   }
 }
 
-// 레드팀 H-2: 좀비 타임아웃 실패가 transient 로 오분류되지 않고 실행기 계열로 집계되는지.
+// 레드팀 H-2 + M-1: 2단계 분류 — 구조화 필드 우선, 자유텍스트는 강한 문구만 폴백.
 async function signatureUnitScenario() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-sig-unit-"));
   process.env.AIMAX_REPORT_DATA_DIR = tmpDir;
@@ -317,14 +317,27 @@ async function signatureUnitScenario() {
   const require = createRequire(import.meta.url);
   const { __jobGuardTest } = require(path.join(repoRoot, "oracle/aimax-reports-api/server.js"));
   const cls = __jobGuardTest.classifyJobFailureSignature;
+  // H-2 회귀: 좀비 타임아웃(구조화 필드)은 실행기 계열 — transient 오분류 금지.
   assert(cls({ reason: "runner_stopped_heartbeating_or_timed_out" }) === "runner_not_started",
     "zombie_timeout_must_be_runner_not_started");
   assert(cls({ reason: "runner_start_not_reported" }) === "runner_not_started", "start_not_reported_class");
-  assert(cls({ visible_error: "로그인 실패: 아이디 또는 비밀번호를 확인해주세요." }) === "naver_login_failed", "login_class");
+  assert(cls({ stage: "runner_stopped_heartbeating_or_timed_out" }) === "runner_not_started", "stage_runner_class");
+  // 실제 흐름: 네이버 로그인 실패는 stage 로 도착(구조화 1단계).
+  assert(cls({ stage: "naver_login", visible_error: "로그인 실패: 아이디 또는 비밀번호를 확인해주세요." }) === "naver_login_failed", "structured_login_class");
+  // 강한 자유텍스트만 2단계 매칭.
   assert(cls({ visible_error: "Gemini 일시적 오류 - 잠시 후 다시 시도해주세요." }) === "transient", "transient_class");
   assert(cls({ visible_error: "Gemini 결제/요금제 한도 초과" }) === "billing_quota", "billing_class");
+  assert(cls({ visible_error: "네이버 로그인 화면에서 인증이 필요합니다" }) === "naver_login_failed", "freetext_naver_class");
+  // M-1 적대 케이스: 구조화 필드가 자유텍스트의 일반 단어를 이긴다.
+  assert(cls({ diagnostic_code: "server_generation_auth_failed", visible_error: "발행 중 timeout 오류가 났어요" }) === "ai_key_invalid",
+    "structured_auth_beats_freetext_timeout");
+  // bare timeout 은 2단계에서 매칭 안 됨 → other.
+  assert(cls({ visible_error: "발행 중 timeout 오류가 났어요" }) === "other", "bare_timeout_freetext_is_other");
+  // bare 로그인(네이버 없음)은 2단계에서 제거됨 → other.
+  assert(cls({ visible_error: "로그인해주세요" }) === "other", "bare_login_freetext_is_other");
+  assert(cls({ visible_error: "잠시 후 다시 시도해주세요" }) === "transient", "freetext_transient_class");
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log("PASS 8) 시그니처 분류 단위 검증 (좀비 타임아웃 = runner_not_started)");
+  console.log("PASS 8) 시그니처 2단계 분류 단위 검증 (구조화 우선 + 강한 자유텍스트 폴백)");
 }
 
 // 레드팀 H-1: job-guards.json 손상 상태에서 acknowledge 가 503 으로 응답하고 서버가 살아있는지.

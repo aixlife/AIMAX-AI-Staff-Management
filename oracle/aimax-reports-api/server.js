@@ -2864,28 +2864,49 @@ function saveJobGuards(data) {
   writeJsonAtomic(JOB_GUARDS_PATH, { version: 1, guards: arrayFieldOrThrow(JOB_GUARDS_PATH, data, "guards") });
 }
 
-// 실패 메시지/스테이지를 정규화해 오류 시그니처 클래스로 분류한다.
-// buildFailureDiagnostic 의 패턴 순서를 따르되, 가드 목적에 맞게 클래스만 축약한다.
-function classifyJobFailureSignature(input = {}) {
-  const text = [
-    input.stage,
-    input.reason,
-    input.error,
-    input.visible_error,
-    input.diagnostic_code,
-    input.diagnostic_message,
-    input.message,
-  ].filter(Boolean).join(" ").toLowerCase();
+// 실패 메시지/스테이지를 정규화해 오류 시그니처 클래스로 분류한다(M-1 2단계 분류).
+// 1단계: 구조화 필드(stage/reason/error/diagnostic_code)만으로 머신 코드 + 영문 일반 패턴 실행.
+// 2단계: 1단계가 other 일 때만 자유텍스트(visible_error 등)를 강한 문구만으로 폴백 매칭.
+// 사용자 화면 문구에 섞인 일반 단어(login/timeout/balance 등)의 오분류를 막는다.
+function classifyStructuredFailureSignature(text) {
   if (!text.trim()) return "other";
   if (/naver_login|네이버 로그인|네이버.*(아이디|비밀번호|로그인|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
   if (/server_generation_auth_failed|api_key_invalid|api_key_missing|key_missing|invalid.*api.*key|invalid x-api-key|unauthorized|permission denied|authentication|api 키 인증|키 인증 실패/.test(text)) return "ai_key_invalid";
   if (/server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|out of credit|balance|결제|크레딧|잔액|요금제/.test(text)) return "billing_quota";
   // runner_stopped_heartbeating_or_timed_out 은 timeout 이라는 단어 때문에 transient 로
-  // 오분류되기 쉬워 transient 검사보다 먼저 실행기 계열로 분류한다.
+  // 오분류되기 쉬워 transient 검사보다 먼저 실행기 계열로 분류한다(H-2).
   if (/runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim|실행기.*(멈춰|재시작|시작되지 않)/.test(text)) return "runner_not_started";
   if (/server_generation_provider_transient|provider_transient|server_generation_rate_limited|rate.?limit|resource_exhausted|temporar|unavailable|overloaded|timeout|timed.?out|try again|일시적|잠시 후|server_generation_interrupted/.test(text)) return "transient";
-  if (/로그인|login/.test(text)) return "naver_login_failed";
   return "other";
+}
+
+function classifyFreeTextFailureSignature(text) {
+  if (!text.trim()) return "other";
+  // 강한 문구만 매칭한다. bare login/timeout/balance/unauthorized 등은 화면 문구 오분류의 주범이라 제외.
+  if (/네이버 로그인|네이버.*(아이디|비밀번호|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
+  if (/api 키 인증|키 인증 실패|invalid.*api.*key|invalid x-api-key/.test(text)) return "ai_key_invalid";
+  if (/결제|크레딧|잔액|요금제|out of credit|insufficient_quota/.test(text)) return "billing_quota";
+  // H-2 순서 보존: 실행기 계열을 transient 보다 먼저.
+  if (/실행기.*(멈춰|재시작|시작되지 않)/.test(text)) return "runner_not_started";
+  if (/일시적|잠시 후|rate.?limit|resource_exhausted|overloaded|try again/.test(text)) return "transient";
+  return "other";
+}
+
+function classifyJobFailureSignature(input = {}) {
+  const structuredText = [
+    input.stage,
+    input.reason,
+    input.error,
+    input.diagnostic_code,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const structured = classifyStructuredFailureSignature(structuredText);
+  if (structured !== "other") return structured;
+  const freeText = [
+    input.visible_error,
+    input.diagnostic_message,
+    input.message,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return classifyFreeTextFailureSignature(freeText);
 }
 
 function jobFailureSignatureClass(job) {
