@@ -370,11 +370,53 @@ async function corruptGuardStoreScenario() {
   }
 }
 
+// M-2: naver readiness saved_at — 전이 없는 ready 재보고는 가드 유지(무력화 방지),
+// saved_at 이 마지막 실패 이후일 때만 해제.
+async function naverSavedAtScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-naver-savedat-"));
+  const port = 22650 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+    // 네이버 ready 로 먼저 등록해 previousNaverStatus 를 ready 로 만든다(이후 전이 배제).
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready" } });
+    await failJobAs(request, auth, "savedat 1회차", LOGIN_FAILURE);
+    await failJobAs(request, auth, "savedat 2회차", LOGIN_FAILURE);
+    await failJobAs(request, auth, "savedat 3회차", LOGIN_FAILURE);
+    await createJob(request, auth, "savedat 차단 확인", 409);
+    console.log("PASS 10) 네이버 ready 상태에서 3연속 로그인 실패 후 차단");
+
+    // (1) ready→ready 재보고 + saved_at 없음 → 가드 유지 (무력화 회귀 방지, 가장 중요)
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready" } });
+    await createJob(request, auth, "saved_at 없음 유지 확인", 409);
+    console.log("PASS 11) ready 재보고 + saved_at 없음 → 가드 유지");
+
+    // (3) saved_at 이 last_error_at 이전 → 유지
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready", saved_at: "2020-01-01T00:00:00.000Z" } });
+    await createJob(request, auth, "saved_at 과거 유지 확인", 409);
+    console.log("PASS 12) saved_at 이 마지막 실패 이전 → 가드 유지");
+
+    // (2) saved_at 이 last_error_at 이후 → 해제
+    const future = new Date(Date.now() + 60 * 1000).toISOString();
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready", saved_at: future } });
+    const afterResave = await createJob(request, auth, "saved_at 재저장 후 생성");
+    assert(afterResave.ok === true, "expected_create_after_saved_at_resave");
+    console.log("PASS 13) saved_at 이 마지막 실패 이후 → 가드 해제");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
 try {
   await mainScenario();
   await versionGateScenario();
   await signatureUnitScenario();
   await corruptGuardStoreScenario();
+  await naverSavedAtScenario();
   console.log("P1_GUARDRAILS_SMOKE_OK");
 } catch (error) {
   console.error("P1_GUARDRAILS_SMOKE_FAILED");

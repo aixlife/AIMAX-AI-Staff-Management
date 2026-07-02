@@ -2929,7 +2929,7 @@ function jobGuardMessage(guard) {
   const signature = String(guard?.signature || "other");
   const threshold = jobGuardPauseThreshold(signature);
   if (signature === "naver_login_failed") {
-    return `네이버 아이디/비밀번호가 ${threshold}회 연속 거부되었습니다. 실행기 로컬 설정에서 네이버 계정을 다시 저장한 뒤 재시도해주세요.`;
+    return `네이버 아이디/비밀번호가 ${threshold}회 연속 거부되었습니다. 실행기 로컬 설정에서 네이버 계정을 다시 저장한 뒤, 이 안내의 '조치했어요, 다시 시도' 버튼을 눌러주세요.`;
   }
   if (signature === "ai_key_invalid") {
     return `AI API 키 인증이 ${threshold}회 연속 실패했습니다. 설정 탭의 AI/API 연결에서 키를 다시 저장한 뒤 재시도해주세요.`;
@@ -3028,6 +3028,28 @@ function releaseJobGuardsForClasses(userId, classes = []) {
   } catch (error) {
     console.warn("[job-guard] release failed", error?.code || error?.message || error);
     return 0;
+  }
+}
+
+// M-2: saved_at 이 paused 된 naver_login_failed 가드의 last_error_at 보다 이후이면
+// (마지막 실패 이후 자격증명이 재저장됨) 전이 없이도 해제 대상으로 본다.
+// saved_at 미전송(null)이면 false → 전이 감지 + acknowledge 경로가 커버한다.
+// 절대 "ready 면 해제"로 확장하지 않는다 — ready 는 자격증명 존재이지 로그인 성공이 아니라
+// 하트비트마다 해제하면 가드가 무력화된다.
+function naverCredentialResavedAfterFailure(userId, savedAtIso) {
+  try {
+    const savedMs = Date.parse(String(savedAtIso || ""));
+    if (!Number.isFinite(savedMs)) return false;
+    const data = loadJobGuards();
+    return data.guards.some((row) => {
+      if (row.user_id !== userId || row.paused !== true) return false;
+      if (String(row.signature || "") !== "naver_login_failed") return false;
+      const lastErrorMs = Date.parse(String(row.last_error_at || ""));
+      return Number.isFinite(lastErrorMs) && lastErrorMs < savedMs;
+    });
+  } catch (error) {
+    console.warn("[job-guard] naver resave check failed", error?.code || error?.message || error);
+    return false;
   }
 }
 
@@ -9150,6 +9172,9 @@ function sanitizeReadiness(value) {
       status: readinessStatus(naver.status),
       has_id: Boolean(naver.has_id),
       has_password: Boolean(naver.has_password),
+      // 로컬 설정에 네이버 자격증명이 저장된 시각. 러너가 안 보내면 null(하위호환).
+      // P2 러너 릴리스부터 전송 예정 — 마지막 실패 이후 재저장 판단(M-2)에 쓰인다.
+      saved_at: safeIsoOrNull(naver.saved_at),
     },
     ai_keys: {
       gemini: readinessStatus(ai.gemini),
@@ -14132,10 +14157,14 @@ async function handleAgentHeartbeat(req, res) {
   agent.device_label = deviceLabel;
   const previousNaverStatus = String(agent.readiness?.naver_account?.status || "");
   agent.readiness = sanitizeReadiness(body.readiness);
-  // 네이버 계정이 (재)저장되어 준비 상태로 전환되면 네이버 로그인 가드를 자동 해제한다.
-  // 이미 ready 였던 계정을 같은 값으로 재저장한 경우는 전이가 없어 여기서 못 잡는다 —
-  // 그 경우는 acknowledge(조치했어요) 경로로 해제한다.
-  if (String(agent.readiness?.naver_account?.status || "") === "ready" && previousNaverStatus !== "ready") {
+  // 네이버 로그인 가드 자동 해제는 두 가지 근거에서만 한다 — "ready 면 해제"는 금지(무력화 위험).
+  //  (1) 전이: not_ready → ready 로 바뀐 경우.
+  //  (2) M-2 재저장: saved_at 이 마지막 실패(last_error_at) 이후인 경우(P2 러너부터 전송).
+  // 그 외(전이 없는 ready 재보고 + saved_at 없음)는 acknowledge(조치했어요) 경로가 커버한다.
+  const naverStatus = String(agent.readiness?.naver_account?.status || "");
+  const naverSavedAt = agent.readiness?.naver_account?.saved_at || "";
+  if (naverStatus === "ready"
+    && (previousNaverStatus !== "ready" || naverCredentialResavedAfterFailure(auth.user.id, naverSavedAt))) {
     releaseJobGuardsForClasses(auth.user.id, ["naver_login_failed"]);
   }
   const readinessDiagnostics = body.readiness && typeof body.readiness === "object" ? body.readiness.diagnostics : null;
