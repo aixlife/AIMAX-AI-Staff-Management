@@ -240,6 +240,8 @@ def _preflight_build_guard() -> None:
          "시작 시 번들 무결성 자기검사 누락(부분 교체 혼합 상태 실행 회귀)"),
         (ROOT / "diagnostics" / "bundle_manifest.py", "def verify_manifest",
          "번들 매니페스트 검증 모듈 누락(무결성 자기검사 무력화)"),
+        (ROOT / "app.py", "_probe_critical_imports",
+         "핵심 모듈 임포트 조기 감지 누락(부분 교체 시 잡 실행 중 ImportError 회귀)"),
     ]
     for path, marker, why in checks:
         try:

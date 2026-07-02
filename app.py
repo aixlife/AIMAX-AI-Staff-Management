@@ -231,6 +231,40 @@ def aimax_compliance_version():
 _verify_bundle_integrity()
 
 
+# 부분 교체 임포트 불일치가 가장 자주 터진 핵심 모듈(예: v1.0.3 의
+# "cannot import name 'measure_visible_char_count' from 'content.ai_text'" 24건).
+# 잡 실행 중이 아니라 시작 시점에 감지해 사용자에게 원인을 알려준다(방어 3층).
+_CRITICAL_BOOT_MODULES = ("content.ai_text", "posting.editor", "local_agent.runtime")
+
+
+def _probe_critical_imports():
+    """frozen 번들 시작 시 핵심 모듈을 try-import — 임포트 불일치 조기 감지.
+
+    ImportError(부분 교체의 전형 증상)만 재설치 안내 경로로 보낸다. 그 외 예외는
+    기존과 동일하게 사용 시점에 드러나도록 시작을 막지 않는다(오탐 방지).
+    """
+    if not (getattr(sys, "frozen", False) or "__compiled__" in globals()):
+        return
+    if _startup_selfcheck_bypassed():
+        return
+    import importlib
+
+    for module_name in _CRITICAL_BOOT_MODULES:
+        try:
+            importlib.import_module(module_name)
+        except ImportError:
+            _report_broken_install(
+                work_context="startup critical import probe",
+                visible_error=f"critical module import failed: {module_name} (app {aimax_compliance_version()})",
+                detail=traceback.format_exc()[:6000],
+            )
+        except Exception:
+            pass
+
+
+_probe_critical_imports()
+
+
 def _hidden_subprocess_kwargs():
     if os.name != "nt":
         return {}
