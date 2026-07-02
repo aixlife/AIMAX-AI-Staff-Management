@@ -139,7 +139,7 @@ async function heartbeat(auth) {
     headers: auth,
     body: JSON.stringify({
       status: "busy",
-      version: "v0.0.0-smoke",
+      version: "v99.0.0-smoke",
       platform: "windows",
       device_label: "Smoke Windows",
       readiness: { workers: { yeri_write: "ready" } },
