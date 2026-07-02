@@ -2551,7 +2551,9 @@ class NaverBlogApp:
                 now = time.monotonic()
                 # 2차 좀비보호: 잡 수신(claim) 후 실행 워커 스레드가 제때 기동했는지 감시한다.
                 # 하트비트가 살아 있어도 워커가 안 올라오는 사각지대를 러너 스스로 판정한다.
-                if self.web_agent_active_job_id:
+                # 단, 모달 설정창이 열려 있으면 UI 큐가 의도적으로 막혀 있는 것이므로(사용자
+                # 입력 중) 오탐/입력 유실을 막기 위해 감시를 건너뛴다.
+                if self.web_agent_active_job_id and not getattr(self, "_local_settings_dialog_open", False):
                     worker_thread = getattr(self, "worker_thread", None)
                     watchdog = evaluate_worker_watchdog(
                         has_active_job=bool(self.web_agent_active_job_id),
