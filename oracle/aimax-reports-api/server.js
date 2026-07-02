@@ -2957,21 +2957,43 @@ function publicJobGuard(row) {
   };
 }
 
-// 잡이 failed 로 확정될 때 호출. 같은 시그니처 연속이면 count+1, 다른 시그니처면 1로 리셋.
-// transient 는 1번(자동 재시도)이 흡수하므로 가드 대상에서 제외한다.
+// M-4: 가드 스코프 분류. 키/결제는 유저 계정 자산이라 기기 무관(계정 단위),
+// 네이버 로그인/실행기 미시작/기타는 기기 단위다. transient 는 가드 제외라 무관.
+function jobGuardSignatureScope(signature) {
+  return signature === "ai_key_invalid" || signature === "billing_quota" ? "account" : "device";
+}
+
+// M-4: 기기 식별 키. jobMatchesAgentTarget/findHeartbeatAgent 와 동일한 정규화 공간을 쓴다.
+// 빈 타겟(platform·label 모두 없음)이면 "아무 기기나"를 뜻하는 "" 로 취급한다.
+function jobDeviceKey(platformValue, deviceLabelValue) {
+  const platform = normalizePlatform(platformValue || "");
+  const label = String(deviceLabelValue || "").trim();
+  if (!platform && !label) return "";
+  return `${platform}|${label}`;
+}
+
+// 잡이 failed 로 확정될 때 호출. 같은 (user, kind, device_key) 행 내에서 같은 시그니처 연속이면
+// count+1, 다른 시그니처면 1로 리셋. transient 는 1번(자동 재시도)이 흡수하므로 가드 대상에서 제외.
+// 계정 단위 시그니처는 항상 device_key="" 로 기록해 기기 무관 차단을 만든다.
 // 가드 기록 실패가 잡 실패 처리 자체를 막으면 안 되므로 내부에서 오류를 삼킨다.
 function recordJobFailureGuard(job) {
   try {
     if (!job || !job.user_id || !job.kind) return null;
     const signature = jobFailureSignatureClass(job);
     if (signature === "transient") return null;
+    const deviceKey = jobGuardSignatureScope(signature) === "account"
+      ? ""
+      : jobDeviceKey(job.target_platform || "", job.target_device_label || "");
     const data = loadJobGuards();
     const now = nowIso();
-    let guard = data.guards.find((row) => row.user_id === job.user_id && row.job_kind === job.kind);
+    let guard = data.guards.find((row) => row.user_id === job.user_id
+      && row.job_kind === job.kind
+      && String(row.device_key || "") === deviceKey);
     if (!guard) {
       guard = {
         user_id: job.user_id,
         job_kind: job.kind,
+        device_key: deviceKey,
         signature,
         consecutive_count: 0,
         paused: false,
@@ -2986,6 +3008,7 @@ function recordJobFailureGuard(job) {
       guard.consecutive_count = 1;
       guard.paused = false;
     }
+    guard.device_key = deviceKey; // 레거시 행(device_key 없음) 보정
     guard.last_error_at = now;
     guard.last_message = redactText(String(job.failed_reason || job.result?.visible_error || job.diagnostic?.message || "")).slice(0, 300);
     guard.updated_at = now;
@@ -3015,13 +3038,22 @@ function clearJobGuardOnSuccess(userId, kind) {
 }
 
 // 사용자가 관련 시크릿을 저장했을 때 해당 클래스 가드를 자동 삭제한다.
-function releaseJobGuardsForClasses(userId, classes = []) {
+// deviceKey 미지정(null/undefined): 유저 전체 삭제 — 시크릿 재저장은 계정 단위라 전체가 맞다.
+// deviceKey 지정: 같은 기기(row.device_key === deviceKey) 또는 계정단위/레거시 행("")만 삭제 —
+//   기기 B 의 전이/재시작이 기기 A 의 가드를 풀지 않게 한다(M-4).
+function releaseJobGuardsForClasses(userId, classes = [], deviceKey = null) {
   try {
     if (!userId || !classes.length) return 0;
     const targets = new Set(classes);
+    const scoped = deviceKey !== null && deviceKey !== undefined;
     const data = loadJobGuards();
     const before = data.guards.length;
-    data.guards = data.guards.filter((row) => !(row.user_id === userId && targets.has(String(row.signature || ""))));
+    data.guards = data.guards.filter((row) => {
+      if (row.user_id !== userId || !targets.has(String(row.signature || ""))) return true; // 유지
+      if (!scoped) return false; // 미지정 → 삭제
+      const rowKey = String(row.device_key || "");
+      return !(rowKey === deviceKey || rowKey === ""); // 지정 시 같은 기기·계정단위/레거시만 삭제
+    });
     if (data.guards.length === before) return 0;
     saveJobGuards(data);
     return before - data.guards.length;
@@ -3054,11 +3086,19 @@ function naverCredentialResavedAfterFailure(userId, savedAtIso) {
 }
 
 // 생성/재시도 차단 판정. 저장소 오류 시에는 기존 동작을 보존(차단하지 않음)한다.
-function pausedJobGuard(userId, kind) {
+// M-4 차단 규칙(안전 우선): paused 행 중 다음이면 차단한다.
+//  - row.device_key === "" (계정 단위·레거시 행) 또는
+//  - row.device_key === jobDeviceKey (같은 기기) 또는
+//  - jobDeviceKey === "" (새 잡이 아무 기기나 갈 수 있어 어떤 paused 기기든 걸리면 차단)
+function pausedJobGuard(userId, kind, deviceKey = "") {
   try {
     if (!userId || !kind) return null;
     const data = loadJobGuards();
-    return data.guards.find((row) => row.user_id === userId && row.job_kind === kind && row.paused === true) || null;
+    return data.guards.find((row) => {
+      if (row.user_id !== userId || row.job_kind !== kind || row.paused !== true) return false;
+      const rowKey = String(row.device_key || "");
+      return rowKey === "" || rowKey === deviceKey || deviceKey === "";
+    }) || null;
   } catch (error) {
     console.warn("[job-guard] lookup failed", error?.code || error?.message || error);
     return null;
@@ -14163,18 +14203,21 @@ async function handleAgentHeartbeat(req, res) {
   // 그 외(전이 없는 ready 재보고 + saved_at 없음)는 acknowledge(조치했어요) 경로가 커버한다.
   const naverStatus = String(agent.readiness?.naver_account?.status || "");
   const naverSavedAt = agent.readiness?.naver_account?.saved_at || "";
+  // M-4: 이 에이전트(기기) 스코프로만 해제한다 — 기기 B 의 전이가 기기 A 가드를 풀지 않게.
+  const agentDeviceKey = jobDeviceKey(platform, deviceLabel);
   if (naverStatus === "ready"
     && (previousNaverStatus !== "ready" || naverCredentialResavedAfterFailure(auth.user.id, naverSavedAt))) {
-    releaseJobGuardsForClasses(auth.user.id, ["naver_login_failed"]);
+    releaseJobGuardsForClasses(auth.user.id, ["naver_login_failed"], agentDeviceKey);
   }
   const readinessDiagnostics = body.readiness && typeof body.readiness === "object" ? body.readiness.diagnostics : null;
   agent.diagnostics = sanitizeAgentDiagnostics(body.diagnostics || readinessDiagnostics || {});
   // 하트비트 공백 3분 이상 후 재개 = 실행기 재시작으로 간주한다.
   // runner_not_started 가드의 조치 안내가 "실행기 재시작"이므로, 재시작이 감지되면
   // 가드를 자동 해제해 사용자가 acknowledge 버튼까지 찾아가지 않아도 되게 한다.
+  // M-4: 재시작한 그 기기 스코프로만 해제한다.
   const previousSeenMs = Date.parse(agent.last_seen_at || "");
   if (!Number.isFinite(previousSeenMs) || Date.now() - previousSeenMs > 3 * 60 * 1000) {
-    releaseJobGuardsForClasses(auth.user.id, ["runner_not_started"]);
+    releaseJobGuardsForClasses(auth.user.id, ["runner_not_started"], agentDeviceKey);
   }
   agent.last_seen_at = now;
   agent.updated_at = now;
@@ -14361,7 +14404,12 @@ async function handleCreateJob(req, res) {
     return;
   }
   // 연속 실패 가드 — 같은 오류가 반복 중이면 조치 안내와 함께 생성 자체를 차단한다.
-  const pausedGuard = pausedJobGuard(auth.user.id, kind);
+  // M-4: 새 잡의 타겟 기기 스코프로 차단 판정한다(다른 기기 실패가 이 기기 생성을 막지 않게).
+  const createDeviceKey = jobDeviceKey(
+    body.target_platform || body.platform || "",
+    body.target_device_label || body.device_label || "",
+  );
+  const pausedGuard = pausedJobGuard(auth.user.id, kind, createDeviceKey);
   if (pausedGuard) {
     json(req, res, 409, {
       ok: false,
@@ -14594,7 +14642,12 @@ async function handleRetryJob(req, res, jobId) {
     return;
   }
   // 연속 실패 가드 — 같은 오류 반복 재시도를 차단한다.
-  const pausedGuard = pausedJobGuard(auth.user.id, job.kind);
+  // M-4: 재시도할 잡의 타겟 기기 스코프로 차단 판정한다.
+  const retryDeviceKey = jobDeviceKey(
+    job.target_platform || body.target_platform || "",
+    job.target_device_label || body.target_device_label || "",
+  );
+  const pausedGuard = pausedJobGuard(auth.user.id, job.kind, retryDeviceKey);
   if (pausedGuard) {
     json(req, res, 409, {
       ok: false,
@@ -14732,18 +14785,21 @@ async function handleAcknowledgeJobGuard(req, res) {
   // 읽기/쓰기 실패 시 503으로 응답하고 프로세스는 살린다.
   try {
     const data = loadJobGuards();
-    const guard = data.guards.find((row) => row.user_id === auth.user.id && row.job_kind === kind);
-    if (!guard) {
+    // M-4: user+kind 의 모든 기기 행을 함께 해제한다(사용자 의사 존중, UI 단순 유지).
+    const matched = data.guards.filter((row) => row.user_id === auth.user.id && row.job_kind === kind);
+    if (!matched.length) {
       json(req, res, 404, { ok: false, error: "guard_not_found" });
       return;
     }
     const now = nowIso();
-    guard.paused = false;
-    guard.consecutive_count = 0;
-    guard.acknowledged_at = now;
-    guard.updated_at = now;
+    for (const guard of matched) {
+      guard.paused = false;
+      guard.consecutive_count = 0;
+      guard.acknowledged_at = now;
+      guard.updated_at = now;
+    }
     saveJobGuards(data);
-    json(req, res, 200, { ok: true, guard: publicJobGuard(guard) });
+    json(req, res, 200, { ok: true, guard: publicJobGuard(matched[0]), guards: matched.map(publicJobGuard) });
   } catch (error) {
     console.warn("[job-guard] acknowledge failed", error?.code || error?.message || error);
     json(req, res, 503, { ok: false, error: "guard_store_unavailable" });
@@ -15820,8 +15876,10 @@ module.exports = {
     appendJobLogById,
     classifyJobFailureSignature,
     clearJobGuardOnSuccess,
+    jobDeviceKey,
     jobFailureSignatureClass,
     jobGuardMessage,
+    jobGuardSignatureScope,
     jobGuardPauseThreshold,
     jobKindRequiresRunner,
     loadJobGuards,
