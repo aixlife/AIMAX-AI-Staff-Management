@@ -216,6 +216,10 @@ def _preflight_build_guard() -> None:
          "업데이트 팝업 재진입 가드 누락(무한로딩 회귀)"),
         (ROOT / "content" / "ai_text.py", "_normalize_gemini_model_id",
          "모델 정규화 누락(Pro 모델 계약 불일치)"),
+        (ROOT / "local_agent" / "worker_watchdog.py", "evaluate_worker_watchdog",
+         "워커 기동 감시(2차 좀비보호) 판정 누락"),
+        (ROOT / "app.py", "_restart_runner_process",
+         "워커 미기동 시 실행기 자체 재시작(2차 좀비보호) 누락"),
     ]
     for path, marker, why in checks:
         try:

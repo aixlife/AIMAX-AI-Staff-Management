@@ -1471,6 +1471,9 @@ class NaverBlogApp:
         self.web_agent_active_job_kind = ""
         self.web_agent_active_job_stage = ""
         self.web_agent_active_job_latest_stage_error = ""
+        # 실행 워커 스레드가 실제로 첫 줄을 실행한 시각(time.monotonic). 0 이면 미기동.
+        # 2차 좀비보호(워커 기동 감시)의 핵심 신호.
+        self.web_agent_worker_started_at = 0.0
         self._shown_update_popup_keys = set()
         # 웹앱 명령 재진입/중복 처리 방지: open_settings 가 done 처리되기 전 폴링마다
         # 재전달되어 설정창이 중첩되며 무한 로딩되는 문제를 막는다.
@@ -2252,6 +2255,7 @@ class NaverBlogApp:
         self.web_agent_active_job_kind = ""
         self.web_agent_active_job_stage = ""
         self.web_agent_active_job_latest_stage_error = ""
+        self.web_agent_worker_started_at = 0.0
 
     def _clear_web_agent_active_job(self):
         self._reset_web_agent_active_job()
@@ -2444,7 +2448,11 @@ class NaverBlogApp:
         heartbeat_only = env_truthy("AIMAX_AGENT_HEARTBEAT_ONLY")
         skip_commands = heartbeat_only or env_truthy("AIMAX_AGENT_DISABLE_COMMANDS")
         skip_jobs = heartbeat_only or env_truthy("AIMAX_AGENT_DISABLE_JOBS")
-        runner_start_timeout_seconds = max(10, int(os.environ.get("AIMAX_AGENT_RUNNER_START_TIMEOUT_SECONDS", "90") or 90))
+        # 2차 좀비보호(워커 기동 감시): 잡 수신 후 N초 안에 실행 워커가 기동하지 않으면
+        # 서버에 실패 보고 후 실행기 프로세스를 자체 재시작한다. 기본 30초.
+        worker_watchdog_seconds = max(10, int(os.environ.get("AIMAX_AGENT_WORKER_WATCHDOG_SECONDS", "30") or 30))
+        # 안전 밸브: 자동 재시작을 끄고 실패 보고+리셋만 하려면 이 환경변수를 켠다.
+        worker_restart_enabled = not env_truthy("AIMAX_AGENT_DISABLE_WORKER_RESTART")
         self._web_agent_polling_diagnostics = {
             "heartbeat_only": heartbeat_only,
             "skip_commands": skip_commands,
@@ -2516,36 +2524,51 @@ class NaverBlogApp:
         while not self.web_agent_stop_event.is_set() and getattr(self, "_web_agent_poll_generation", generation) == generation:
             try:
                 now = time.monotonic()
-                if self.web_agent_active_job_id and not self.running:
-                    claimed_at = float(getattr(self, "web_agent_active_job_claimed_at", 0.0) or 0.0)
-                    if claimed_at and now - claimed_at >= runner_start_timeout_seconds:
+                # 2차 좀비보호: 잡 수신(claim) 후 실행 워커 스레드가 제때 기동했는지 감시한다.
+                # 하트비트가 살아 있어도 워커가 안 올라오는 사각지대를 러너 스스로 판정한다.
+                if self.web_agent_active_job_id:
+                    worker_thread = getattr(self, "worker_thread", None)
+                    watchdog = evaluate_worker_watchdog(
+                        has_active_job=bool(self.web_agent_active_job_id),
+                        claimed_at=float(getattr(self, "web_agent_active_job_claimed_at", 0.0) or 0.0),
+                        now=now,
+                        worker_started_at=float(getattr(self, "web_agent_worker_started_at", 0.0) or 0.0),
+                        worker_thread_alive=bool(worker_thread is not None and worker_thread.is_alive()),
+                        stage=self.web_agent_active_job_stage,
+                        timeout_seconds=worker_watchdog_seconds,
+                    )
+                    if watchdog:
                         stuck_job_id = self.web_agent_active_job_id
                         active_job = self._web_agent_active_job_diagnostics()
-                        stage = active_job.get("active_job_stage") or "claimed"
-                        error = "local_ui_queue_not_processed_after_claim" if stage in {"claimed", "queued_to_ui"} else "local_worker_not_started_after_claim"
-                        message = (
-                            "로컬 실행기가 작업을 받았지만 내부 UI 큐가 작업 시작을 처리하지 못했습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
-                            if error == "local_ui_queue_not_processed_after_claim"
-                            else "로컬 실행기가 작업을 받았지만 내부 실행 워커가 시작되지 않았습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
-                        )
+                        self.queue.put((
+                            "log",
+                            f"[웹앱 작업] 워커 기동 감시: {watchdog['elapsed']}초 안에 실행 워커가 기동하지 않았습니다 "
+                            f"(단계={watchdog['stage']}, 사유={watchdog['error']}).",
+                        ))
+                        # (a) 서버에 명확한 실패 보고(동기 호출이라 재시작 전 전송이 보장된다).
                         try:
                             client.update_job(
                                 stuck_job_id,
                                 "failed",
-                                message,
+                                watchdog["message"],
                                 "error",
                                 result={
                                     "ok": False,
-                                    "stage": "runner_start_timeout",
-                                    "active_job_stage": stage,
-                                    "error": error,
+                                    "stage": "worker_watchdog_timeout",
+                                    "active_job_stage": watchdog["stage"],
+                                    "error": watchdog["error"],
+                                    "watchdog_seconds": worker_watchdog_seconds,
                                     "active_job": active_job,
                                 },
                             )
                         except Exception as update_error:
-                            self.queue.put(("log", f"[웹앱 작업] 시작 타임아웃 상태 전송 오류: {update_error}"))
-                        self.queue.put(("log", f"[웹앱 작업] 시작 타임아웃으로 작업을 실패 처리했습니다: {stuck_job_id}"))
+                            self.queue.put(("log", f"[웹앱 작업] 워커 기동 감시 실패 보고 전송 오류: {update_error}"))
+                        self.queue.put(("log", f"[웹앱 작업] 워커 기동 감시로 작업을 실패 처리했습니다: {stuck_job_id}"))
                         self._reset_web_agent_active_job()
+                        # (b) 실행기 프로세스 자체 재시작(런처는 감독하지 않으므로 새 인스턴스를 직접 띄운다).
+                        if worker_restart_enabled:
+                            self._restart_runner_process(reason=watchdog["error"])
+                            return  # 재시작 경로는 os._exit 로 종료되므로 정상적으로는 도달하지 않음
 
                 if now >= next_version_check_at:
                     next_version_check_at = now + version_check_seconds
@@ -2610,6 +2633,8 @@ class NaverBlogApp:
                             self.web_agent_active_job_id = job_id
                             self.web_agent_active_job_kind = str(job_kind or "")[:80]
                             self.web_agent_active_job_claimed_at = time.monotonic()
+                            # 새 잡 수신 시 워커 기동 신호를 초기화(이전 잡의 값 잔재 방지).
+                            self.web_agent_worker_started_at = 0.0
                             self._set_web_agent_active_job_stage("claimed", job_id=job_id, kind=job_kind)
                             try:
                                 client.update_job(
@@ -3243,6 +3268,70 @@ class NaverBlogApp:
 
         threading.Thread(target=_shutdown, daemon=True).start()
 
+    def _restart_runner_process(self, reason=""):
+        """2차 좀비보호: 실행 워커가 기동하지 못한 경우 실행기 프로세스를 자체 재시작한다.
+
+        Go 런처(aimax_agent_launcher.go)는 코어를 8초 뒤 핸드오프하고 스스로 종료하므로
+        코어를 감독(재기동)하지 않는다. 따라서 _handle_stop_agent_command 처럼 os._exit 만
+        하면 아무도 코어를 다시 띄우지 않는다. 그래서 런처에 의존하지 않고 새 코어 인스턴스를
+        직접(detached) 띄운 뒤 현재 프로세스를 종료한다.
+
+        단일 인스턴스 락은 실행 중인 옛 PID 를 소유자로 보므로, 새 인스턴스가 기동을
+        거부당하지 않도록 종료 직전에 락을 먼저 해제(파일 삭제)한 뒤 새 인스턴스를 띄운다.
+        폴링(백그라운드) 스레드에서 호출되며 Tk UI 는 건드리지 않는다.
+        """
+        import subprocess as _sub
+        import time as _t
+        self.queue.put(("log", f"[웹앱 작업][자동복구] 실행 워커가 기동하지 않아 실행기를 자동 재시작합니다. (사유: {reason})"))
+        try:
+            self.web_agent_stop_event.set()
+            self.stop_event.set()
+            self.running = False
+        except Exception:
+            pass
+        if getattr(self, "driver", None):
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+        # 재기동 대상/인자: 프리즌(배포)에서는 sys.executable 이 AIMAX.exe 다.
+        if getattr(sys, "frozen", False):
+            args = [sys.executable, "--agent", "--connect"]
+            cwd = os.path.dirname(sys.executable)
+        else:
+            args = [sys.executable, os.path.abspath(__file__), "--agent", "--connect"]
+            cwd = os.path.dirname(os.path.abspath(__file__))
+        # 단일 인스턴스 락 해제(파일 삭제) — 새 인스턴스가 옛 PID 락 때문에 거부되지 않게.
+        lock = getattr(self, "_single_instance_lock", None)
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception:
+                pass
+            self._single_instance_lock = None
+        _t.sleep(0.3)  # 락 파일 삭제 반영 대기
+        spawned = False
+        try:
+            popen_kwargs = {"cwd": cwd, "close_fds": True}
+            if sys.platform.startswith("win"):
+                creationflags = getattr(_sub, "DETACHED_PROCESS", 0) | getattr(_sub, "CREATE_NEW_PROCESS_GROUP", 0)
+                if creationflags:
+                    popen_kwargs["creationflags"] = creationflags
+                try:
+                    startupinfo = _sub.STARTUPINFO()
+                    startupinfo.dwFlags |= _sub.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = _sub.SW_HIDE
+                    popen_kwargs["startupinfo"] = startupinfo
+                except Exception:
+                    pass
+            _sub.Popen(args, **popen_kwargs)
+            spawned = True
+            self.queue.put(("log", "[웹앱 작업][자동복구] 새 실행기 인스턴스를 시작했습니다. 잠시 후 자동으로 다시 연결됩니다."))
+        except Exception as error:
+            self.queue.put(("log", f"[웹앱 작업][자동복구] 실행기 재시작 실패: {error}"))
+        _t.sleep(1.0)  # 로그/보고가 전송될 최소 시간 확보
+        os._exit(0 if spawned else 1)
+
     def _handle_web_agent_command(self, data):
         client = data.get("client")
         command = data.get("command") or {}
@@ -3417,6 +3506,9 @@ class NaverBlogApp:
     def _run_remote_job_worker(self, client, job):
         job_id = job.get("id") or ""
         kind = job.get("kind") or ""
+        # 워커 스레드가 실제로 기동했음을 표시(2차 좀비보호 감시의 핵심 신호).
+        # 단순 float 대입이라 GIL 하에서 스레드 안전하다.
+        self.web_agent_worker_started_at = time.monotonic()
         self._set_web_agent_active_job_stage("worker_thread_started", job_id=job_id, kind=kind)
         try:
             client.update_job(
