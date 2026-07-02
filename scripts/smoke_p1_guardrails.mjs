@@ -611,6 +611,62 @@ async function runnerRestartScopeScenario() {
   }
 }
 
+// I-2: 기기 라벨 정규화 — 잡 생성("Device A")과 하트비트("device a")의 대소문자 차이를 흡수해
+// 러너 재시작 자동 해제가 동작해야 한다(정규화 없으면 device_key 불일치로 해제 안 됨).
+async function deviceLabelNormalizationScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-label-norm-"));
+  const port = 23520 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+    const upper = { platform: "windows", label: "Device A" };
+    const lower = { platform: "windows", label: "device a" };
+    // "Device A" 로 runner_not_started 5연속(임계 5) → paused. 하트비트는 아직 안 보낸다.
+    for (let i = 1; i <= 5; i += 1) {
+      await failJobOn(request, auth, `norm ${i}`, upper, RUNNER_FAILURE);
+    }
+    await createJobOn(request, auth, "norm 차단", upper, 409);
+    console.log("PASS 23) 'Device A' runner 5연속 → 차단 (라벨 정규화 후에도 동일 기기 취급)");
+
+    // "device a"(소문자)로 첫 하트비트 = 재시작 → 정규화 매칭으로 'Device A' 가드 해제.
+    await heartbeatOn(request, auth, "v99.0.0-smoke", lower);
+    const after = await createJobOn(request, auth, "norm 재시작 후", upper);
+    assert(after.ok === true, "expected_release_across_case_diff");
+    console.log("PASS 24) 'device a' 재시작 하트비트가 'Device A' 가드 해제 (대소문자 무관)");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// I-2: 유저당 가드 행 상한 — 클라이언트가 라벨을 매번 바꿔도 job-guards.json 이 무한 성장하지 않는다.
+async function guardRowCapScenario() {
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const { __jobGuardTest } = require(path.join(repoRoot, "oracle/aimax-reports-api/server.js"));
+  const { recordJobFailureGuard, loadJobGuards, JOB_GUARDS_PATH, JOB_GUARD_MAX_ROWS_PER_USER } = __jobGuardTest;
+  const cap = JOB_GUARD_MAX_ROWS_PER_USER;
+  // 모듈이 바인딩한 실제 데이터 경로에 빈 가드 파일을 심어 캐싱/삭제된 tmpDir 문제를 피한다.
+  fs.mkdirSync(path.dirname(JOB_GUARDS_PATH), { recursive: true });
+  fs.writeFileSync(JOB_GUARDS_PATH, JSON.stringify({ version: 1, guards: [] }), "utf8");
+  for (let i = 0; i < cap + 20; i += 1) {
+    recordJobFailureGuard({
+      user_id: "cap-user",
+      kind: "yeri_write",
+      target_platform: "windows",
+      target_device_label: `cap-device-${i}`,
+      failed_stage: "other",
+      result: { visible_error: "알 수 없는 오류" },
+    });
+  }
+  const rows = loadJobGuards().guards.filter((r) => r.user_id === "cap-user");
+  assert(rows.length === cap, `guard_rows_must_be_capped_at_${cap}_got_${rows.length}`);
+  console.log(`PASS 25) 유저당 가드 행 상한(${cap}) 초과 방지 — 오래된 행 축출 (I-2)`);
+}
+
 try {
   await mainScenario();
   await versionGateScenario();
@@ -620,6 +676,8 @@ try {
   await deviceScopeScenario();
   await legacyGuardRowScenario();
   await runnerRestartScopeScenario();
+  await deviceLabelNormalizationScenario();
+  await guardRowCapScenario();
   console.log("P1_GUARDRAILS_SMOKE_OK");
 } catch (error) {
   console.error("P1_GUARDRAILS_SMOKE_FAILED");

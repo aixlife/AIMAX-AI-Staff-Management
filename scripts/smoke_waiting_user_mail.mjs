@@ -32,12 +32,15 @@ function writeJson(filePath, payload) {
   fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 }
 
-function seedUsers(tmpDir, email) {
-  writeJson(path.join(tmpDir, "users.json"), {
-    version: 1,
-    users: [{
-      id: "waiting-user-mail-smoke-id",
-      email,
+// entries: 문자열(email → id "user-<email>") 또는 { id, email } 객체의 배열/단일값.
+// C-1 검증(account_user_id 로 users.json 조회 + 이메일 일치)을 통과시키려면
+// 각 발송 대상 행의 account_user_id 에 대응하는 유저가 여기 시드되어야 한다.
+function seedUsers(tmpDir, entries) {
+  const list = (Array.isArray(entries) ? entries : [entries]).map((entry) => {
+    const obj = typeof entry === "string" ? { id: `user-${entry}`, email: entry } : entry;
+    return {
+      id: obj.id,
+      email: obj.email,
       name: "Waiting User Mail Smoke",
       status: "active",
       must_change_password: false,
@@ -45,8 +48,9 @@ function seedUsers(tmpDir, email) {
       entitlements: { product: "bundle", products: ["bundle"], status: "active" },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }],
+    };
   });
+  writeJson(path.join(tmpDir, "users.json"), { version: 1, users: list });
 }
 
 function seedIndex(tmpDir, rows) {
@@ -73,6 +77,7 @@ function isoDaysAgo(days) {
 
 function reportRow(overrides = {}) {
   const stored = overrides.stored_at || isoDaysAgo(0);
+  const email = overrides.account_email || "buyer@example.test";
   return {
     report_id: overrides.report_id || `rep-${crypto.randomUUID().slice(0, 8)}`,
     date: String(stored).slice(0, 10),
@@ -81,7 +86,9 @@ function reportRow(overrides = {}) {
     status_updated_at: stored,
     report_kind: "error",
     source: "app_error_report",
-    account_email: overrides.account_email || "buyer@example.test",
+    account_email: email,
+    // C-1: 기본적으로 검증을 통과하도록 이메일에 대응하는 유저 id 를 붙인다. 검증 실패 케이스는 override.
+    account_user_id: `user-${email}`,
     job_kind: "yeri_write",
     public_message: "확인이 필요한 오류가 접수되었습니다.",
     ...overrides,
@@ -174,7 +181,7 @@ async function scenarioSendAndDedup() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-send-"));
   const email = "buyer@example.test";
   const reportId = "rep-send-1";
-  seedUsers(tmpDir, email);
+  seedUsers(tmpDir, [email]);
   seedIndex(tmpDir, [reportRow({ report_id: reportId, account_email: email })]);
   const stub = await startMailStub({ status: 200 });
   const port = nextPort();
@@ -209,7 +216,8 @@ async function scenarioSendAndDedup() {
 // 3) invalid email → skip 마커, 4) 피드백 리포트 → 발송 안 함, 5) 7일 초과 → 발송 안 함
 async function scenarioSkips() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-skip-"));
-  seedUsers(tmpDir, "buyer@example.test");
+  // rep-invalid: 검증은 통과하되(정본 이메일이 잘못된 형식) 최종 isValidEmail 에서 걸려 invalid_email 마커.
+  seedUsers(tmpDir, ["eligible@example.test", "not-an-email"]);
   seedIndex(tmpDir, [
     reportRow({ report_id: "rep-invalid", account_email: "not-an-email" }),
     reportRow({ report_id: "rep-feedback", account_email: "fb@example.test", report_kind: "feedback", source: "staff_feedback" }),
@@ -248,7 +256,7 @@ async function scenarioSkips() {
 async function scenarioFailure() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-fail-"));
   const reportId = "rep-fail";
-  seedUsers(tmpDir, "buyer@example.test");
+  seedUsers(tmpDir, ["fail@example.test"]);
   seedIndex(tmpDir, [reportRow({ report_id: reportId, account_email: "fail@example.test" })]);
   const stub = await startMailStub({ status: 500 });
   const port = nextPort();
@@ -273,7 +281,7 @@ async function scenarioFailure() {
 async function scenarioKillSwitch() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-kill-"));
   const reportId = "rep-kill";
-  seedUsers(tmpDir, "buyer@example.test");
+  seedUsers(tmpDir, ["kill@example.test"]);
   seedIndex(tmpDir, [reportRow({ report_id: reportId, account_email: "kill@example.test" })]);
   const stub = await startMailStub({ status: 200 });
   const port = nextPort();
@@ -292,11 +300,79 @@ async function scenarioKillSwitch() {
   }
 }
 
+// C-1: account_user_id 가 users.json 과 불일치(이메일 다름)하거나 유저가 없으면
+// 발송 금지 + unverified_account 스킵 마커. (리포트 토큰 경로의 스푸핑 방어)
+async function scenarioUnverifiedAccount() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-unverified-"));
+  // 실제 유저는 real@ 인데, 행은 attacker@ 로 스푸핑을 시도한다.
+  seedUsers(tmpDir, [{ id: "user-real", email: "real@example.test" }]);
+  seedIndex(tmpDir, [
+    // (a) account_user_id 존재하지만 이메일 불일치 → unverified
+    reportRow({ report_id: "rep-mismatch", account_email: "attacker@evil.test", account_user_id: "user-real" }),
+    // (b) account_user_id 가 존재하지 않는 유저 → unverified
+    reportRow({ report_id: "rep-absent", account_email: "ghost@example.test", account_user_id: "user-does-not-exist" }),
+  ]);
+  const stub = await startMailStub({ status: 200 });
+  const port = nextPort();
+  const { child, logs } = bootServer(tmpDir, port, { AIMAX_MAIL_WEBHOOK_URL: stub.url });
+  try {
+    await waitForServer(port, logs);
+    await waitFor(() => readIndexRows(tmpDir).some((r) => r.report_id === "rep-mismatch" && r.user_notify_skipped), "mismatch_skip");
+    await waitFor(() => readIndexRows(tmpDir).some((r) => r.report_id === "rep-absent" && r.user_notify_skipped), "absent_skip");
+    await sleep(1500);
+    const rows = readIndexRows(tmpDir);
+    const mismatch = rows.find((r) => r.report_id === "rep-mismatch");
+    const absent = rows.find((r) => r.report_id === "rep-absent");
+    assert(mismatch.user_notify_skipped === "unverified_account", `expected_unverified_mismatch:${mismatch.user_notify_skipped}`);
+    assert(absent.user_notify_skipped === "unverified_account", `expected_unverified_absent:${absent.user_notify_skipped}`);
+    assert(!mismatch.user_notified_at && !absent.user_notified_at, "unverified_must_not_be_notified");
+    assert(stub.received.length === 0, `unverified_must_not_send_got_${stub.received.length}`);
+    console.log("PASS 8) 미검증 account(불일치/부재) → 발송 0 + unverified_account 마커 (C-1)");
+  } finally {
+    child.kill("SIGTERM");
+    await stub.close();
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// C-2: report_id 가 비었거나 정규화 후 빈 문자열(가비지)인 행은 마커를 남길 수 없어 발송하지 않는다.
+// 크래시 없이 건너뛰고, 정상 행은 그대로 발송된다.
+async function scenarioGarbageReportId() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-garbage-"));
+  seedUsers(tmpDir, ["ok@example.test"]);
+  seedIndex(tmpDir, [
+    reportRow({ report_id: "", account_email: "empty@example.test" }),
+    reportRow({ report_id: "!!!@@@###", account_email: "garbage@example.test" }),
+    reportRow({ report_id: "rep-ok", account_email: "ok@example.test" }),
+  ]);
+  const stub = await startMailStub({ status: 200 });
+  const port = nextPort();
+  const { child, logs } = bootServer(tmpDir, port, { AIMAX_MAIL_WEBHOOK_URL: stub.url });
+  try {
+    await waitForServer(port, logs);
+    // 정상 행이 발송되면(=크래시 없이 스윕이 돌았다) 가비지 행 판정을 확정한다.
+    await waitFor(() => readIndexRows(tmpDir).some((r) => r.report_id === "rep-ok" && r.user_notified_at), "ok_sent");
+    await sleep(1500);
+    const recipients = stub.received.map((m) => m.to);
+    assert(recipients.length === 1 && recipients[0] === "ok@example.test", `expected_only_ok:${JSON.stringify(recipients)}`);
+    // 서버 생존 확인.
+    const health = await (await fetch(`http://127.0.0.1:${port}/api/reports/health`)).json();
+    assert(health.ok === true, "server_must_survive_garbage_rows");
+    console.log("PASS 9) 빈/가비지 report_id → 발송 안 함, 크래시 없음 (C-2)");
+  } finally {
+    child.kill("SIGTERM");
+    await stub.close();
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
 try {
   await scenarioSendAndDedup();
   await scenarioSkips();
   await scenarioFailure();
   await scenarioKillSwitch();
+  await scenarioUnverifiedAccount();
+  await scenarioGarbageReportId();
   console.log("WAITING_USER_MAIL_SMOKE_OK");
 } catch (error) {
   console.error("WAITING_USER_MAIL_SMOKE_FAILED");

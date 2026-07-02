@@ -2851,6 +2851,9 @@ function saveCommands(data) {
 // ---------------------------------------------------------------------------
 const JOB_GUARD_PAUSE_THRESHOLD = 3;
 const JOB_GUARD_RUNNER_NOT_STARTED_THRESHOLD = 5;
+// I-2: 클라이언트가 기기 라벨을 매번 바꿔 잡을 실패시키면 가드 행이 무한 증식할 수 있다.
+// 유저당 가드 행 상한을 두고 초과 시 오래된 행부터 축출해 남용/폭주로 인한 무한 성장을 방지한다.
+const JOB_GUARD_MAX_ROWS_PER_USER = 30;
 
 function loadJobGuards() {
   const data = readJsonFile(JOB_GUARDS_PATH, { version: 1, guards: [] });
@@ -2967,7 +2970,13 @@ function jobGuardSignatureScope(signature) {
 // 빈 타겟(platform·label 모두 없음)이면 "아무 기기나"를 뜻하는 "" 로 취급한다.
 function jobDeviceKey(platformValue, deviceLabelValue) {
   const platform = normalizePlatform(platformValue || "");
-  const label = String(deviceLabelValue || "").trim();
+  // 라벨은 클라이언트가 임의로 넣을 수 있어 정규화한다(I-2): trim → 내부 공백 축소 → 소문자 → 120자.
+  // 가드 키는 내부 전용이며, 이 정규화로 잡 생성/하트비트 간 대소문자·공백 불일치도 함께 해소된다.
+  const label = String(deviceLabelValue || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .slice(0, 120);
   if (!platform && !label) return "";
   return `${platform}|${label}`;
 }
@@ -2990,6 +2999,24 @@ function recordJobFailureGuard(job) {
       && row.job_kind === job.kind
       && String(row.device_key || "") === deviceKey);
     if (!guard) {
+      // I-2: 새 행 추가 전 유저당 상한을 확인한다. 남용/폭주로 인한 무한 성장 방지 —
+      // 상한 도달 시 오래된 행부터 축출하되, paused(사용자에게 노출 중인) 행은 최대한 보존한다:
+      // paused 아닌 행 중 updated_at 가장 오래된 것부터, 전부 paused 면 paused 중 가장 오래된 것.
+      const userRows = data.guards.filter((row) => row.user_id === job.user_id);
+      while (userRows.length >= JOB_GUARD_MAX_ROWS_PER_USER) {
+        const evictAt = (row) => Date.parse(row.updated_at || row.last_error_at || row.created_at || "") || 0;
+        const nonPaused = userRows.filter((row) => row.paused !== true);
+        const pool = nonPaused.length ? nonPaused : userRows;
+        let victim = pool[0];
+        for (const row of pool) {
+          if (evictAt(row) < evictAt(victim)) victim = row;
+        }
+        const removeAt = data.guards.indexOf(victim);
+        if (removeAt >= 0) data.guards.splice(removeAt, 1);
+        const userRemoveAt = userRows.indexOf(victim);
+        if (userRemoveAt >= 0) userRows.splice(userRemoveAt, 1);
+        if (removeAt < 0 && userRemoveAt < 0) break; // 안전장치: 축출 대상 소실 시 무한루프 방지
+      }
       guard = {
         user_id: job.user_id,
         job_kind: job.kind,
@@ -10166,6 +10193,28 @@ function updateReportIndexSummary(reportId, summary) {
   return updatedRow;
 }
 
+// I-1: 여러 행 패치를 한 번의 read-modify-write 로 반영한다(스윕당 파일 재작성 1회).
+// aimax_report_auto_guidance.py 가 같은 파일을 크로스 프로세스로 재작성하는 경쟁은 이 배치로
+// 줄지만 완전히 없애지는 못한다 — 남은 단일 경쟁 창은 C-2 인메모리 dedup 이 커버한다.
+// patchesByReportId: Map<cleanReportId, patchObject>. 반영된 행 수를 반환한다.
+function updateReportIndexSummaries(patchesByReportId) {
+  if (!patchesByReportId || patchesByReportId.size === 0) return 0;
+  if (!fs.existsSync(INDEX_PATH)) return 0;
+  const rows = loadReportIndexRows(Number.MAX_SAFE_INTEGER);
+  let applied = 0;
+  const nextRows = rows.map((row) => {
+    const cleanId = cleanReportId(row.report_id);
+    if (!cleanId) return row;
+    const patch = patchesByReportId.get(cleanId);
+    if (!patch) return row;
+    applied += 1;
+    return { ...row, ...patch };
+  });
+  if (applied === 0) return 0;
+  writeJsonLinesAtomic(INDEX_PATH, nextRows);
+  return applied;
+}
+
 function loadReportDetail(reportId) {
   const cleanId = cleanReportId(reportId);
   if (!cleanId || !fs.existsSync(INDEX_PATH)) return null;
@@ -10464,6 +10513,11 @@ const WAITING_USER_MAIL_MAX_ATTEMPTS = 3;
 const WAITING_USER_MAIL_INITIAL_DELAY_MS = Math.min(60 * 1000, WAITING_USER_MAIL_INTERVAL_MS);
 let waitingUserMailSweepBusy = false;
 let waitingUserMailNotConfiguredWarned = false;
+// C-2: 마커 기록이 빈 report_id 나 크로스 프로세스 파일 재작성 경쟁으로 실패해도 재발송하지
+// 않도록, 프로세스 수명 동안 유지되는 인메모리 dedup. 발송 성공 직후·마커 기록 시도 전에 채운다.
+// 파일에서 재구성되는 마커/쿨다운이 유실되는 단일 경쟁 창을 이 구조가 메꾼다(재시작 시 초기화).
+const waitingUserMailSentReportIds = new Set();
+const waitingUserMailLastSentByEmail = new Map();
 
 // stored_at 등 ISO 시각을 KST(UTC+9) 표기 문자열로 수동 변환한다.
 function waitingUserMailKstTimestamp(value) {
@@ -10547,6 +10601,24 @@ async function sweepWaitingUserReportMail() {
       }
       return { sent: 0, skipped: 0, mail_not_configured: true };
     }
+    // C-1: 보고 행의 account_* 필드를 신뢰하지 않는다. 공유 리포트 토큰 경로(hasReportAuth)는
+    // 클라이언트가 보낸 account_email/user_id 를 그대로 저장하므로, 그대로 메일을 보내면
+    // AIMAX 명의 메일을 임의의 제3자 주소로 보낼 수 있다. 발송 전 account_user_id 로 users.json 의
+    // 실제 유저를 조회해 저장된 이메일과 일치할 때만, 그 정본 이메일(user.email)로 보낸다.
+    // users.json 은 스윕당 1회만 로드한다.
+    let usersById;
+    try {
+      const users = loadUsers();
+      usersById = new Map();
+      for (const item of users.users) {
+        const id = String(item?.id || "").trim();
+        if (id) usersById.set(id, item);
+      }
+    } catch (error) {
+      // 유저 목록을 못 읽으면 아무도 검증할 수 없으므로 이번 스윕은 조용히 건너뛴다(fail-open).
+      console.warn("[waiting-user-mail] users load failed — sweep skipped", error?.code || error?.message || error);
+      return { sent: 0, skipped: 0, users_unavailable: true };
+    }
     const rows = loadReportIndexRows(Number.MAX_SAFE_INTEGER);
     const nowMs = Date.now();
     const cutoffMs = nowMs - WAITING_USER_MAIL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
@@ -10559,6 +10631,16 @@ async function sweepWaitingUserReportMail() {
       if (!email) continue;
       if (notifiedMs > (lastNotifiedByEmail.get(email) || 0)) lastNotifiedByEmail.set(email, notifiedMs);
     }
+    // I-1: 행 패치를 모아 스윕 끝에 단 한 번의 read-modify-write 로 반영한다.
+    const patches = new Map();
+    const setPatch = (reportId, patch) => {
+      const cleanId = cleanReportId(reportId);
+      if (!cleanId) return;
+      patches.set(cleanId, { ...(patches.get(cleanId) || {}), ...patch });
+    };
+    // 이번 스윕에서 실제로 메일이 나간 행. 배치 기록이 실패해도 attempts 를 올리지 않기 위해 분리한다.
+    const sentReportIds = [];
+    const eventsToRecord = [];
     let sent = 0;
     let skipped = 0;
     for (const row of rows) {
@@ -10567,50 +10649,100 @@ async function sweepWaitingUserReportMail() {
       if (isFeedbackReport(row)) continue; // 오류보고만 (피드백 리포트 제외)
       // 이미 발송/실패확정/스킵된 행은 재발송하지 않는다 (같은 보고가 다시 waiting_user 여도 배너가 커버).
       if (row?.user_notified_at || row?.user_notify_failed_at || row?.user_notify_skipped) continue;
+      // C-2: report_id 가 비면 마커를 남길 방법이 없어 스윕마다 재발송될 수 있다 → 발송 전에 건너뛴다.
+      const cleanId = cleanReportId(row?.report_id);
+      if (!cleanId) continue;
+      // C-2: 이번 프로세스에서 이미 보낸 행이면(마커 기록 실패 포함) 다시 보내지 않는다.
+      if (waitingUserMailSentReportIds.has(cleanId)) continue;
       const statusUpdatedMs = Date.parse(String(row?.status_updated_at || row?.stored_at || ""));
       // 시각 파싱 불가 또는 룩백 초과 행은 오발송 방지를 위해 건너뛴다.
       if (!Number.isFinite(statusUpdatedMs) || statusUpdatedMs < cutoffMs) continue;
-      const email = normalizeEmail(row?.account_email || "");
-      if (!isValidEmail(email)) {
-        updateReportIndexSummary(row.report_id, { user_notify_skipped: "invalid_email", user_notify_skipped_at: nowIso() });
+      // C-1: account_user_id 로 실제 유저를 조회하고, 저장된 이메일이 정본과 일치할 때만 발송한다.
+      const accountUserId = String(row?.account_user_id || "").trim();
+      const rowEmail = normalizeEmail(row?.account_email || "");
+      const user = accountUserId ? usersById.get(accountUserId) : null;
+      const verified = Boolean(user) && rowEmail && normalizeEmail(user.email) === rowEmail;
+      if (!verified) {
+        // 리포트 토큰 경로가 저장한 미검증 account 필드 → 발송 금지, 스킵 마커만 남긴다.
+        setPatch(row.report_id, { user_notify_skipped: "unverified_account", user_notify_skipped_at: nowIso() });
+        skipped += 1;
+        continue;
+      }
+      const recipient = String(user.email || "").trim(); // 정본 이메일로만 보낸다(클라이언트 원본 값 아님).
+      const email = normalizeEmail(recipient);
+      if (!isValidEmail(recipient)) {
+        setPatch(row.report_id, { user_notify_skipped: "invalid_email", user_notify_skipped_at: nowIso() });
         skipped += 1;
         continue;
       }
       // 같은 이메일이 6시간 내 발송됐으면 이번 스윕은 건너뛰고 다음 스윕에서 재평가한다(실패 마킹 안 함).
-      const lastNotifiedMs = lastNotifiedByEmail.get(email) || 0;
+      // C-2: 파일 기반 쿨다운과 인메모리 쿨다운 중 더 최근 값을 쓴다.
+      const lastNotifiedMs = Math.max(
+        lastNotifiedByEmail.get(email) || 0,
+        waitingUserMailLastSentByEmail.get(email) || 0,
+      );
       if (lastNotifiedMs && nowMs - lastNotifiedMs < WAITING_USER_MAIL_COOLDOWN_MS) {
         skipped += 1;
         continue;
       }
       const built = buildWaitingUserReportMail(row);
+      let result;
       try {
-        const result = await sendTransactionalEmail({
-          to: email,
+        result = await sendTransactionalEmail({
+          to: recipient,
           subject: built.subject,
           text: built.text,
           emailType: "error_report_waiting_user",
         });
-        const notifiedAt = nowIso();
-        updateReportIndexSummary(row.report_id, {
-          user_notified_at: notifiedAt,
-          user_notified_channel: "email",
-          user_notified_id: String(result?.id || "").slice(0, 160),
-        });
-        recordWaitingUserMailEvent(email, {
-          provider: result?.provider || "",
-          provider_message_id: result?.id || "",
-          subject: built.subject,
-          sent_at: notifiedAt,
-        });
-        lastNotifiedByEmail.set(email, Date.parse(notifiedAt) || nowMs);
-        sent += 1;
       } catch (error) {
+        // 발송 실패 경로에서만 attempts 를 올린다(실제로 메일이 나간 행은 절대 여기 오지 않는다).
         const attempts = safeInt(row?.user_notify_attempts, 0, 1000) + 1;
         const patch = { user_notify_attempts: attempts, user_notify_last_error_at: nowIso() };
         if (attempts >= WAITING_USER_MAIL_MAX_ATTEMPTS) patch.user_notify_failed_at = nowIso();
-        updateReportIndexSummary(row.report_id, patch);
-        console.warn("[waiting-user-mail] send failed", row?.report_id || "", error?.code || error?.message || "send_failed");
+        setPatch(row.report_id, patch);
+        console.warn("[waiting-user-mail] send failed", cleanId, error?.code || error?.message || "send_failed");
+        continue;
       }
+      // C-2: 발송 성공 → 마커 기록(배치) 시도 전에 인메모리 dedup 을 먼저 채운다.
+      const notifiedAt = nowIso();
+      waitingUserMailSentReportIds.add(cleanId);
+      waitingUserMailLastSentByEmail.set(email, Date.parse(notifiedAt) || nowMs);
+      lastNotifiedByEmail.set(email, Date.parse(notifiedAt) || nowMs);
+      setPatch(row.report_id, {
+        user_notified_at: notifiedAt,
+        user_notified_channel: "email",
+        user_notified_id: String(result?.id || "").slice(0, 160),
+      });
+      sentReportIds.push(cleanId);
+      eventsToRecord.push({
+        email,
+        provider: result?.provider || "",
+        provider_message_id: result?.id || "",
+        subject: built.subject,
+        sent_at: notifiedAt,
+      });
+      sent += 1;
+    }
+    // I-1/C-2: 모은 패치를 한 번에 반영한다. 배치 기록이 실패해도(파일 경쟁 등) 이미 보낸 메일은
+    // 인메모리 dedup 이 커버하므로 재발송하지 않으며, 보낸 행의 attempts 도 올리지 않는다.
+    try {
+      const applied = updateReportIndexSummaries(patches);
+      // 일부 패치가 반영 안 됐고 이번에 실제 발송한 행이 있으면, 발송 마커가 유실됐을 수 있어 크게 경고한다.
+      if (applied < patches.size && sentReportIds.length > 0) {
+        console.warn(
+          "[waiting-user-mail] sent but marker write incomplete — memory dedup only until restart",
+          `applied=${applied}`, `patches=${patches.size}`, `sent=${sentReportIds.length}`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "[waiting-user-mail] sent but marker write failed — memory dedup only until restart",
+        error?.code || error?.message || error,
+      );
+    }
+    // email_events 기록은 유저 파일 쪽이라 실패해도 발송/마커에 영향을 주지 않는다(개별 try/catch 내장).
+    for (const event of eventsToRecord) {
+      recordWaitingUserMailEvent(event.email, event);
     }
     return { sent, skipped };
   } catch (error) {
@@ -15873,6 +16005,7 @@ module.exports = {
   },
   __jobGuardTest: {
     JOB_GUARDS_PATH,
+    JOB_GUARD_MAX_ROWS_PER_USER,
     appendJobLogById,
     classifyJobFailureSignature,
     clearJobGuardOnSuccess,
