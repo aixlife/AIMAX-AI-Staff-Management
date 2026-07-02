@@ -136,6 +136,101 @@ def _create_app_mutex():
 _create_app_mutex()
 
 
+def _startup_selfcheck_bypassed(argv=None):
+    """시작 시 자기검사(무결성/임포트)를 건너뛸 조건.
+
+    - --diagnostics-probe / --repair-local-state: 손상된 설치에서도 실행돼야 하는 진단/복구 경로.
+    - AIMAX_SKIP_INTEGRITY_CHECK: 지원용 긴급 우회(검사 오탐으로 사용자가 막혔을 때).
+    """
+    if _early_env_truthy("AIMAX_SKIP_INTEGRITY_CHECK"):
+        return True
+    argv = list(sys.argv[1:] if argv is None else argv)
+    for flag in ("--diagnostics-probe", "--repair-local-state"):
+        if any(arg == flag or arg.startswith(flag + "=") for arg in argv):
+            return True
+    return False
+
+
+def _report_broken_install(work_context, visible_error, detail):
+    """부분 교체/혼합 상태 감지 시 공용 처리: 오류 자동 보고 → 재설치 안내 창 → 실행 중단.
+
+    보고와 안내 창 각각이 실패해도(설치가 깨진 상태라 무엇이든 죽을 수 있음) 나머지 단계와
+    실행 중단은 반드시 진행한다. 혼합 상태로 계속 실행되는 것이 최악의 결과이기 때문이다.
+    """
+    try:
+        from diagnostics.error_reporter import submit_error_report
+
+        submit_error_report(
+            work_context=work_context,
+            visible_error=visible_error,
+            user_note="",
+            console_log=detail,
+        )
+    except Exception:
+        pass
+    try:
+        import tkinter as _tk
+        from tkinter import messagebox as _messagebox
+
+        _alert_root = _tk.Tk()
+        _alert_root.withdraw()
+        _messagebox.showerror(
+            "AIMAX 설치 오류",
+            "업데이트가 완전히 적용되지 않았습니다. 인스톨러를 다시 실행해주세요.\n\n"
+            "문제 정보는 자동으로 접수되었습니다.",
+            parent=_alert_root,
+        )
+        _alert_root.destroy()
+    except Exception:
+        pass
+    sys.exit(3)
+
+
+def _verify_bundle_integrity():
+    """frozen 번들 시작 시 빌드 매니페스트(aimax_manifest.json) 대조 — 부분 교체 감지 2층.
+
+    빌드 시 build.py 가 onedir 루트에 만든 파일별 sha256/size 매니페스트와 실제 설치
+    파일을 대조한다. 매니페스트가 없으면(구버전 설치본, 맥 .app) 통과. 검사기 자체의
+    예기치 못한 오류는 시작을 막지 않는다(보수적 통과) — 확인된 '불일치'만 실행을 중단한다.
+    """
+    if not (getattr(sys, "frozen", False) or "__compiled__" in globals()):
+        return
+    if _startup_selfcheck_bypassed():
+        return
+    try:
+        from diagnostics.bundle_manifest import verify_manifest
+
+        bundle_root = os.path.dirname(os.path.abspath(sys.executable))
+        result = verify_manifest(bundle_root)
+    except Exception:
+        return
+    if result.get("ok"):
+        return
+    mismatches = result.get("mismatches") or []
+    summary = ", ".join(str(m.get("path")) for m in mismatches[:5])
+    _report_broken_install(
+        work_context="startup bundle integrity check",
+        visible_error=(
+            f"bundle integrity mismatch: {result.get('mismatch_count')} file(s) "
+            f"(manifest {result.get('app_version')}, app {aimax_compliance_version()}): {summary}"
+        ),
+        detail=json.dumps(result, ensure_ascii=False)[:6000],
+    )
+
+
+def aimax_compliance_version():
+    """오류 보고 문맥용 앱 버전. 부트스트랩 초기라 실패해도 시작을 막지 않는다."""
+    try:
+        from aimax_compliance import APP_VERSION
+
+        return APP_VERSION
+    except Exception:
+        return "unknown"
+
+
+_verify_bundle_integrity()
+
+
 def _hidden_subprocess_kwargs():
     if os.name != "nt":
         return {}
