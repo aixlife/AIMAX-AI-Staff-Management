@@ -17,6 +17,8 @@ env/
 dist/
 build/
 *.spec
+!AIMAX.spec
+!NaverBlogAuto.spec
 *.build/
 *.dist/
 *.onefile-build/
@@ -45,3 +47,11 @@ NaverBlogAuto_*.zip
 
 # Build scratch
 .tmp/
+
+# Dependencies
+node_modules/
+
+# Auto-generated logs & evidence
+docs/deployments/
+docs/testing/evidence/**/*.png
+handoff*/**/*.zip
