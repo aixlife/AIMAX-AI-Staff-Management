@@ -116,6 +116,24 @@ def latest_rows_by_id(rows: list[dict[str, Any]], key: str) -> dict[str, dict[st
     return latest
 
 
+def is_waiting_deploy_approval(row: dict[str, Any]) -> bool:
+    if str(row.get("status") or "") != "working":
+        return False
+    text = " ".join(
+        str(row.get(key) or "")
+        for key in (
+            "public_message",
+            "next_update_message",
+            "work_context",
+            "suggested_next_action",
+        )
+    )
+    return bool(
+        ("배포" in text and ("승인 대기" in text or "승인 필요" in text))
+        or ("deploy" in text.lower() and "approval" in text.lower())
+    )
+
+
 def stale_reports(
     rows: list[dict[str, Any]],
     now: datetime,
@@ -126,6 +144,8 @@ def stale_reports(
     for row in rows:
         status = str(row.get("status") or "new")
         if status not in {"new", "reviewing", "working"}:
+            continue
+        if is_waiting_deploy_approval(row):
             continue
         updated_at = parse_time(str(row.get("status_updated_at") or row.get("stored_at") or ""))
         if not updated_at:
@@ -150,6 +170,8 @@ def open_tickets(
     candidates: list[dict[str, Any]] = []
     for row in latest:
         if str(row.get("status") or "open") not in {"open", "new", "working"}:
+            continue
+        if is_waiting_deploy_approval(row):
             continue
         linked_report_id = str(row.get("report_id") or "")
         linked_report_status = (report_status_by_id or {}).get(linked_report_id, "")
