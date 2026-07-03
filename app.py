@@ -180,6 +180,8 @@ def _report_broken_install(work_context, visible_error, detail):
         _messagebox.showerror(
             "AIMAX 설치 오류",
             "업데이트가 완전히 적용되지 않았습니다. 인스톨러를 다시 실행해주세요.\n\n"
+            "백신이 파일을 격리했을 수 있습니다. 재설치해도 같은 안내가 반복되면\n"
+            "백신 예외 등록 후 다시 설치해주세요.\n\n"
             "문제 정보는 자동으로 접수되었습니다.",
             parent=_alert_root,
         )
