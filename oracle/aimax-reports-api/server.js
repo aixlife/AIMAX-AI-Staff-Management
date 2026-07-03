@@ -1673,6 +1673,28 @@ function yeriPayloadFirstKeyword(payload) {
   return yeriPayloadKeywords(payload)[0] || "AIMAX 블로그 글";
 }
 
+// 예리 예약 발행 스태거 — 키워드 분리로 만든 i번째 잡의 예약 시각을 i*간격(시간)만큼 뒤로 민다.
+// 서버 타임존에 의존하지 않도록 날짜/시각 컴포넌트로 Date.UTC 를 만들어 오프셋을 더한 뒤 UTC 컴포넌트로 되읽는다.
+// mode 가 'schedule' 이 아니거나 날짜/시각이 없거나 파싱 불가면 원래 예약 그대로 둔다(오늘 동작 보존).
+function applyYeriScheduleStagger(payload, sourcePayload, index, intervalHours) {
+  if (index === 0) return; // 첫 글은 원래 예약 시각 그대로
+  if (String(sourcePayload?.mode || "").trim() !== "schedule") return;
+  const rawDate = String(sourcePayload?.schedule_date ?? "").trim();
+  const rawHour = sourcePayload?.schedule_hour;
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(rawDate);
+  const hourNum = Number(rawHour);
+  if (!dateMatch) return;
+  if (rawHour === "" || rawHour === null || rawHour === undefined || !Number.isFinite(hourNum)) return;
+  const baseMs = Date.UTC(Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]), Math.trunc(hourNum), 0, 0, 0);
+  const shifted = new Date(baseMs + index * intervalHours * 3600000);
+  const yyyy = shifted.getUTCFullYear();
+  const mm = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(shifted.getUTCDate()).padStart(2, "0");
+  const hh = shifted.getUTCHours();
+  payload.schedule_date = `${yyyy}-${mm}-${dd}`;
+  payload.schedule_hour = typeof rawHour === "number" ? hh : String(hh);
+}
+
 function yeriPayloadImageCount(payload) {
   return safeInt(payload?.image_count ?? payload?.images ?? 3, 0, 8);
 }
@@ -14666,6 +14688,65 @@ async function handleCreateJob(req, res) {
   const now = nowIso();
   const targetPlatform = normalizePlatform(body.target_platform || body.platform || "");
   const targetDeviceLabel = String(body.target_device_label || body.device_label || "").trim().slice(0, 120);
+  // 예리 키워드 분리: 콤마/줄바꿈으로 키워드를 여러 개 넣으면 키워드마다 1편씩 작성한다.
+  // yeriPayloadKeywords 가 이미 최대 10개로 캡한다. 단일 키워드/기타 직원은 오늘과 동일 동작.
+  // 모든 검증/가드/preflight/러너 MIN 체크는 위에서 이미 한 번만 수행됐다(잡별 중복 금지).
+  const yeriSplitKeywords = kind === "yeri_write" ? yeriPayloadKeywords(jobPayload) : [];
+  if (yeriSplitKeywords.length >= 2) {
+    const total = yeriSplitKeywords.length;
+    const intervalHours = Math.max(1, Math.min(72, Number(jobPayload.schedule_interval) || 1));
+    const createdJobs = [];
+    for (let i = 0; i < total; i += 1) {
+      const kw = yeriSplitKeywords[i];
+      // redactPayload 적용 전에 이 잡의 키워드/예약을 확정한다.
+      const splitPayload = { ...jobPayload, keywords: [kw] };
+      applyYeriScheduleStagger(splitPayload, jobPayload, i, intervalHours);
+      const splitJob = {
+        id: crypto.randomUUID(),
+        user_id: auth.user.id,
+        kind,
+        worker_code: JOB_KINDS[kind]?.workerCode || "",
+        status: yeriGenerationMode ? "generating" : "queued",
+        server_generation: yeriGenerationMode || "",
+        target_platform: targetPlatform,
+        target_device_label: targetDeviceLabel,
+        payload: redactPayload(splitPayload),
+        logs: [
+          {
+            at: now,
+            level: "info",
+            message: yeriGenerationMode
+              ? "작업 요청이 생성되어 서버 글 생성 단계로 들어갔습니다."
+              : "작업 요청이 생성되었습니다.",
+          },
+          {
+            at: now,
+            level: "info",
+            message: `키워드 ${i + 1}/${total} '${kw}' 작업으로 분리되었습니다 (전체 키워드 ${total}개 → 글 ${total}편).`,
+          },
+        ],
+        created_at: now,
+        updated_at: now,
+      };
+      jobs.jobs.push(splitJob);
+      createdJobs.push(splitJob);
+    }
+    saveJobs(jobs);
+    // 서버 글 생성 트리거: 잡마다 fire-and-forget(각 job.id 로 키잉되어 충돌 없음).
+    // 유료 호출을 병렬로 몰지 않도록 기존 단일 패턴과 동일하게 잡별로 순차 발화한다.
+    if (yeriGenerationMode) {
+      for (const splitJob of createdJobs) {
+        scheduleYeriArtifactGeneration(splitJob, auth.user, yeriGenerationMode);
+      }
+    }
+    json(req, res, 201, {
+      ok: true,
+      job: publicJob(createdJobs[0]),
+      jobs: createdJobs.map((item) => publicJob(item)),
+      split_count: total,
+    });
+    return;
+  }
   const job = {
     id: crypto.randomUUID(),
     user_id: auth.user.id,
