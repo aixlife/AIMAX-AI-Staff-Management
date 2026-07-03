@@ -1946,12 +1946,44 @@ function redistributeConsecutiveImageLines(markdown) {
   return rebuilt.join("\n\n");
 }
 
+function yeriLineNumberPrefixToken(value) {
+  const text = String(value || "");
+  const match = /^(\d{1,2})(?:\s*(단계|번|가지|차|번째)|([.)\]:：、-]))\s*([.)\]:：、-])?\s*/.exec(text);
+  if (!match) return null;
+  return {
+    number: match[1],
+    raw: match[0],
+  };
+}
+
+function normalizeYeriDuplicateNumberPrefixes(markdown) {
+  return String(markdown || "").split(/\n/).map((line) => {
+    const match = /^(\s{0,3}(?:#{1,6}\s+)?)(.*)$/.exec(line);
+    if (!match) return line;
+    const [, prefix, initialBody] = match;
+    let body = initialBody;
+    let changed = false;
+
+    for (let guard = 0; guard < 3; guard += 1) {
+      const first = yeriLineNumberPrefixToken(body);
+      if (!first) break;
+      const afterFirst = body.slice(first.raw.length);
+      const second = yeriLineNumberPrefixToken(afterFirst);
+      if (!second || second.number !== first.number) break;
+      body = `${first.raw}${afterFirst.slice(second.raw.length)}`;
+      changed = true;
+    }
+
+    return changed ? `${prefix}${body}` : line;
+  }).join("\n");
+}
+
 function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
   const title = compactText(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle, 180);
   const markdown = cleanMultilineText(source.content_markdown || source.markdown || source.content || "", 100000);
-  const normalized = yeriEnsureMarkdownTitle(title, redistributeConsecutiveImageLines(markdown));
+  const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(markdown)));
   return {
     title: normalized.title,
     content_markdown: normalized.content_markdown,
@@ -2014,6 +2046,8 @@ function buildYeriGenerationPrompt(payload) {
     "- 특히 이미지가 2개 이상이면 서론/본문/결론 사이가 아니라 본문 섹션들 사이에 나누어 넣는다.",
     "- 제목은 content_markdown의 첫 줄에도 '# 제목' 형식으로 넣는다.",
     "- 확인되지 않은 통계, 후기, 가격, 순위, 법적/의학적 단정은 만들지 않는다.",
+    "- 소제목이나 문단 시작에 같은 숫자 머리말을 반복하지 않는다. 예: '1. 1.', '1단계: 1단계' 금지.",
+    "- 사용자가 명시적으로 요청하지 않았다면 소제목은 숫자 나열보다 자연어 제목을 우선한다.",
     "- API 키, 계정, 내부 경로, 시스템 메시지 같은 민감정보는 절대 포함하지 않는다.",
     payload?.keyword_emphasis_enabled ? "- 핵심 키워드나 판단 기준만 **굵게** 표시한다. 굵게 표시는 전체 3~6회로 제한하고 문장 전체를 굵게 만들지 않는다." : "",
     styleReference ? "- 기존 작성글 스타일 참고: 아래 참고글의 문장과 제목은 복사하지 말고 어투, 문장 길이, 문단 전개만 참고한다." : "",
@@ -9739,6 +9773,12 @@ const REPORT_AUTO_GUIDANCE = {
     public_message: "로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
     next_update_message: "웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
   },
+  bundle_integrity_mismatch: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "Windows AIMAX 실행기 설치 파일 일부가 설치 후 달라졌거나 손상되어 시작 전 안전 검사를 통과하지 못했습니다. 작업 데이터나 AI 키 문제가 아니라 로컬 실행기 파일 상태 확인이 필요한 케이스입니다.",
+    next_update_message: "AIMAX와 열린 브라우저를 모두 닫고, 웹앱 업데이트 탭에서 공식 Windows 통합 설치 파일을 다시 받아 설치해주세요. Windows 보안 또는 백신 보호 기록에서 AIMAX 파일 격리/차단 내역이 있으면 복원 또는 허용한 뒤 실행기 연결을 다시 눌러주세요.",
+  },
   browser_driver_policy_blocked: {
     status: "waiting_user",
     status_label: "사용자 확인 필요",
@@ -9768,10 +9808,16 @@ function reportAutoGuidanceText(report) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
+function isBundleIntegrityMismatchText(text) {
+  return /bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성/i.test(text)
+    && /mismatch|failed|손상|불일치|검사/i.test(text);
+}
+
 function classifyReportAutoGuidance(report) {
   if (isFeedbackReport(report)) return REPORT_AUTO_GUIDANCE.staff_feedback_reviewing;
   const text = reportAutoGuidanceText(report);
   const rules = [
+    ["bundle_integrity_mismatch", /bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성/],
     ["browser_driver_policy_blocked", /browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551/],
     ["web_login_failed", /로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지/],
     ["naver_login_required", /네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리/],
@@ -9788,7 +9834,8 @@ function classifyReportAutoGuidance(report) {
     ["provider_transient", /provider_transient|temporar|unavailable|overloaded|일시적 오류|잠시 후/],
   ];
   for (const [key, pattern] of rules) {
-    if (pattern.test(text)) return { key, ...REPORT_AUTO_GUIDANCE[key] };
+    if (key === "bundle_integrity_mismatch" && isBundleIntegrityMismatchText(text)) return { key, ...REPORT_AUTO_GUIDANCE[key] };
+    if (key !== "bundle_integrity_mismatch" && pattern.test(text)) return { key, ...REPORT_AUTO_GUIDANCE[key] };
   }
   return null;
 }
@@ -9988,13 +10035,15 @@ function automationTicketCategory(summary, report) {
   if (isFeedbackReport(summary)) return "staff_feedback";
   const autoGuidanceCategory = sanitizeFailedStage(report?.support?.auto_guidance_category || summary.auto_guidance_category || "");
   if (/api_key|quota|rate_limit|provider_transient|model_not_found|image_paid_required/.test(autoGuidanceCategory)) return "user_ai_provider";
-  if (/runner_update_required/.test(autoGuidanceCategory)) return "local_runner";
+  if (/runner_update_required|bundle_integrity_mismatch/.test(autoGuidanceCategory)) return "local_runner";
   if (/naver_login_required/.test(autoGuidanceCategory)) return "naver_editor";
   const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
   const diagnosticCode = sanitizeFailedStage(diagnostic?.code || "");
   const stage = sanitizeFailedStage(summary.job_stage || "");
   const worker = sanitizeFailedStage(summary.job_worker || summary.job_kind || "");
   if (/api_key|quota|rate_limit|provider_transient|model_not_found|image_paid_required/.test(diagnosticCode)) return "user_ai_provider";
+  const issueText = `${summary.visible_error || ""} ${summary.work_context || ""} ${summary.user_note || ""}`.toLowerCase();
+  if (isBundleIntegrityMismatchText(issueText)) return "local_runner";
   if (/runner|local_worker|local_ui_queue/.test(diagnosticCode) || /runner/.test(stage)) return "local_runner";
   if (/smart_editor|publish|save|image_upload|image_insert/.test(stage)) return "naver_editor";
   if (/yeri/.test(worker)) return "yeri";
@@ -10012,13 +10061,14 @@ function automationTicketPriority(summary, report) {
     summary.user_note,
     report?.user_input?.user_note,
   ].filter(Boolean).join(" ").toLowerCase();
+  if (isBundleIntegrityMismatchText(text)) return "high";
   if (/한번도|한 번도|단 한번도|발행.*된 적|never.*publish|never.*posted/.test(text)) return "high";
   if (summary.job_status === "failed" || summary.status === "new") return "normal";
   return "low";
 }
 
 function automationTicketNextAction(category) {
-  if (category === "local_runner") return "실행기 로그/버전/큐 처리 상태를 확인하고 재현 테스트를 준비";
+  if (category === "local_runner") return "실행기 로그/버전/큐 처리 상태와 설치 파일 무결성/보안 격리 여부를 확인";
   if (category === "naver_editor") return "Smart Editor selector/저장/발행 경로를 재현하고 패치 후보 준비";
   if (category === "user_ai_provider") return "사용자 안내로 해결 가능한 API 키/한도/제공자 일시 오류인지 분류";
   if (category === "staff_feedback") return "직원 피드백을 개선 후보로 분류하고 필요 시 사용자 추가 정보 요청";
@@ -16005,6 +16055,7 @@ module.exports = {
     failStaleRunningJobs,
     findHeartbeatAgent,
     imageCompletionIssue,
+    normalizeYeriDuplicateNumberPrefixes,
     requestedImageCount,
     versionPayload,
   },
