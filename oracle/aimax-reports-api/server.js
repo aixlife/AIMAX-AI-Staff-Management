@@ -31,7 +31,9 @@ const YERI_RUNNING_STALE_MS = Number(process.env.AIMAX_YERI_RUNNING_STALE_MS || 
 const YERI_RUNNER_HEARTBEAT_GRACE_MS = Number(process.env.AIMAX_YERI_RUNNER_HEARTBEAT_GRACE_MS || 10 * 60 * 1000);
 // 좀비보호 2차: 러너 하트비트는 살아있지만 워커 스레드가 행 걸려 진행 단계(progress_stage)가
 // 멈춘 사각지대를 정리하기 위한 임계. progress_stage 는 v1.0.56+ 러너만 전송한다(미전송 러너는 불변).
-const YERI_PROGRESS_STALL_MS = Math.max(5, safeInt(process.env.AIMAX_JOB_PROGRESS_STALL_MINUTES || "20", 5, 1440)) * 60 * 1000;
+// 기본 45분: 러너는 작업 중간에 update_job 을 보내지 않아, 안전 속도로 오래 걸리는 정상 작업
+// (예: 현주 서로이웃 10건)이 한 단계에 20-30분 머물 수 있다 — 오탐 실패를 막기 위해 여유를 둔다.
+const YERI_PROGRESS_STALL_MS = Math.max(5, safeInt(process.env.AIMAX_JOB_PROGRESS_STALL_MINUTES || "45", 5, 1440)) * 60 * 1000;
 const YERI_RETRY_LIMIT = Number(process.env.AIMAX_YERI_RETRY_LIMIT || 3);
 const YERI_SERVER_GENERATION_ENABLED = envFlag("AIMAX_YERI_SERVER_GENERATION_ENABLED");
 const YERI_SERVER_GENERATION_MOCK = envFlag("AIMAX_YERI_SERVER_GENERATION_MOCK");
