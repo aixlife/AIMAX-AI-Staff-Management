@@ -29,6 +29,11 @@ const YERI_GENERATING_STALE_MS = Number(process.env.AIMAX_YERI_GENERATING_STALE_
 // updated_at(모든 로그/상태 갱신 시 전진) 기준 무진행 한계 + 러너 하트비트 끊김 유예.
 const YERI_RUNNING_STALE_MS = Number(process.env.AIMAX_YERI_RUNNING_STALE_MS || 45 * 60 * 1000);
 const YERI_RUNNER_HEARTBEAT_GRACE_MS = Number(process.env.AIMAX_YERI_RUNNER_HEARTBEAT_GRACE_MS || 10 * 60 * 1000);
+// 좀비보호 2차: 러너 하트비트는 살아있지만 워커 스레드가 행 걸려 진행 단계(progress_stage)가
+// 멈춘 사각지대를 정리하기 위한 임계. progress_stage 는 v1.0.56+ 러너만 전송한다(미전송 러너는 불변).
+// 기본 45분: 러너는 작업 중간에 update_job 을 보내지 않아, 안전 속도로 오래 걸리는 정상 작업
+// (예: 현주 서로이웃 10건)이 한 단계에 20-30분 머물 수 있다 — 오탐 실패를 막기 위해 여유를 둔다.
+const YERI_PROGRESS_STALL_MS = Math.max(5, safeInt(process.env.AIMAX_JOB_PROGRESS_STALL_MINUTES || "45", 5, 1440)) * 60 * 1000;
 const YERI_RETRY_LIMIT = Number(process.env.AIMAX_YERI_RETRY_LIMIT || 3);
 const YERI_SERVER_GENERATION_ENABLED = envFlag("AIMAX_YERI_SERVER_GENERATION_ENABLED");
 const YERI_SERVER_GENERATION_MOCK = envFlag("AIMAX_YERI_SERVER_GENERATION_MOCK");
@@ -2813,12 +2818,44 @@ function failStaleRunningJobs(jobs, options = {}) {
     const agent = findHeartbeatAgent(agents, job.user_id, job.target_platform || "", job.target_device_label || "");
     const agentSeenMs = agent ? Date.parse(agent.last_seen_at || agent.updated_at || "") : NaN;
     let runnerDead;
+    const runnerAlive = Number.isFinite(agentSeenMs) && nowMs - agentSeenMs < graceMs;
     if (Number.isFinite(agentSeenMs)) {
       // 러너가 살아있으면(grace 내 하트비트) 작업이 오래 걸려도 절대 죽이지 않는다.
       runnerDead = nowMs - agentSeenMs >= graceMs;
     } else {
       // 러너 기록 자체가 없음 → 넉넉한 무진행 시간 백스톱으로만 정리.
       runnerDead = noProgressMs >= ceilingMs;
+    }
+    // 좀비보호 2차: 하트비트는 살아있지만(runnerAlive) 워커 스레드가 행 걸려 진행 단계가 멈춘 사각지대.
+    // progress_stage_changed_at 은 v1.0.56+ 러너만 채운다 — 미전송(구버전) 러너는 이 값이 없어
+    // 이 블록을 건너뛰고 기존 규칙(러너 사망 시에만 정리)이 그대로 적용된다(완전 하위호환).
+    // last-write 라이브니스 오판을 막기 위해 progress 정체 + updated_at 정체를 둘 다 요구한다.
+    const progressChangedMs = Date.parse(job.progress_stage_changed_at || "");
+    const updatedStallMs = Date.parse(job.updated_at || 0);
+    if (runnerAlive
+      && Number.isFinite(progressChangedMs)
+      && nowMs - progressChangedMs >= YERI_PROGRESS_STALL_MS
+      && Number.isFinite(updatedStallMs)
+      && nowMs - updatedStallMs >= YERI_PROGRESS_STALL_MS) {
+      const stalledStage = String(job.progress_stage || "");
+      const stallMinutes = Math.round(YERI_PROGRESS_STALL_MS / 60000);
+      job.status = "failed";
+      job.failed_stage = "runner_progress_stalled";
+      job.failed_reason = "local_worker_progress_stalled";
+      job.finished_at = now;
+      job.updated_at = now;
+      delete job.claim_expires_at;
+      job.result = {
+        ...(job.result || {}),
+        ok: false,
+        stage: "runner_progress_stalled",
+        error: "local_worker_progress_stalled",
+        progress_stage: stalledStage,
+      };
+      appendJobLog(job, "error", `실행기는 연결되어 있지만 작업 진행(단계: ${stalledStage})이 ${stallMinutes}분 이상 멈춰 작업을 실패 처리했습니다. 실행기를 재시작한 뒤 다시 시도해주세요.`, now);
+      recordJobFailureGuard(job);
+      recovered += 1;
+      continue;
     }
     // 러너가 죽었다고 판단돼도, 막 끊긴 직후 즉시 죽이지 않도록 최소 유예만큼 무진행을 확인.
     if (!runnerDead || noProgressMs < graceMs) continue;
@@ -2900,7 +2937,7 @@ function classifyStructuredFailureSignature(text) {
   if (/server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|out of credit|balance|결제|크레딧|잔액|요금제/.test(text)) return "billing_quota";
   // runner_stopped_heartbeating_or_timed_out 은 timeout 이라는 단어 때문에 transient 로
   // 오분류되기 쉬워 transient 검사보다 먼저 실행기 계열로 분류한다(H-2).
-  if (/runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim|실행기.*(멈춰|재시작|시작되지 않)/.test(text)) return "runner_not_started";
+  if (/runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|runner_progress_stalled|local_worker_progress_stalled|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim|실행기.*(멈춰|재시작|시작되지 않)/.test(text)) return "runner_not_started";
   if (/server_generation_provider_transient|provider_transient|server_generation_rate_limited|rate.?limit|resource_exhausted|temporar|unavailable|overloaded|timeout|timed.?out|try again|일시적|잠시 후|server_generation_interrupted/.test(text)) return "transient";
   return "other";
 }
@@ -7607,6 +7644,7 @@ function publicJob(job) {
     target_device_label: job.target_device_label || "",
     failed_stage: job.failed_stage || "",
     failed_reason: job.failed_reason || "",
+    progress_stage: job.progress_stage || "",
     diagnostic: jobFailureDiagnostic(job),
     retry_count: safeInt(job.retry_count, 0, 100),
     artifact: publicYeriArtifactMeta(job),
@@ -14399,6 +14437,41 @@ async function handleAgentHeartbeat(req, res) {
   agent.updated_at = now;
   saveAgents(agents);
   const jobs = loadJobs();
+  // v1.0.56+ 러너가 보내는 진행 단계(progress_stage)를 이 러너의 활성 잡에 기록한다.
+  // 좀비보호 2차의 기준선 — 단계 값이 바뀔 때만 changed_at 을 전진시키고 그때만 저장한다
+  // (하트비트 20초 주기 x 다수 러너 → 매번 saveJobs 하면 쓰기 폭주). fail-open: 오류가 나도
+  // 하트비트 자체는 계속되어야 하므로 try/catch 로 감싼다.
+  let progressChanged = false;
+  try {
+    const progressStage = String(body.progress_stage || "").trim().slice(0, 80);
+    if (progressStage) {
+      let activeJob = null;
+      let activeClaimMs = -Infinity;
+      for (const job of jobs.jobs || []) {
+        if (job.status !== "running") continue;
+        if (job.user_id !== auth.user.id) continue;
+        if (!job.runner_started_at) continue;
+        if (!jobMatchesAgentTarget(job, platform, deviceLabel)) continue;
+        // 여러 잡이 매칭되면 가장 최근에 claim/assign 된 잡을 이 러너의 활성 잡으로 본다.
+        const claimMs = Date.parse(job.runner_claimed_at || job.assigned_at || "") || 0;
+        if (claimMs >= activeClaimMs) {
+          activeJob = job;
+          activeClaimMs = claimMs;
+        }
+      }
+      if (activeJob) {
+        const previousStage = activeJob.progress_stage;
+        activeJob.progress_stage = progressStage;
+        if (previousStage !== progressStage) {
+          // 최초 관측(previousStage 없음)도 변화로 간주한다.
+          activeJob.progress_stage_changed_at = now;
+          progressChanged = true;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("[heartbeat] progress record failed", error?.code || error?.message || error);
+  }
   const timedOut = markRunnerStartTimeouts(jobs, {
     userId: auth.user.id,
     platform,
@@ -14410,7 +14483,7 @@ async function handleAgentHeartbeat(req, res) {
     deviceLabel,
     agents,
   });
-  if (timedOut || stale) saveJobs(jobs);
+  if (timedOut || stale || progressChanged) saveJobs(jobs);
   json(req, res, 200, { ok: true, agent: publicAgent(agent) });
 }
 
