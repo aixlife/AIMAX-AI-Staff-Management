@@ -2851,6 +2851,9 @@ function saveCommands(data) {
 // ---------------------------------------------------------------------------
 const JOB_GUARD_PAUSE_THRESHOLD = 3;
 const JOB_GUARD_RUNNER_NOT_STARTED_THRESHOLD = 5;
+// I-2: 클라이언트가 기기 라벨을 매번 바꿔 잡을 실패시키면 가드 행이 무한 증식할 수 있다.
+// 유저당 가드 행 상한을 두고 초과 시 오래된 행부터 축출해 남용/폭주로 인한 무한 성장을 방지한다.
+const JOB_GUARD_MAX_ROWS_PER_USER = 30;
 
 function loadJobGuards() {
   const data = readJsonFile(JOB_GUARDS_PATH, { version: 1, guards: [] });
@@ -2864,28 +2867,49 @@ function saveJobGuards(data) {
   writeJsonAtomic(JOB_GUARDS_PATH, { version: 1, guards: arrayFieldOrThrow(JOB_GUARDS_PATH, data, "guards") });
 }
 
-// 실패 메시지/스테이지를 정규화해 오류 시그니처 클래스로 분류한다.
-// buildFailureDiagnostic 의 패턴 순서를 따르되, 가드 목적에 맞게 클래스만 축약한다.
-function classifyJobFailureSignature(input = {}) {
-  const text = [
-    input.stage,
-    input.reason,
-    input.error,
-    input.visible_error,
-    input.diagnostic_code,
-    input.diagnostic_message,
-    input.message,
-  ].filter(Boolean).join(" ").toLowerCase();
+// 실패 메시지/스테이지를 정규화해 오류 시그니처 클래스로 분류한다(M-1 2단계 분류).
+// 1단계: 구조화 필드(stage/reason/error/diagnostic_code)만으로 머신 코드 + 영문 일반 패턴 실행.
+// 2단계: 1단계가 other 일 때만 자유텍스트(visible_error 등)를 강한 문구만으로 폴백 매칭.
+// 사용자 화면 문구에 섞인 일반 단어(login/timeout/balance 등)의 오분류를 막는다.
+function classifyStructuredFailureSignature(text) {
   if (!text.trim()) return "other";
   if (/naver_login|네이버 로그인|네이버.*(아이디|비밀번호|로그인|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
   if (/server_generation_auth_failed|api_key_invalid|api_key_missing|key_missing|invalid.*api.*key|invalid x-api-key|unauthorized|permission denied|authentication|api 키 인증|키 인증 실패/.test(text)) return "ai_key_invalid";
   if (/server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|out of credit|balance|결제|크레딧|잔액|요금제/.test(text)) return "billing_quota";
   // runner_stopped_heartbeating_or_timed_out 은 timeout 이라는 단어 때문에 transient 로
-  // 오분류되기 쉬워 transient 검사보다 먼저 실행기 계열로 분류한다.
+  // 오분류되기 쉬워 transient 검사보다 먼저 실행기 계열로 분류한다(H-2).
   if (/runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_ui_queue_not_processed_after_claim|local_worker_not_started_after_claim|실행기.*(멈춰|재시작|시작되지 않)/.test(text)) return "runner_not_started";
   if (/server_generation_provider_transient|provider_transient|server_generation_rate_limited|rate.?limit|resource_exhausted|temporar|unavailable|overloaded|timeout|timed.?out|try again|일시적|잠시 후|server_generation_interrupted/.test(text)) return "transient";
-  if (/로그인|login/.test(text)) return "naver_login_failed";
   return "other";
+}
+
+function classifyFreeTextFailureSignature(text) {
+  if (!text.trim()) return "other";
+  // 강한 문구만 매칭한다. bare login/timeout/balance/unauthorized 등은 화면 문구 오분류의 주범이라 제외.
+  if (/네이버 로그인|네이버.*(아이디|비밀번호|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
+  if (/api 키 인증|키 인증 실패|invalid.*api.*key|invalid x-api-key/.test(text)) return "ai_key_invalid";
+  if (/결제|크레딧|잔액|요금제|out of credit|insufficient_quota/.test(text)) return "billing_quota";
+  // H-2 순서 보존: 실행기 계열을 transient 보다 먼저.
+  if (/실행기.*(멈춰|재시작|시작되지 않)/.test(text)) return "runner_not_started";
+  if (/일시적|잠시 후|rate.?limit|resource_exhausted|overloaded|try again/.test(text)) return "transient";
+  return "other";
+}
+
+function classifyJobFailureSignature(input = {}) {
+  const structuredText = [
+    input.stage,
+    input.reason,
+    input.error,
+    input.diagnostic_code,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const structured = classifyStructuredFailureSignature(structuredText);
+  if (structured !== "other") return structured;
+  const freeText = [
+    input.visible_error,
+    input.diagnostic_message,
+    input.message,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return classifyFreeTextFailureSignature(freeText);
 }
 
 function jobFailureSignatureClass(job) {
@@ -2908,7 +2932,7 @@ function jobGuardMessage(guard) {
   const signature = String(guard?.signature || "other");
   const threshold = jobGuardPauseThreshold(signature);
   if (signature === "naver_login_failed") {
-    return `네이버 아이디/비밀번호가 ${threshold}회 연속 거부되었습니다. 실행기 로컬 설정에서 네이버 계정을 다시 저장한 뒤 재시도해주세요.`;
+    return `네이버 아이디/비밀번호가 ${threshold}회 연속 거부되었습니다. 실행기 로컬 설정에서 네이버 계정을 다시 저장한 뒤, 이 안내의 '조치했어요, 다시 시도' 버튼을 눌러주세요.`;
   }
   if (signature === "ai_key_invalid") {
     return `AI API 키 인증이 ${threshold}회 연속 실패했습니다. 설정 탭의 AI/API 연결에서 키를 다시 저장한 뒤 재시도해주세요.`;
@@ -2936,21 +2960,67 @@ function publicJobGuard(row) {
   };
 }
 
-// 잡이 failed 로 확정될 때 호출. 같은 시그니처 연속이면 count+1, 다른 시그니처면 1로 리셋.
-// transient 는 1번(자동 재시도)이 흡수하므로 가드 대상에서 제외한다.
+// M-4: 가드 스코프 분류. 키/결제는 유저 계정 자산이라 기기 무관(계정 단위),
+// 네이버 로그인/실행기 미시작/기타는 기기 단위다. transient 는 가드 제외라 무관.
+function jobGuardSignatureScope(signature) {
+  return signature === "ai_key_invalid" || signature === "billing_quota" ? "account" : "device";
+}
+
+// M-4: 기기 식별 키. jobMatchesAgentTarget/findHeartbeatAgent 와 동일한 정규화 공간을 쓴다.
+// 빈 타겟(platform·label 모두 없음)이면 "아무 기기나"를 뜻하는 "" 로 취급한다.
+function jobDeviceKey(platformValue, deviceLabelValue) {
+  const platform = normalizePlatform(platformValue || "");
+  // 라벨은 클라이언트가 임의로 넣을 수 있어 정규화한다(I-2): trim → 내부 공백 축소 → 소문자 → 120자.
+  // 가드 키는 내부 전용이며, 이 정규화로 잡 생성/하트비트 간 대소문자·공백 불일치도 함께 해소된다.
+  const label = String(deviceLabelValue || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase()
+    .slice(0, 120);
+  if (!platform && !label) return "";
+  return `${platform}|${label}`;
+}
+
+// 잡이 failed 로 확정될 때 호출. 같은 (user, kind, device_key) 행 내에서 같은 시그니처 연속이면
+// count+1, 다른 시그니처면 1로 리셋. transient 는 1번(자동 재시도)이 흡수하므로 가드 대상에서 제외.
+// 계정 단위 시그니처는 항상 device_key="" 로 기록해 기기 무관 차단을 만든다.
 // 가드 기록 실패가 잡 실패 처리 자체를 막으면 안 되므로 내부에서 오류를 삼킨다.
 function recordJobFailureGuard(job) {
   try {
     if (!job || !job.user_id || !job.kind) return null;
     const signature = jobFailureSignatureClass(job);
     if (signature === "transient") return null;
+    const deviceKey = jobGuardSignatureScope(signature) === "account"
+      ? ""
+      : jobDeviceKey(job.target_platform || "", job.target_device_label || "");
     const data = loadJobGuards();
     const now = nowIso();
-    let guard = data.guards.find((row) => row.user_id === job.user_id && row.job_kind === job.kind);
+    let guard = data.guards.find((row) => row.user_id === job.user_id
+      && row.job_kind === job.kind
+      && String(row.device_key || "") === deviceKey);
     if (!guard) {
+      // I-2: 새 행 추가 전 유저당 상한을 확인한다. 남용/폭주로 인한 무한 성장 방지 —
+      // 상한 도달 시 오래된 행부터 축출하되, paused(사용자에게 노출 중인) 행은 최대한 보존한다:
+      // paused 아닌 행 중 updated_at 가장 오래된 것부터, 전부 paused 면 paused 중 가장 오래된 것.
+      const userRows = data.guards.filter((row) => row.user_id === job.user_id);
+      while (userRows.length >= JOB_GUARD_MAX_ROWS_PER_USER) {
+        const evictAt = (row) => Date.parse(row.updated_at || row.last_error_at || row.created_at || "") || 0;
+        const nonPaused = userRows.filter((row) => row.paused !== true);
+        const pool = nonPaused.length ? nonPaused : userRows;
+        let victim = pool[0];
+        for (const row of pool) {
+          if (evictAt(row) < evictAt(victim)) victim = row;
+        }
+        const removeAt = data.guards.indexOf(victim);
+        if (removeAt >= 0) data.guards.splice(removeAt, 1);
+        const userRemoveAt = userRows.indexOf(victim);
+        if (userRemoveAt >= 0) userRows.splice(userRemoveAt, 1);
+        if (removeAt < 0 && userRemoveAt < 0) break; // 안전장치: 축출 대상 소실 시 무한루프 방지
+      }
       guard = {
         user_id: job.user_id,
         job_kind: job.kind,
+        device_key: deviceKey,
         signature,
         consecutive_count: 0,
         paused: false,
@@ -2965,6 +3035,7 @@ function recordJobFailureGuard(job) {
       guard.consecutive_count = 1;
       guard.paused = false;
     }
+    guard.device_key = deviceKey; // 레거시 행(device_key 없음) 보정
     guard.last_error_at = now;
     guard.last_message = redactText(String(job.failed_reason || job.result?.visible_error || job.diagnostic?.message || "")).slice(0, 300);
     guard.updated_at = now;
@@ -2994,13 +3065,22 @@ function clearJobGuardOnSuccess(userId, kind) {
 }
 
 // 사용자가 관련 시크릿을 저장했을 때 해당 클래스 가드를 자동 삭제한다.
-function releaseJobGuardsForClasses(userId, classes = []) {
+// deviceKey 미지정(null/undefined): 유저 전체 삭제 — 시크릿 재저장은 계정 단위라 전체가 맞다.
+// deviceKey 지정: 같은 기기(row.device_key === deviceKey) 또는 계정단위/레거시 행("")만 삭제 —
+//   기기 B 의 전이/재시작이 기기 A 의 가드를 풀지 않게 한다(M-4).
+function releaseJobGuardsForClasses(userId, classes = [], deviceKey = null) {
   try {
     if (!userId || !classes.length) return 0;
     const targets = new Set(classes);
+    const scoped = deviceKey !== null && deviceKey !== undefined;
     const data = loadJobGuards();
     const before = data.guards.length;
-    data.guards = data.guards.filter((row) => !(row.user_id === userId && targets.has(String(row.signature || ""))));
+    data.guards = data.guards.filter((row) => {
+      if (row.user_id !== userId || !targets.has(String(row.signature || ""))) return true; // 유지
+      if (!scoped) return false; // 미지정 → 삭제
+      const rowKey = String(row.device_key || "");
+      return !(rowKey === deviceKey || rowKey === ""); // 지정 시 같은 기기·계정단위/레거시만 삭제
+    });
     if (data.guards.length === before) return 0;
     saveJobGuards(data);
     return before - data.guards.length;
@@ -3010,12 +3090,42 @@ function releaseJobGuardsForClasses(userId, classes = []) {
   }
 }
 
+// M-2: saved_at 이 paused 된 naver_login_failed 가드의 last_error_at 보다 이후이면
+// (마지막 실패 이후 자격증명이 재저장됨) 전이 없이도 해제 대상으로 본다.
+// saved_at 미전송(null)이면 false → 전이 감지 + acknowledge 경로가 커버한다.
+// 절대 "ready 면 해제"로 확장하지 않는다 — ready 는 자격증명 존재이지 로그인 성공이 아니라
+// 하트비트마다 해제하면 가드가 무력화된다.
+function naverCredentialResavedAfterFailure(userId, savedAtIso) {
+  try {
+    const savedMs = Date.parse(String(savedAtIso || ""));
+    if (!Number.isFinite(savedMs)) return false;
+    const data = loadJobGuards();
+    return data.guards.some((row) => {
+      if (row.user_id !== userId || row.paused !== true) return false;
+      if (String(row.signature || "") !== "naver_login_failed") return false;
+      const lastErrorMs = Date.parse(String(row.last_error_at || ""));
+      return Number.isFinite(lastErrorMs) && lastErrorMs < savedMs;
+    });
+  } catch (error) {
+    console.warn("[job-guard] naver resave check failed", error?.code || error?.message || error);
+    return false;
+  }
+}
+
 // 생성/재시도 차단 판정. 저장소 오류 시에는 기존 동작을 보존(차단하지 않음)한다.
-function pausedJobGuard(userId, kind) {
+// M-4 차단 규칙(안전 우선): paused 행 중 다음이면 차단한다.
+//  - row.device_key === "" (계정 단위·레거시 행) 또는
+//  - row.device_key === jobDeviceKey (같은 기기) 또는
+//  - jobDeviceKey === "" (새 잡이 아무 기기나 갈 수 있어 어떤 paused 기기든 걸리면 차단)
+function pausedJobGuard(userId, kind, deviceKey = "") {
   try {
     if (!userId || !kind) return null;
     const data = loadJobGuards();
-    return data.guards.find((row) => row.user_id === userId && row.job_kind === kind && row.paused === true) || null;
+    return data.guards.find((row) => {
+      if (row.user_id !== userId || row.job_kind !== kind || row.paused !== true) return false;
+      const rowKey = String(row.device_key || "");
+      return rowKey === "" || rowKey === deviceKey || deviceKey === "";
+    }) || null;
   } catch (error) {
     console.warn("[job-guard] lookup failed", error?.code || error?.message || error);
     return null;
@@ -9129,6 +9239,9 @@ function sanitizeReadiness(value) {
       status: readinessStatus(naver.status),
       has_id: Boolean(naver.has_id),
       has_password: Boolean(naver.has_password),
+      // 로컬 설정에 네이버 자격증명이 저장된 시각. 러너가 안 보내면 null(하위호환).
+      // P2 러너 릴리스부터 전송 예정 — 마지막 실패 이후 재저장 판단(M-2)에 쓰인다.
+      saved_at: safeIsoOrNull(naver.saved_at),
     },
     ai_keys: {
       gemini: readinessStatus(ai.gemini),
@@ -10049,6 +10162,8 @@ function adminReportSummary(row) {
     app_version: row.app_version || "",
     os: row.os || "",
     automation_ticket_id: row.automation_ticket_id || "",
+    user_notified_at: row.user_notified_at || "",
+    user_notify_failed_at: row.user_notify_failed_at || "",
   };
 }
 
@@ -10076,6 +10191,28 @@ function updateReportIndexSummary(reportId, summary) {
   if (!updatedRow) return null;
   writeJsonLinesAtomic(INDEX_PATH, nextRows);
   return updatedRow;
+}
+
+// I-1: 여러 행 패치를 한 번의 read-modify-write 로 반영한다(스윕당 파일 재작성 1회).
+// aimax_report_auto_guidance.py 가 같은 파일을 크로스 프로세스로 재작성하는 경쟁은 이 배치로
+// 줄지만 완전히 없애지는 못한다 — 남은 단일 경쟁 창은 C-2 인메모리 dedup 이 커버한다.
+// patchesByReportId: Map<cleanReportId, patchObject>. 반영된 행 수를 반환한다.
+function updateReportIndexSummaries(patchesByReportId) {
+  if (!patchesByReportId || patchesByReportId.size === 0) return 0;
+  if (!fs.existsSync(INDEX_PATH)) return 0;
+  const rows = loadReportIndexRows(Number.MAX_SAFE_INTEGER);
+  let applied = 0;
+  const nextRows = rows.map((row) => {
+    const cleanId = cleanReportId(row.report_id);
+    if (!cleanId) return row;
+    const patch = patchesByReportId.get(cleanId);
+    if (!patch) return row;
+    applied += 1;
+    return { ...row, ...patch };
+  });
+  if (applied === 0) return 0;
+  writeJsonLinesAtomic(INDEX_PATH, nextRows);
+  return applied;
 }
 
 function loadReportDetail(reportId) {
@@ -10297,7 +10434,14 @@ function guideHtmlFromText(text) {
 </html>`;
 }
 
-async function sendAdminGuideEmail({ to, subject, text }) {
+// 메일 발송 설정 여부 — 웹훅(Apps Script) 또는 Resend 중 하나라도 있으면 발송 가능.
+function isMailConfigured() {
+  return Boolean(MAIL_WEBHOOK_URL || RESEND_API_KEY);
+}
+
+// 공용 트랜잭션 메일 발송 — Apps Script 웹훅 우선, 없으면 Resend.
+// sendAdminGuideEmail(온보딩)과 waiting_user 오류보고 알림이 함께 쓰는 단일 경로다.
+async function sendTransactionalEmail({ to, subject, text, tags = null, emailType = "onboarding_guide" }) {
   if (!isValidEmail(to)) {
     throw Object.assign(new Error("invalid_email"), { statusCode: 400, code: "invalid_email" });
   }
@@ -10305,7 +10449,9 @@ async function sendAdminGuideEmail({ to, subject, text }) {
     throw Object.assign(new Error("empty_mail_body"), { statusCode: 400, code: "empty_mail_body" });
   }
   const html = guideHtmlFromText(text);
-  const tags = [{ name: "email_type", value: "onboarding_guide" }];
+  const mailTags = Array.isArray(tags) && tags.length
+    ? tags
+    : [{ name: "email_type", value: String(emailType || "onboarding_guide").slice(0, 80) }];
   if (MAIL_WEBHOOK_URL) {
     const data = await postJsonUrl(MAIL_WEBHOOK_URL, {
       secret: MAIL_WEBHOOK_SECRET,
@@ -10315,7 +10461,7 @@ async function sendAdminGuideEmail({ to, subject, text }) {
       subject,
       text,
       html,
-      tags,
+      tags: mailTags,
     });
     return {
       provider: "apps_script",
@@ -10332,7 +10478,7 @@ async function sendAdminGuideEmail({ to, subject, text }) {
         subject,
         html,
         text,
-        tags,
+        tags: mailTags,
         reply_to: MAIL_REPLY_TO,
       },
       { authorization: `Bearer ${RESEND_API_KEY}` },
@@ -10344,6 +10490,303 @@ async function sendAdminGuideEmail({ to, subject, text }) {
     };
   }
   throw Object.assign(new Error("mail_not_configured"), { statusCode: 503, code: "mail_not_configured" });
+}
+
+// 기존 온보딩 안내 메일 — 공용 발송 함수를 감싸 호출부 동작을 보존한다.
+async function sendAdminGuideEmail({ to, subject, text }) {
+  return sendTransactionalEmail({ to, subject, text, emailType: "onboarding_guide" });
+}
+
+// ---------------------------------------------------------------------------
+// waiting_user 오류보고 이메일 알림 스윕
+// 오류보고가 waiting_user 로 바뀌는 경로 중 오라클 auto-guidance 스크립트는 서버 API 를
+// 거치지 않고 reports-index.jsonl 을 직접 수정한다. 따라서 전이 훅으로는 못 잡고,
+// 주기 스윕으로 미발송 waiting_user 오류보고를 찾아 접수자에게 1회 안내 메일을 보낸다.
+// 전체를 try/catch 로 감싸 스토어/메일 오류가 프로세스를 죽이지 않는다(H-1 교훈).
+// ---------------------------------------------------------------------------
+const WAITING_USER_MAIL_ENABLED = String(process.env.AIMAX_WAITING_USER_MAIL ?? "1").trim() !== "0";
+const WAITING_USER_MAIL_LOOKBACK_DAYS = safeInt(process.env.AIMAX_WAITING_USER_MAIL_LOOKBACK_DAYS || "7", 1, 3650);
+const WAITING_USER_MAIL_PER_SWEEP = safeInt(process.env.AIMAX_WAITING_USER_MAIL_PER_SWEEP || "10", 1, 1000);
+const WAITING_USER_MAIL_INTERVAL_MS = safeInt(process.env.AIMAX_WAITING_USER_MAIL_INTERVAL_MS || "300000", 1000, 24 * 60 * 60 * 1000);
+const WAITING_USER_MAIL_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const WAITING_USER_MAIL_MAX_ATTEMPTS = 3;
+const WAITING_USER_MAIL_INITIAL_DELAY_MS = Math.min(60 * 1000, WAITING_USER_MAIL_INTERVAL_MS);
+let waitingUserMailSweepBusy = false;
+let waitingUserMailNotConfiguredWarned = false;
+// C-2: 마커 기록이 빈 report_id 나 크로스 프로세스 파일 재작성 경쟁으로 실패해도 재발송하지
+// 않도록, 프로세스 수명 동안 유지되는 인메모리 dedup. 발송 성공 직후·마커 기록 시도 전에 채운다.
+// 파일에서 재구성되는 마커/쿨다운이 유실되는 단일 경쟁 창을 이 구조가 메꾼다(재시작 시 초기화).
+const waitingUserMailSentReportIds = new Set();
+const waitingUserMailLastSentByEmail = new Map();
+
+// stored_at 등 ISO 시각을 KST(UTC+9) 표기 문자열로 수동 변환한다.
+function waitingUserMailKstTimestamp(value) {
+  const ms = Date.parse(String(value || ""));
+  if (!Number.isFinite(ms)) return "";
+  const kst = new Date(ms + 9 * 60 * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const mo = String(kst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(kst.getUTCDate()).padStart(2, "0");
+  const h = String(kst.getUTCHours()).padStart(2, "0");
+  const mi = String(kst.getUTCMinutes()).padStart(2, "0");
+  return `${y}-${mo}-${d} ${h}:${mi} (KST)`;
+}
+
+// 메일 본문 구성 — 이모지 금지, redactText 적용 필드만 사용, 시크릿/원문 로그 인용 금지.
+function buildWaitingUserReportMail(row) {
+  const jobKind = String(row?.job_kind || "").trim();
+  const kindLabel = (JOB_KINDS[jobKind] && JOB_KINDS[jobKind].label) || "작업";
+  const subject = `[AIMAX] 오류 보고에 확인이 필요합니다 — ${kindLabel}`;
+  const storedAtKst = waitingUserMailKstTimestamp(row?.stored_at || row?.status_updated_at || "");
+  const publicMessage = redactText(String(row?.public_message || "")).trim();
+  const checklist = reportActionChecklist(row);
+  const lines = [];
+  lines.push("안녕하세요, AIMAX입니다.");
+  lines.push("");
+  if (storedAtKst) lines.push(`접수 시각: ${storedAtKst}`);
+  lines.push(`작업: ${kindLabel}`);
+  lines.push("");
+  lines.push("진행 중이던 작업에 확인이 필요한 오류가 접수되었습니다.");
+  if (publicMessage) {
+    lines.push("");
+    lines.push(publicMessage);
+  }
+  if (checklist.length) {
+    lines.push("");
+    lines.push("확인 방법:");
+    checklist.forEach((item, index) => {
+      lines.push(`${index + 1}. ${redactText(String(item || "")).trim()}`);
+    });
+  }
+  lines.push("");
+  lines.push(`앱에 접속해 오류보고 탭에서 자세한 안내를 확인해주세요: ${PUBLIC_BASE_URL}/app`);
+  lines.push("조치 후 상단 배너의 '조치했어요, 다시 시도' 버튼을 누르거나 작업을 다시 시도해주세요.");
+  lines.push("");
+  lines.push(`문의는 이 메일에 회신해주세요 (${MAIL_REPLY_TO}).`);
+  return { subject, text: lines.join("\n") };
+}
+
+// 발송 성공 시 해당 유저의 email_events 에 기존 관례대로 기록한다. 유저를 못 찾으면
+// 행 마커(user_notified_at)만으로 dedup 이 충분하므로 조용히 생략한다.
+function recordWaitingUserMailEvent(email, event) {
+  try {
+    const normalized = normalizeEmail(email);
+    if (!normalized) return;
+    const users = loadUsers();
+    const user = users.users.find((item) => normalizeEmail(item.email) === normalized);
+    if (!user) return;
+    rememberUserEmailEvent(user, {
+      type: "error_report_waiting_user",
+      provider: event.provider,
+      provider_message_id: event.provider_message_id,
+      to: normalized,
+      subject: event.subject,
+      sent_at: event.sent_at,
+    });
+    saveUsers(users);
+  } catch (error) {
+    console.warn("[waiting-user-mail] email_event record failed", error?.code || error?.message || error);
+  }
+}
+
+async function sweepWaitingUserReportMail() {
+  if (!WAITING_USER_MAIL_ENABLED) return { sent: 0, skipped: 0, disabled: true };
+  if (waitingUserMailSweepBusy) return { sent: 0, skipped: 0, busy: true };
+  waitingUserMailSweepBusy = true;
+  try {
+    if (!isMailConfigured()) {
+      if (!waitingUserMailNotConfiguredWarned) {
+        console.warn("[waiting-user-mail] mail not configured — sweep skipped");
+        waitingUserMailNotConfiguredWarned = true;
+      }
+      return { sent: 0, skipped: 0, mail_not_configured: true };
+    }
+    // C-1: 보고 행의 account_* 필드를 신뢰하지 않는다. 공유 리포트 토큰 경로(hasReportAuth)는
+    // 클라이언트가 보낸 account_email/user_id 를 그대로 저장하므로, 그대로 메일을 보내면
+    // AIMAX 명의 메일을 임의의 제3자 주소로 보낼 수 있다. 발송 전 account_user_id 로 users.json 의
+    // 실제 유저를 조회해 저장된 이메일과 일치할 때만, 그 정본 이메일(user.email)로 보낸다.
+    // users.json 은 스윕당 1회만 로드한다.
+    let usersById;
+    try {
+      const users = loadUsers();
+      usersById = new Map();
+      for (const item of users.users) {
+        const id = String(item?.id || "").trim();
+        if (id) usersById.set(id, item);
+      }
+    } catch (error) {
+      // 유저 목록을 못 읽으면 아무도 검증할 수 없으므로 이번 스윕은 조용히 건너뛴다(fail-open).
+      console.warn("[waiting-user-mail] users load failed — sweep skipped", error?.code || error?.message || error);
+      return { sent: 0, skipped: 0, users_unavailable: true };
+    }
+    const rows = loadReportIndexRows(Number.MAX_SAFE_INTEGER);
+    const nowMs = Date.now();
+    const cutoffMs = nowMs - WAITING_USER_MAIL_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+    // 쿨다운 판단용: 같은 이메일 주소가 마지막으로 발송된 시각(ms). 다른 행의 user_notified_at 도 포함.
+    const lastNotifiedByEmail = new Map();
+    for (const row of rows) {
+      const notifiedMs = Date.parse(String(row?.user_notified_at || ""));
+      if (!Number.isFinite(notifiedMs)) continue;
+      const email = normalizeEmail(row?.account_email || "");
+      if (!email) continue;
+      if (notifiedMs > (lastNotifiedByEmail.get(email) || 0)) lastNotifiedByEmail.set(email, notifiedMs);
+    }
+    // I-1: 행 패치를 모아 스윕 끝에 단 한 번의 read-modify-write 로 반영한다.
+    const patches = new Map();
+    const setPatch = (reportId, patch) => {
+      const cleanId = cleanReportId(reportId);
+      if (!cleanId) return;
+      patches.set(cleanId, { ...(patches.get(cleanId) || {}), ...patch });
+    };
+    // 이번 스윕에서 실제로 메일이 나간 행. 배치 기록이 실패해도 attempts 를 올리지 않기 위해 분리한다.
+    const sentReportIds = [];
+    const eventsToRecord = [];
+    let sent = 0;
+    let skipped = 0;
+    for (const row of rows) {
+      if (sent >= WAITING_USER_MAIL_PER_SWEEP) break;
+      if (normalizeReportStatus(row?.status || "") !== "waiting_user") continue;
+      if (isFeedbackReport(row)) continue; // 오류보고만 (피드백 리포트 제외)
+      // 발송 완료(user_notified_at)/실패 확정(user_notify_failed_at) 행은 영구 스킵한다.
+      // user_notify_skipped 만 있는 행은 매 스윕 재평가한다: 이제 검증을 통과하면 이 스윕에서 발송하며
+      // 스킵 마커를 지우고, 여전히 같은 이유로 실패하면 마커를 다시 쓰지 않고 조용히 건너뛴다(5분마다 파일 churn 방지).
+      if (row?.user_notified_at || row?.user_notify_failed_at) continue;
+      const priorSkip = String(row?.user_notify_skipped || "");
+      // 스킵 마커를 남기되, 같은 이유로 이미 마킹돼 있으면 재기록하지 않는다(파일 churn 방지). 이유가 바뀌면 갱신한다.
+      const applySkip = (reason) => {
+        skipped += 1;
+        if (priorSkip === reason) return;
+        setPatch(row.report_id, { user_notify_skipped: reason, user_notify_skipped_at: nowIso() });
+      };
+      // C-2: report_id 가 비면 마커를 남길 방법이 없어 스윕마다 재발송될 수 있다 → 발송 전에 건너뛴다.
+      const cleanId = cleanReportId(row?.report_id);
+      if (!cleanId) continue;
+      // C-2: 이번 프로세스에서 이미 보낸 행이면(마커 기록 실패 포함) 다시 보내지 않는다.
+      if (waitingUserMailSentReportIds.has(cleanId)) continue;
+      const statusUpdatedMs = Date.parse(String(row?.status_updated_at || row?.stored_at || ""));
+      // 시각 파싱 불가 또는 룩백 초과 행은 오발송 방지를 위해 건너뛴다.
+      if (!Number.isFinite(statusUpdatedMs) || statusUpdatedMs < cutoffMs) continue;
+      // C-1: account_user_id 로 실제 유저를 조회한다. handleReport 는 서버가 주입한 세션 계정을
+      // 포함한 리포트 전체에 redactPayload 를 적용하므로, 저장된 row.account_email 은 마스킹돼 있다
+      // (예: "a***@b***.com"). 따라서 이메일 문자열 비교는 세션 오류보고 행에서 절대 통과하지 못한다.
+      // 대신 서버가 세션 리포트에 심는 account_user_id(추측 불가한 UUID)를 신뢰 앵커로 삼는다.
+      // 유저가 존재하고 다음 중 하나면 검증 통과: (1) row 이메일이 비어 있음, (2) row 이메일이 "*"를
+      // 포함(마스킹돼 비교 불가 → user_id 앵커 신뢰), (3) 마스킹 안 된 이메일이 정본과 일치.
+      // 발송은 어떤 경우든 정본 user.email 로만 한다.
+      const accountUserId = String(row?.account_user_id || "").trim();
+      const rowEmail = normalizeEmail(row?.account_email || "");
+      const user = accountUserId ? usersById.get(accountUserId) : null;
+      const rowEmailMasked = rowEmail.includes("*");
+      const verified = Boolean(user) && (
+        !rowEmail || rowEmailMasked || normalizeEmail(user.email) === rowEmail
+      );
+      if (!verified) {
+        // 유저 부재이거나, 마스킹 안 된 이메일이 정본과 불일치 → 발송 금지, 스킵 마커.
+        applySkip("unverified_account");
+        continue;
+      }
+      const recipient = String(user.email || "").trim(); // 정본 이메일로만 보낸다(클라이언트 원본 값 아님).
+      const email = normalizeEmail(recipient);
+      if (!isValidEmail(recipient)) {
+        applySkip("invalid_email");
+        continue;
+      }
+      // 같은 이메일이 6시간 내 발송됐으면 이번 스윕은 건너뛰고 다음 스윕에서 재평가한다(실패 마킹 안 함).
+      // C-2: 파일 기반 쿨다운과 인메모리 쿨다운 중 더 최근 값을 쓴다.
+      const lastNotifiedMs = Math.max(
+        lastNotifiedByEmail.get(email) || 0,
+        waitingUserMailLastSentByEmail.get(email) || 0,
+      );
+      if (lastNotifiedMs && nowMs - lastNotifiedMs < WAITING_USER_MAIL_COOLDOWN_MS) {
+        skipped += 1;
+        continue;
+      }
+      const built = buildWaitingUserReportMail(row);
+      let result;
+      try {
+        result = await sendTransactionalEmail({
+          to: recipient,
+          subject: built.subject,
+          text: built.text,
+          emailType: "error_report_waiting_user",
+        });
+      } catch (error) {
+        // 발송 실패 경로에서만 attempts 를 올린다(실제로 메일이 나간 행은 절대 여기 오지 않는다).
+        const attempts = safeInt(row?.user_notify_attempts, 0, 1000) + 1;
+        const patch = { user_notify_attempts: attempts, user_notify_last_error_at: nowIso() };
+        if (attempts >= WAITING_USER_MAIL_MAX_ATTEMPTS) patch.user_notify_failed_at = nowIso();
+        setPatch(row.report_id, patch);
+        console.warn("[waiting-user-mail] send failed", cleanId, error?.code || error?.message || "send_failed");
+        continue;
+      }
+      // C-2: 발송 성공 → 마커 기록(배치) 시도 전에 인메모리 dedup 을 먼저 채운다.
+      const notifiedAt = nowIso();
+      waitingUserMailSentReportIds.add(cleanId);
+      waitingUserMailLastSentByEmail.set(email, Date.parse(notifiedAt) || nowMs);
+      lastNotifiedByEmail.set(email, Date.parse(notifiedAt) || nowMs);
+      const notifiedPatch = {
+        user_notified_at: notifiedAt,
+        user_notified_channel: "email",
+        user_notified_id: String(result?.id || "").slice(0, 160),
+      };
+      // 이전 스윕에서 스킵 마커가 있던 행이 재평가로 통과했다면, 발송 마커와 같은 패치에서 스킵 필드를 지운다.
+      if (priorSkip) {
+        notifiedPatch.user_notify_skipped = "";
+        notifiedPatch.user_notify_skipped_at = "";
+      }
+      setPatch(row.report_id, notifiedPatch);
+      sentReportIds.push(cleanId);
+      eventsToRecord.push({
+        email,
+        provider: result?.provider || "",
+        provider_message_id: result?.id || "",
+        subject: built.subject,
+        sent_at: notifiedAt,
+      });
+      sent += 1;
+    }
+    // I-1/C-2: 모은 패치를 한 번에 반영한다. 배치 기록이 실패해도(파일 경쟁 등) 이미 보낸 메일은
+    // 인메모리 dedup 이 커버하므로 재발송하지 않으며, 보낸 행의 attempts 도 올리지 않는다.
+    try {
+      const applied = updateReportIndexSummaries(patches);
+      // 일부 패치가 반영 안 됐고 이번에 실제 발송한 행이 있으면, 발송 마커가 유실됐을 수 있어 크게 경고한다.
+      if (applied < patches.size && sentReportIds.length > 0) {
+        console.warn(
+          "[waiting-user-mail] sent but marker write incomplete — memory dedup only until restart",
+          `applied=${applied}`, `patches=${patches.size}`, `sent=${sentReportIds.length}`,
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "[waiting-user-mail] sent but marker write failed — memory dedup only until restart",
+        error?.code || error?.message || error,
+      );
+    }
+    // email_events 기록은 유저 파일 쪽이라 실패해도 발송/마커에 영향을 주지 않는다(개별 try/catch 내장).
+    for (const event of eventsToRecord) {
+      recordWaitingUserMailEvent(event.email, event);
+    }
+    return { sent, skipped };
+  } catch (error) {
+    console.warn("[waiting-user-mail] sweep failed", error?.code || error?.message || error);
+    return { sent: 0, skipped: 0, error: true };
+  } finally {
+    waitingUserMailSweepBusy = false;
+  }
+}
+
+function startWaitingUserReportMailSweep() {
+  if (!WAITING_USER_MAIL_ENABLED) return null;
+  const runSweep = () => {
+    sweepWaitingUserReportMail().catch((error) => {
+      console.warn("[waiting-user-mail] sweep failed", error?.code || error?.message || error);
+    });
+  };
+  const initial = setTimeout(runSweep, WAITING_USER_MAIL_INITIAL_DELAY_MS);
+  if (typeof initial.unref === "function") initial.unref();
+  const timer = setInterval(runSweep, WAITING_USER_MAIL_INTERVAL_MS);
+  if (typeof timer.unref === "function") timer.unref();
+  return timer;
 }
 
 function telegramAlertsConfigured() {
@@ -13908,20 +14351,27 @@ async function handleAgentHeartbeat(req, res) {
   agent.device_label = deviceLabel;
   const previousNaverStatus = String(agent.readiness?.naver_account?.status || "");
   agent.readiness = sanitizeReadiness(body.readiness);
-  // 네이버 계정이 (재)저장되어 준비 상태로 전환되면 네이버 로그인 가드를 자동 해제한다.
-  // 이미 ready 였던 계정을 같은 값으로 재저장한 경우는 전이가 없어 여기서 못 잡는다 —
-  // 그 경우는 acknowledge(조치했어요) 경로로 해제한다.
-  if (String(agent.readiness?.naver_account?.status || "") === "ready" && previousNaverStatus !== "ready") {
-    releaseJobGuardsForClasses(auth.user.id, ["naver_login_failed"]);
+  // 네이버 로그인 가드 자동 해제는 두 가지 근거에서만 한다 — "ready 면 해제"는 금지(무력화 위험).
+  //  (1) 전이: not_ready → ready 로 바뀐 경우.
+  //  (2) M-2 재저장: saved_at 이 마지막 실패(last_error_at) 이후인 경우(P2 러너부터 전송).
+  // 그 외(전이 없는 ready 재보고 + saved_at 없음)는 acknowledge(조치했어요) 경로가 커버한다.
+  const naverStatus = String(agent.readiness?.naver_account?.status || "");
+  const naverSavedAt = agent.readiness?.naver_account?.saved_at || "";
+  // M-4: 이 에이전트(기기) 스코프로만 해제한다 — 기기 B 의 전이가 기기 A 가드를 풀지 않게.
+  const agentDeviceKey = jobDeviceKey(platform, deviceLabel);
+  if (naverStatus === "ready"
+    && (previousNaverStatus !== "ready" || naverCredentialResavedAfterFailure(auth.user.id, naverSavedAt))) {
+    releaseJobGuardsForClasses(auth.user.id, ["naver_login_failed"], agentDeviceKey);
   }
   const readinessDiagnostics = body.readiness && typeof body.readiness === "object" ? body.readiness.diagnostics : null;
   agent.diagnostics = sanitizeAgentDiagnostics(body.diagnostics || readinessDiagnostics || {});
   // 하트비트 공백 3분 이상 후 재개 = 실행기 재시작으로 간주한다.
   // runner_not_started 가드의 조치 안내가 "실행기 재시작"이므로, 재시작이 감지되면
   // 가드를 자동 해제해 사용자가 acknowledge 버튼까지 찾아가지 않아도 되게 한다.
+  // M-4: 재시작한 그 기기 스코프로만 해제한다.
   const previousSeenMs = Date.parse(agent.last_seen_at || "");
   if (!Number.isFinite(previousSeenMs) || Date.now() - previousSeenMs > 3 * 60 * 1000) {
-    releaseJobGuardsForClasses(auth.user.id, ["runner_not_started"]);
+    releaseJobGuardsForClasses(auth.user.id, ["runner_not_started"], agentDeviceKey);
   }
   agent.last_seen_at = now;
   agent.updated_at = now;
@@ -14108,7 +14558,12 @@ async function handleCreateJob(req, res) {
     return;
   }
   // 연속 실패 가드 — 같은 오류가 반복 중이면 조치 안내와 함께 생성 자체를 차단한다.
-  const pausedGuard = pausedJobGuard(auth.user.id, kind);
+  // M-4: 새 잡의 타겟 기기 스코프로 차단 판정한다(다른 기기 실패가 이 기기 생성을 막지 않게).
+  const createDeviceKey = jobDeviceKey(
+    body.target_platform || body.platform || "",
+    body.target_device_label || body.device_label || "",
+  );
+  const pausedGuard = pausedJobGuard(auth.user.id, kind, createDeviceKey);
   if (pausedGuard) {
     json(req, res, 409, {
       ok: false,
@@ -14341,7 +14796,12 @@ async function handleRetryJob(req, res, jobId) {
     return;
   }
   // 연속 실패 가드 — 같은 오류 반복 재시도를 차단한다.
-  const pausedGuard = pausedJobGuard(auth.user.id, job.kind);
+  // M-4: 재시도할 잡의 타겟 기기 스코프로 차단 판정한다.
+  const retryDeviceKey = jobDeviceKey(
+    job.target_platform || body.target_platform || "",
+    job.target_device_label || body.target_device_label || "",
+  );
+  const pausedGuard = pausedJobGuard(auth.user.id, job.kind, retryDeviceKey);
   if (pausedGuard) {
     json(req, res, 409, {
       ok: false,
@@ -14479,18 +14939,21 @@ async function handleAcknowledgeJobGuard(req, res) {
   // 읽기/쓰기 실패 시 503으로 응답하고 프로세스는 살린다.
   try {
     const data = loadJobGuards();
-    const guard = data.guards.find((row) => row.user_id === auth.user.id && row.job_kind === kind);
-    if (!guard) {
+    // M-4: user+kind 의 모든 기기 행을 함께 해제한다(사용자 의사 존중, UI 단순 유지).
+    const matched = data.guards.filter((row) => row.user_id === auth.user.id && row.job_kind === kind);
+    if (!matched.length) {
       json(req, res, 404, { ok: false, error: "guard_not_found" });
       return;
     }
     const now = nowIso();
-    guard.paused = false;
-    guard.consecutive_count = 0;
-    guard.acknowledged_at = now;
-    guard.updated_at = now;
+    for (const guard of matched) {
+      guard.paused = false;
+      guard.consecutive_count = 0;
+      guard.acknowledged_at = now;
+      guard.updated_at = now;
+    }
     saveJobGuards(data);
-    json(req, res, 200, { ok: true, guard: publicJobGuard(guard) });
+    json(req, res, 200, { ok: true, guard: publicJobGuard(matched[0]), guards: matched.map(publicJobGuard) });
   } catch (error) {
     console.warn("[job-guard] acknowledge failed", error?.code || error?.message || error);
     json(req, res, 503, { ok: false, error: "guard_store_unavailable" });
@@ -15451,6 +15914,7 @@ function startServer() {
   });
 
   startSongiDiscoverySubscriptionPoller();
+  startWaitingUserReportMailSweep();
   server.listen(PORT, HOST, () => {
     console.log(`aimax-reports-api listening on http://${HOST}:${PORT}`);
   });
@@ -15563,11 +16027,14 @@ module.exports = {
   },
   __jobGuardTest: {
     JOB_GUARDS_PATH,
+    JOB_GUARD_MAX_ROWS_PER_USER,
     appendJobLogById,
     classifyJobFailureSignature,
     clearJobGuardOnSuccess,
+    jobDeviceKey,
     jobFailureSignatureClass,
     jobGuardMessage,
+    jobGuardSignatureScope,
     jobGuardPauseThreshold,
     jobKindRequiresRunner,
     loadJobGuards,

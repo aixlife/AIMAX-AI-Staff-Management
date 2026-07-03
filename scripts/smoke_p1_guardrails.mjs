@@ -177,6 +177,71 @@ const BILLING_FAILURE = {
   log: "Gemini 결제/요금제 한도 초과 - 결제/크레딧 상태를 확인해주세요.",
   result: { visible_error: "Gemini 결제/요금제 한도 초과 - 결제/크레딧 상태를 확인해주세요." },
 };
+// 계정 단위(기기 무관) 시그니처 — 구조화 stage 로 분류된다.
+const AIKEY_FAILURE = {
+  stage: "server_generation_auth_failed",
+  log: "AI 키 인증 실패",
+  result: { visible_error: "AI 키 인증에 실패했습니다." },
+};
+// 기기 단위 시그니처 — 실행기 미시작(임계 5회).
+const RUNNER_FAILURE = {
+  stage: "runner_start_not_reported",
+  log: "실행기가 작업을 시작하지 못했습니다.",
+  result: { visible_error: "실행기가 시작되지 않았습니다." },
+};
+
+// M-4: 기기(platform/device_label) 별로 잡을 만들고 실패시키는 헬퍼.
+async function createJobOn(request, auth, keyword, device, expectStatus) {
+  return request("/api/jobs", {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      kind: "yeri_write",
+      target_platform: device.platform,
+      target_device_label: device.label,
+      payload: { keywords: [keyword], ai_model: "mock-no-paid" },
+    }),
+    ...(expectStatus ? { expectStatus } : {}),
+  });
+}
+
+async function claimJobOn(request, auth, device) {
+  const query = new URLSearchParams({ platform: device.platform, device_label: device.label }).toString();
+  const claimed = await request(`/api/agent/next-job?${query}`, { headers: auth });
+  assert(claimed.job, "expected_claimed_job");
+  return claimed.job.id;
+}
+
+async function failJobOn(request, auth, keyword, device, failure) {
+  const created = await createJobOn(request, auth, keyword, device);
+  const jobId = created.job.id;
+  assert((await claimJobOn(request, auth, device)) === jobId, "claim_mismatch");
+  await request("/api/agent/jobs/update", { method: "POST", headers: auth, body: JSON.stringify({ job_id: jobId, status: "running", log: "worker started" }) });
+  await request("/api/agent/jobs/update", { method: "POST", headers: auth, body: JSON.stringify({ job_id: jobId, status: "failed", log: failure.log, failed_stage: failure.stage, result: failure.result }) });
+  return jobId;
+}
+
+async function heartbeatOn(request, auth, version, device, readiness = {}) {
+  await request("/api/agent/heartbeat", {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      status: "connected",
+      version,
+      platform: device.platform,
+      device_label: device.label,
+      readiness: { workers: { yeri_write: "ready" }, ...readiness },
+    }),
+  });
+}
+
+async function acknowledge(request, auth) {
+  await request("/api/jobs/guard/acknowledge", { method: "POST", headers: auth, body: JSON.stringify({ job_kind: "yeri_write" }) });
+}
+
+const DEVICE_A = { platform: "windows", label: "Device A" };
+const DEVICE_B = { platform: "windows", label: "Device B" };
+const NO_TARGET = { platform: "", label: "" };
 
 async function mainScenario() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-guard-smoke-"));
@@ -249,12 +314,16 @@ async function mainScenario() {
     const afterSwitch = await createJob(request, auth, "전환 후 생성 허용");
     assert(afterSwitch.ok === true, "expected_create_after_signature_switch");
     const switched = await request("/api/jobs/guards", { headers: auth });
-    assert(switched.guards[0].guard_class === "billing_quota" && switched.guards[0].consecutive_count === 1,
+    // M-4: naver(기기 단위)와 billing(계정 단위)은 이제 별도 행이므로 billing 행을 찾아 검증한다.
+    const billingGuard = switched.guards.find((g) => g.guard_class === "billing_quota");
+    assert(billingGuard && billingGuard.consecutive_count === 1,
       `expected_billing_count_1:${JSON.stringify(switched)}`);
-    console.log("PASS 4) 시그니처 전환 시 카운트 1로 리셋");
+    console.log("PASS 4) 시그니처 전환 시 카운트 1로 리셋 (계정 단위 billing 행)");
 
     // 5) 하트비트 naver_account ready 전이 → naver_login_failed 가드 자동 해제
-    //    (다시 로그인 실패 3연속으로 pause 만든 뒤 검증. 직전 결제 1회 상태에서 로그인 실패가 오면 1로 리셋되므로 3회 필요)
+    //    M-4 로 naver(기기 단위) 카운트가 앞 시나리오에서 누적돼 있어, acknowledge 로 먼저 리셋한 뒤
+    //    로그인 실패 3연속으로 pause 를 새로 만들어 검증한다.
+    await request("/api/jobs/guard/acknowledge", { method: "POST", headers: auth, body: JSON.stringify({ job_kind: "yeri_write" }) });
     // 남은 queued 잡 정리를 위해 방금 생성한 잡을 로그인 실패 처리
     const q1 = (await request("/api/jobs", { headers: auth })).jobs.find((job) => job.status === "queued" || job.status === "assigned")?.id;
     assert((await claimJob(request, auth)) === q1, "q1_claim_mismatch");
@@ -309,7 +378,7 @@ async function versionGateScenario() {
   }
 }
 
-// 레드팀 H-2: 좀비 타임아웃 실패가 transient 로 오분류되지 않고 실행기 계열로 집계되는지.
+// 레드팀 H-2 + M-1: 2단계 분류 — 구조화 필드 우선, 자유텍스트는 강한 문구만 폴백.
 async function signatureUnitScenario() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-sig-unit-"));
   process.env.AIMAX_REPORT_DATA_DIR = tmpDir;
@@ -317,14 +386,27 @@ async function signatureUnitScenario() {
   const require = createRequire(import.meta.url);
   const { __jobGuardTest } = require(path.join(repoRoot, "oracle/aimax-reports-api/server.js"));
   const cls = __jobGuardTest.classifyJobFailureSignature;
+  // H-2 회귀: 좀비 타임아웃(구조화 필드)은 실행기 계열 — transient 오분류 금지.
   assert(cls({ reason: "runner_stopped_heartbeating_or_timed_out" }) === "runner_not_started",
     "zombie_timeout_must_be_runner_not_started");
   assert(cls({ reason: "runner_start_not_reported" }) === "runner_not_started", "start_not_reported_class");
-  assert(cls({ visible_error: "로그인 실패: 아이디 또는 비밀번호를 확인해주세요." }) === "naver_login_failed", "login_class");
+  assert(cls({ stage: "runner_stopped_heartbeating_or_timed_out" }) === "runner_not_started", "stage_runner_class");
+  // 실제 흐름: 네이버 로그인 실패는 stage 로 도착(구조화 1단계).
+  assert(cls({ stage: "naver_login", visible_error: "로그인 실패: 아이디 또는 비밀번호를 확인해주세요." }) === "naver_login_failed", "structured_login_class");
+  // 강한 자유텍스트만 2단계 매칭.
   assert(cls({ visible_error: "Gemini 일시적 오류 - 잠시 후 다시 시도해주세요." }) === "transient", "transient_class");
   assert(cls({ visible_error: "Gemini 결제/요금제 한도 초과" }) === "billing_quota", "billing_class");
+  assert(cls({ visible_error: "네이버 로그인 화면에서 인증이 필요합니다" }) === "naver_login_failed", "freetext_naver_class");
+  // M-1 적대 케이스: 구조화 필드가 자유텍스트의 일반 단어를 이긴다.
+  assert(cls({ diagnostic_code: "server_generation_auth_failed", visible_error: "발행 중 timeout 오류가 났어요" }) === "ai_key_invalid",
+    "structured_auth_beats_freetext_timeout");
+  // bare timeout 은 2단계에서 매칭 안 됨 → other.
+  assert(cls({ visible_error: "발행 중 timeout 오류가 났어요" }) === "other", "bare_timeout_freetext_is_other");
+  // bare 로그인(네이버 없음)은 2단계에서 제거됨 → other.
+  assert(cls({ visible_error: "로그인해주세요" }) === "other", "bare_login_freetext_is_other");
+  assert(cls({ visible_error: "잠시 후 다시 시도해주세요" }) === "transient", "freetext_transient_class");
   fs.rmSync(tmpDir, { recursive: true, force: true });
-  console.log("PASS 8) 시그니처 분류 단위 검증 (좀비 타임아웃 = runner_not_started)");
+  console.log("PASS 8) 시그니처 2단계 분류 단위 검증 (구조화 우선 + 강한 자유텍스트 폴백)");
 }
 
 // 레드팀 H-1: job-guards.json 손상 상태에서 acknowledge 가 503 으로 응답하고 서버가 살아있는지.
@@ -357,11 +439,245 @@ async function corruptGuardStoreScenario() {
   }
 }
 
+// M-2: naver readiness saved_at — 전이 없는 ready 재보고는 가드 유지(무력화 방지),
+// saved_at 이 마지막 실패 이후일 때만 해제.
+async function naverSavedAtScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-naver-savedat-"));
+  const port = 22650 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+    // 네이버 ready 로 먼저 등록해 previousNaverStatus 를 ready 로 만든다(이후 전이 배제).
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready" } });
+    await failJobAs(request, auth, "savedat 1회차", LOGIN_FAILURE);
+    await failJobAs(request, auth, "savedat 2회차", LOGIN_FAILURE);
+    await failJobAs(request, auth, "savedat 3회차", LOGIN_FAILURE);
+    await createJob(request, auth, "savedat 차단 확인", 409);
+    console.log("PASS 10) 네이버 ready 상태에서 3연속 로그인 실패 후 차단");
+
+    // (1) ready→ready 재보고 + saved_at 없음 → 가드 유지 (무력화 회귀 방지, 가장 중요)
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready" } });
+    await createJob(request, auth, "saved_at 없음 유지 확인", 409);
+    console.log("PASS 11) ready 재보고 + saved_at 없음 → 가드 유지");
+
+    // (3) saved_at 이 last_error_at 이전 → 유지
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready", saved_at: "2020-01-01T00:00:00.000Z" } });
+    await createJob(request, auth, "saved_at 과거 유지 확인", 409);
+    console.log("PASS 12) saved_at 이 마지막 실패 이전 → 가드 유지");
+
+    // (2) saved_at 이 last_error_at 이후 → 해제
+    const future = new Date(Date.now() + 60 * 1000).toISOString();
+    await heartbeat(request, auth, "v99.0.0-smoke", { naver_account: { status: "ready", saved_at: future } });
+    const afterResave = await createJob(request, auth, "saved_at 재저장 후 생성");
+    assert(afterResave.ok === true, "expected_create_after_saved_at_resave");
+    console.log("PASS 13) saved_at 이 마지막 실패 이후 → 가드 해제");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// M-4: 가드 기기 단위 분리 — 기기 격리, 계정 단위 전체 차단, 레거시 행, acknowledge/성공 해제.
+async function deviceScopeScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-devscope-"));
+  const port = 22960 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+
+    // (1) 기기 A naver 3연속 → paused. 기기 B 타겟 생성은 허용.
+    await failJobOn(request, auth, "A naver 1", DEVICE_A, LOGIN_FAILURE);
+    await failJobOn(request, auth, "A naver 2", DEVICE_A, LOGIN_FAILURE);
+    await failJobOn(request, auth, "A naver 3", DEVICE_A, LOGIN_FAILURE);
+    await createJobOn(request, auth, "A 차단 확인", DEVICE_A, 409);
+    const bAllowed = await createJobOn(request, auth, "B 생성 허용", DEVICE_B);
+    assert(bAllowed.ok === true, "expected_device_b_create_allowed");
+    console.log("PASS 14) 기기 A naver paused → 기기 B 생성 허용");
+
+    // (2) 타겟 없는(아무 기기나) 잡은 어떤 paused 기기든 걸려 차단.
+    const noTargetBlocked = await createJobOn(request, auth, "무타겟 차단", NO_TARGET, 409);
+    assert(noTargetBlocked.error === "guard_paused", `expected_no_target_blocked:${JSON.stringify(noTargetBlocked)}`);
+    console.log("PASS 15) 기기 A paused → 타겟 없는 잡 차단");
+
+    // (3) ai_key_invalid 3연속(계정 단위) → 기기 무관 전부 차단.
+    await acknowledge(request, auth); // 앞의 naver 가드 리셋
+    await failJobOn(request, auth, "A key 1", DEVICE_A, AIKEY_FAILURE);
+    await failJobOn(request, auth, "A key 2", DEVICE_A, AIKEY_FAILURE);
+    await failJobOn(request, auth, "A key 3", DEVICE_A, AIKEY_FAILURE);
+    const keyBlockA = await createJobOn(request, auth, "key A 차단", DEVICE_A, 409);
+    const keyBlockB = await createJobOn(request, auth, "key B 차단", DEVICE_B, 409);
+    assert(keyBlockA.guard_class === "ai_key_invalid" && keyBlockB.guard_class === "ai_key_invalid",
+      `expected_account_scope_block:${JSON.stringify([keyBlockA, keyBlockB])}`);
+    console.log("PASS 16) ai_key_invalid 3연속 → 기기 무관 전부 차단");
+
+    // (6) 성공(done) 시 전체 해제 회귀 — 다른 기기의 잔여 가드까지 함께 지운다.
+    await acknowledge(request, auth);
+    const successJob = await createJobOn(request, auth, "성공 처리", DEVICE_A);
+    const successId = successJob.job.id;
+    assert((await claimJobOn(request, auth, DEVICE_A)) === successId, "success_claim_mismatch");
+    await request("/api/agent/jobs/update", { method: "POST", headers: auth, body: JSON.stringify({ job_id: successId, status: "running", log: "worker started" }) });
+    // PASS 14 에서 만들어둔 기기 B 큐 잡을 실패시켜 다른 기기에 잔여 가드를 만든다.
+    const bLeftoverId = await claimJobOn(request, auth, DEVICE_B);
+    await request("/api/agent/jobs/update", { method: "POST", headers: auth, body: JSON.stringify({ job_id: bLeftoverId, status: "running", log: "worker started" }) });
+    await request("/api/agent/jobs/update", { method: "POST", headers: auth, body: JSON.stringify({ job_id: bLeftoverId, status: "failed", log: LOGIN_FAILURE.log, failed_stage: LOGIN_FAILURE.stage, result: LOGIN_FAILURE.result }) });
+    const beforeDone = await request("/api/jobs/guards", { headers: auth });
+    assert(beforeDone.guards.some((g) => g.paused === false && g.guard_class === "naver_login_failed"), `expected_residual_guard:${JSON.stringify(beforeDone)}`);
+    // 기기 A 잡 done → user+kind 전체(모든 기기) 가드 해제.
+    await request("/api/agent/jobs/update", { method: "POST", headers: auth, body: JSON.stringify({ job_id: successId, status: "done", log: "완료" }) });
+    const clearedAll = await request("/api/jobs/guards", { headers: auth });
+    assert(clearedAll.guards.length === 0, `expected_all_cleared_on_success:${JSON.stringify(clearedAll)}`);
+    console.log("PASS 17) 성공(done) 시 user+kind 전체(모든 기기) 가드 해제");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// M-4 (5): 레거시 행(device_key 없음)은 전 기기 차단 + acknowledge 로 해제.
+async function legacyGuardRowScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-legacy-"));
+  const port = 23260 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+    // device_key 필드가 없는 구버전 형식 가드 행을 직접 심는다.
+    writeJson(path.join(tmpDir, "job-guards.json"), {
+      version: 1,
+      guards: [{
+        user_id: "p1-guardrails-smoke-user-id",
+        job_kind: "yeri_write",
+        signature: "naver_login_failed",
+        consecutive_count: 3,
+        paused: true,
+        created_at: new Date().toISOString(),
+        last_error_at: new Date().toISOString(),
+      }],
+    });
+    const blockA = await createJobOn(request, auth, "레거시 A 차단", DEVICE_A, 409);
+    const blockB = await createJobOn(request, auth, "레거시 B 차단", DEVICE_B, 409);
+    assert(blockA.error === "guard_paused" && blockB.error === "guard_paused",
+      `expected_legacy_block_all:${JSON.stringify([blockA, blockB])}`);
+    console.log("PASS 18) 레거시 행(device_key 없음) → 전 기기 차단");
+    await acknowledge(request, auth);
+    const afterAck = await createJobOn(request, auth, "레거시 해제 후 생성", DEVICE_A);
+    assert(afterAck.ok === true, "expected_create_after_legacy_ack");
+    console.log("PASS 19) 레거시 행 acknowledge 로 해제");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// M-4 (4): runner_not_started 는 기기 단위. 기기 B 재시작은 기기 A 가드를 안 풀고, 기기 A 재시작만 푼다.
+async function runnerRestartScopeScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-runner-scope-"));
+  const port = 23560 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+    // 기기 A 에서 runner_not_started 5연속(임계 5) → paused. 기기 A 하트비트는 아직 안 보낸다
+    // (첫 하트비트가 곧 '재시작' 트리거가 되게 하기 위해).
+    for (let i = 1; i <= 5; i += 1) {
+      await failJobOn(request, auth, `A runner ${i}`, DEVICE_A, RUNNER_FAILURE);
+    }
+    await createJobOn(request, auth, "A runner 차단", DEVICE_A, 409);
+    console.log("PASS 20) 기기 A runner 5연속 → 차단");
+
+    // 기기 B 첫 하트비트(=기기 B 재시작) → 기기 B 스코프만 해제. 기기 A 가드는 유지.
+    await heartbeatOn(request, auth, "v99.0.0-smoke", DEVICE_B);
+    await createJobOn(request, auth, "B 재시작 후 A 유지", DEVICE_A, 409);
+    console.log("PASS 21) 기기 B 재시작 → 기기 A runner 가드 유지");
+
+    // 기기 A 첫 하트비트(=기기 A 재시작) → 기기 A 스코프 해제.
+    await heartbeatOn(request, auth, "v99.0.0-smoke", DEVICE_A);
+    const afterRestart = await createJobOn(request, auth, "A 재시작 후 생성", DEVICE_A);
+    assert(afterRestart.ok === true, "expected_create_after_device_a_restart");
+    console.log("PASS 22) 기기 A 재시작 → 기기 A runner 가드 해제");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// I-2: 기기 라벨 정규화 — 잡 생성("Device A")과 하트비트("device a")의 대소문자 차이를 흡수해
+// 러너 재시작 자동 해제가 동작해야 한다(정규화 없으면 device_key 불일치로 해제 안 됨).
+async function deviceLabelNormalizationScenario() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-p1-label-norm-"));
+  const port = 23520 + Math.floor(Math.random() * 300);
+  seedUsers(tmpDir);
+  const { child, logs } = bootServer(tmpDir, port);
+  const request = makeClient(`http://127.0.0.1:${port}`);
+  try {
+    await waitForServer(request, logs);
+    const auth = await login(request);
+    const upper = { platform: "windows", label: "Device A" };
+    const lower = { platform: "windows", label: "device a" };
+    // "Device A" 로 runner_not_started 5연속(임계 5) → paused. 하트비트는 아직 안 보낸다.
+    for (let i = 1; i <= 5; i += 1) {
+      await failJobOn(request, auth, `norm ${i}`, upper, RUNNER_FAILURE);
+    }
+    await createJobOn(request, auth, "norm 차단", upper, 409);
+    console.log("PASS 23) 'Device A' runner 5연속 → 차단 (라벨 정규화 후에도 동일 기기 취급)");
+
+    // "device a"(소문자)로 첫 하트비트 = 재시작 → 정규화 매칭으로 'Device A' 가드 해제.
+    await heartbeatOn(request, auth, "v99.0.0-smoke", lower);
+    const after = await createJobOn(request, auth, "norm 재시작 후", upper);
+    assert(after.ok === true, "expected_release_across_case_diff");
+    console.log("PASS 24) 'device a' 재시작 하트비트가 'Device A' 가드 해제 (대소문자 무관)");
+  } finally {
+    child.kill("SIGTERM");
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
+// I-2: 유저당 가드 행 상한 — 클라이언트가 라벨을 매번 바꿔도 job-guards.json 이 무한 성장하지 않는다.
+async function guardRowCapScenario() {
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const { __jobGuardTest } = require(path.join(repoRoot, "oracle/aimax-reports-api/server.js"));
+  const { recordJobFailureGuard, loadJobGuards, JOB_GUARDS_PATH, JOB_GUARD_MAX_ROWS_PER_USER } = __jobGuardTest;
+  const cap = JOB_GUARD_MAX_ROWS_PER_USER;
+  // 모듈이 바인딩한 실제 데이터 경로에 빈 가드 파일을 심어 캐싱/삭제된 tmpDir 문제를 피한다.
+  fs.mkdirSync(path.dirname(JOB_GUARDS_PATH), { recursive: true });
+  fs.writeFileSync(JOB_GUARDS_PATH, JSON.stringify({ version: 1, guards: [] }), "utf8");
+  for (let i = 0; i < cap + 20; i += 1) {
+    recordJobFailureGuard({
+      user_id: "cap-user",
+      kind: "yeri_write",
+      target_platform: "windows",
+      target_device_label: `cap-device-${i}`,
+      failed_stage: "other",
+      result: { visible_error: "알 수 없는 오류" },
+    });
+  }
+  const rows = loadJobGuards().guards.filter((r) => r.user_id === "cap-user");
+  assert(rows.length === cap, `guard_rows_must_be_capped_at_${cap}_got_${rows.length}`);
+  console.log(`PASS 25) 유저당 가드 행 상한(${cap}) 초과 방지 — 오래된 행 축출 (I-2)`);
+}
+
 try {
   await mainScenario();
   await versionGateScenario();
   await signatureUnitScenario();
   await corruptGuardStoreScenario();
+  await naverSavedAtScenario();
+  await deviceScopeScenario();
+  await legacyGuardRowScenario();
+  await runnerRestartScopeScenario();
+  await deviceLabelNormalizationScenario();
+  await guardRowCapScenario();
   console.log("P1_GUARDRAILS_SMOKE_OK");
 } catch (error) {
   console.error("P1_GUARDRAILS_SMOKE_FAILED");
