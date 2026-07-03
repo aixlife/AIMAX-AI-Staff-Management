@@ -20,6 +20,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 os.environ.setdefault("AIMAX_AGENT_POLL_SECONDS", "1")
+os.environ.setdefault("AIMAX_AGENT_RUNNER_START_TIMEOUT_SECONDS", "1")
 
 from app import HeadlessNaverBlogAgent  # noqa: E402
 from web_agent.client import AimaxWebAgentClient  # noqa: E402
@@ -44,7 +45,7 @@ class FakeApiState:
                 "payload": {
                     "keywords": ["headless 테스트 글감"],
                     "mode": "save",
-                    "ai_model": "gemini-2.5-pro",
+                    "ai_model": "gemini-3.1-pro-preview",
                     "word_count": 1200,
                     "image_count": 4,
                     "category": "테스트",
@@ -157,12 +158,14 @@ def main() -> int:
     agent.naver_pw_var.set("naver-password-smoke")
     agent.api_key_var.set("gemini-api-key-smoke")
     agent.claude_key_var.set("")
-    agent.ai_model_var.set("gemini-3.1-pro-preview")
+    agent.ai_model_var.set("gemini-2.5-flash")
     agent._open_headless_settings_dialog = lambda: True  # type: ignore[method-assign]
 
     captured: list[dict[str, Any]] = []
     def fake_write(**kwargs: Any) -> dict[str, Any]:
         captured.append({"type": "worker_write", "kwargs": kwargs})
+        if "headless 테스트 글감" in kwargs.get("keywords", []):
+            time.sleep(1.4)
         agent.queue.put(("done", None))
         if "headless 실패 글감" in kwargs.get("keywords", []):
             return {
@@ -247,6 +250,8 @@ def main() -> int:
     failed_job_ids = [item.get("job_id") for item in summary["job_updates"] if item.get("status") == "failed"]
     if failed_job_ids != ["job-yeri-fail"]:
         raise RuntimeError(f"expected forced write failure to be reported: {summary}")
+    if any(item.get("job_id") == "job-yeri" and item.get("result", {}).get("error") == "local_worker_not_started_after_claim" for item in summary["job_updates"]):
+        raise RuntimeError(f"worker_running job was incorrectly start-timed-out: {summary}")
     yeri_done_update = next((item for item in summary["job_updates"] if item.get("job_id") == "job-yeri" and item.get("status") == "done"), {})
     if yeri_done_update.get("result", {}).get("cost", {}).get("currency") != "KRW":
         raise RuntimeError(f"expected yeri result cost in KRW: {summary}")
@@ -258,7 +263,7 @@ def main() -> int:
     if not any(item.get("type") == "worker_write" for item in captured):
         raise RuntimeError(f"worker_write was not called: {summary}")
     write_calls = [item for item in captured if item.get("type") == "worker_write"]
-    if not any(item.get("kwargs", {}).get("ai_model") == "gemini-2.5-pro" for item in write_calls):
+    if not any(item.get("kwargs", {}).get("ai_model") == "gemini-3.1-pro-preview" for item in write_calls):
         raise RuntimeError(f"worker_write did not receive web ai_model: {summary}")
     if not any(item.get("kwargs", {}).get("image_count") == 4 for item in write_calls):
         raise RuntimeError(f"worker_write did not receive web image_count: {summary}")
