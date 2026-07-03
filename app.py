@@ -2631,7 +2631,12 @@ class NaverBlogApp:
         # 서버에 실패 보고 후 실행기 프로세스를 자체 재시작한다. 기본 30초.
         worker_watchdog_seconds = max(10, int(os.environ.get("AIMAX_AGENT_WORKER_WATCHDOG_SECONDS", "30") or 30))
         # 안전 밸브: 자동 재시작을 끄고 실패 보고+리셋만 하려면 이 환경변수를 켠다.
-        worker_restart_enabled = not env_truthy("AIMAX_AGENT_DISABLE_WORKER_RESTART")
+        # macOS 재시작(respawn) 경로는 실기 미검증이라 검증 전까지 기본 OFF —
+        # 명시 opt-in(AIMAX_AGENT_ENABLE_WORKER_RESTART)으로만 켠다. 실패 보고+리셋은 동일하게 동작.
+        if sys.platform.startswith("win"):
+            worker_restart_enabled = not env_truthy("AIMAX_AGENT_DISABLE_WORKER_RESTART")
+        else:
+            worker_restart_enabled = env_truthy("AIMAX_AGENT_ENABLE_WORKER_RESTART")
         self._web_agent_polling_diagnostics = {
             "heartbeat_only": heartbeat_only,
             "skip_commands": skip_commands,
