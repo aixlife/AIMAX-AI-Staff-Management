@@ -1253,39 +1253,36 @@ def _image_failure(stage, error, message, provider=""):
 
 
 def _editor_image_node_count(driver):
-    """Smart Editor 본문 안에 실제 이미지/이미지 블록이 몇 개 있는지 센다."""
+    """Smart Editor 본문에 '실제로 삽입된' 이미지 개수를 센다.
+
+    과거 버그: 셀렉터에 '[class*="se-image"]' 가 있어서 툴바의 사진 버튼
+    (.se-image-toolbar-button) 까지 이미지로 오검출 → 빈 에디터에서도 before=1 이 나와
+    삽입 검증이 '1 -> 1' 로 실패 판정됐다(라이브 재현 확인). 여기서는 툴바 요소는 절대
+    세지 않고, 본문(.se-main-container) 안의 업로드된 img/이미지 컴포넌트만 센다.
+    """
     if driver is None:
         return 0
     try:
         return int(driver.execute_script(
             """
-            const roots = Array.from(document.querySelectorAll(
-              '.se-main-container, .se-content, .se-section-text, body'
-            )).filter(Boolean);
-            const root = roots[0] || document;
-            const selectors = [
-              '.se-component-image',
-              '.se-module-image',
-              '.se-image',
-              '.se-section-image',
-              '[class*="se-image"]',
-              'figure img',
-              'img'
-            ];
-            const nodes = new Set();
-            for (const selector of selectors) {
-              root.querySelectorAll(selector).forEach((node) => {
-                const rect = node.getBoundingClientRect ? node.getBoundingClientRect() : {width: 1, height: 1};
-                const style = window.getComputedStyle ? window.getComputedStyle(node) : {};
-                if (style.display === 'none' || style.visibility === 'hidden') return;
-                if (node.tagName && node.tagName.toLowerCase() === 'img') {
-                  const src = node.getAttribute('src') || node.getAttribute('data-src') || '';
-                  if (!src && rect.width <= 1 && rect.height <= 1) return;
-                }
-                nodes.add(node);
-              });
-            }
-            return nodes.size;
+            const root = document.querySelector('.se-main-container')
+                       || document.querySelector('.se-content')
+                       || document.body;
+            if (!root) return 0;
+            // 1순위: 실제 업로드/삽입된 img (http/blob/data src). 툴바 아이콘/placeholder 제외.
+            const realImgs = Array.from(root.querySelectorAll('img')).filter((img) => {
+              const src = img.getAttribute('src') || img.getAttribute('data-src') || '';
+              if (!/^(https?:|blob:|data:image)/.test(src)) return false;
+              if (/se-placeholder|blank\\.gif|1x1/.test(src)) return false;
+              const style = window.getComputedStyle ? window.getComputedStyle(img) : null;
+              if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+              return true;
+            }).length;
+            if (realImgs > 0) return realImgs;
+            // 2순위: 붙여넣기 직후 아직 src가 안 채워진 업로드 진행 상태 - 이미지 컴포넌트 노드로 감지.
+            return root.querySelectorAll(
+              '.se-module-image, .se-section-image, .se-component-image'
+            ).length;
             """
         ) or 0)
     except Exception as e:
@@ -1473,68 +1470,46 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
     try:
         before_image_count = _editor_image_node_count(driver)
         image_attempts = []
+        upload_method = ""
+        inserted = False
 
-        # 방법 1: 이미지 버튼 클릭 → file input 대기 → send_keys
-        uploaded = _try_upload_via_image_button(driver, abs_path)
-        upload_method = "image_button" if uploaded else ""
-        image_attempts.append({"method": "image_button", "uploaded": bool(uploaded)})
-
-        # 방법 2: 클립보드 붙여넣기 (Ctrl+V / Cmd+V)
-        if not uploaded:
-            logger.info("file input 방식 실패 - 클립보드 방식 시도...")
-            uploaded = _try_upload_via_clipboard(driver, abs_path)
-            image_attempts.append({"method": "clipboard", "uploaded": bool(uploaded)})
-            if uploaded:
+        # 주경로(라이브 검증됨): 클립보드 이미지 복사 → 실포커스 → 실제 Ctrl/Cmd+V.
+        # SmartEditor ONE 은 사진 버튼 클릭 시 input[type=file] 을 우리가 접근 가능한
+        # 프레임(top/mainFrame/버퍼)에 만들지 않고(0개, 라이브 확인) OS 네이티브 대화상자로
+        # 직행한다. 반면 실제 키 붙여넣기는 blogfiles.pstatic.net 업로드 3회 연속 성공으로 검증됨.
+        pasted = _try_upload_via_clipboard(driver, abs_path)
+        image_attempts.append({"method": "clipboard", "uploaded": bool(pasted)})
+        if pasted:
+            wait_long()
+            inserted = _verify_editor_image_inserted(driver, before_image_count)
+            if inserted:
                 upload_method = "clipboard"
 
-        if not uploaded:
-            logger.warning("이미지 업로드 실패 (모든 방법 소진) - 건너뜀")
-            debug_html_path = _save_editor_debug(driver, "image_upload_failed")
-            screenshot_path = _save_editor_screenshot(driver, "image_upload_failed")
-            diagnostics = _editor_image_diagnostics(
-                driver,
-                before_image_count,
-                upload_method,
-                image_attempts,
-                debug_html_path,
-                screenshot_path,
-            )
-            failure = _image_failure(
-                "image_upload",
-                "image_upload_failed",
-                (
-                    "이미지는 생성됐지만 네이버 에디터 업로드에 실패했습니다."
-                    + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
-                ),
-                used_provider,
-            )
-            if preserved_path:
-                failure["local_image_path"] = preserved_path
-            failure["diagnostics"] = diagnostics
-            return {
-                "stage": failure["stage"],
-                "error_code": failure["error_code"],
-                "message": failure["message"],
-                "generated": True,
-                "inserted": False,
-                "provider": used_provider,
-                "local_image_path": preserved_path,
-                "diagnostics": diagnostics,
-                "failure": failure,
-            }
-
-        wait_long()
-        inserted = _verify_editor_image_inserted(driver, before_image_count)
-        if not inserted and upload_method != "clipboard":
-            logger.warning("이미지 버튼 업로드 후 본문 반영 확인 실패 - 클립보드 방식으로 재시도")
-            clipboard_retry_uploaded = _try_upload_via_clipboard(driver, abs_path)
-            image_attempts.append({"method": "clipboard_retry", "uploaded": bool(clipboard_retry_uploaded)})
-            if clipboard_retry_uploaded:
-                upload_method = f"{upload_method}+clipboard_retry" if upload_method else "clipboard_retry"
+        # 폴백: 이미지 버튼 → file input send_keys (클립보드/CF_DIB 미가용 환경 대비).
+        uploaded_btn = False
+        if not inserted:
+            logger.info("클립보드 붙여넣기 미검증 - 이미지 버튼(file input) 폴백 시도...")
+            uploaded_btn = _try_upload_via_image_button(driver, abs_path)
+            image_attempts.append({"method": "image_button", "uploaded": bool(uploaded_btn)})
+            if uploaded_btn:
                 wait_long()
                 inserted = _verify_editor_image_inserted(driver, before_image_count)
+                if inserted:
+                    upload_method = "image_button"
+
+        any_upload_attempt = bool(pasted or uploaded_btn)
 
         if not inserted:
+            if any_upload_attempt:
+                logger.warning("이미지 업로드 시도했으나 본문 반영 확인 실패 - 건너뜀")
+                stage = "image_insert_verification"
+                error_code = "image_uploaded_but_not_inserted"
+                fail_message = "이미지는 생성/업로드를 시도했지만 네이버 에디터 본문에서 실제 이미지 반영을 확인하지 못했습니다."
+            else:
+                logger.warning("이미지 업로드 실패 (모든 방법 소진) - 건너뜀")
+                stage = "image_upload"
+                error_code = "image_upload_failed"
+                fail_message = "이미지는 생성됐지만 네이버 에디터 업로드에 실패했습니다."
             debug_html_path = _save_editor_debug(driver, "image_insert_not_verified_final")
             screenshot_path = _save_editor_screenshot(driver, "image_insert_not_verified_final")
             diagnostics = _editor_image_diagnostics(
@@ -1546,12 +1521,9 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
                 screenshot_path,
             )
             failure = _image_failure(
-                "image_insert_verification",
-                "image_uploaded_but_not_inserted",
-                (
-                    "이미지는 생성/업로드를 시도했지만 네이버 에디터 본문에서 실제 이미지 반영을 확인하지 못했습니다."
-                    + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")
-                ),
+                stage,
+                error_code,
+                (fail_message + (f" 로컬 보존 파일: {preserved_path}" if preserved_path else "")),
                 used_provider,
             )
             if preserved_path:
@@ -1742,25 +1714,66 @@ def _try_upload_via_clipboard(driver, abs_path):
 
         time.sleep(0.5)
 
-        # 에디터 본문 클릭 (포커스 확보)
-        for content_sel in [".se-content", ".se-text-paragraph", "[contenteditable='true']"]:
-            try:
-                content_el = driver.find_element(By.CSS_SELECTOR, content_sel)
-                driver.execute_script("arguments[0].click();", content_el)
+        # 에디터 본문에 '실제 마우스 클릭'으로 포커스를 준다.
+        # 과거 버그: execute_script("...click()") 은 SmartEditor ONE 의 키보드 입력 버퍼
+        # (숨은 input_buffer iframe)로 포커스를 넘기지 못해 이어지는 Ctrl/Cmd+V 가 에디터
+        # 밖으로 새고, 붙여넣기 핸들러가 실행되지 않았다(라이브 확인: 붙여넣기 후 이미지 미반영).
+        # ActionChains 실클릭 + JS 캐럿 설정을 하면 activeElement 가 input_buffer(iframe)로
+        # 이동하고, 실제 키 이벤트(isTrusted=true) Ctrl/Cmd+V 가 paste 핸들러에 도달한다.
+        # (라이브 검증: blogfiles.pstatic.net 업로드 3회 연속 성공)
+        target = None
+        for content_sel in [".se-content .se-text-paragraph", ".se-text-paragraph",
+                            ".se-content", "[contenteditable='true']"]:
+            els = driver.find_elements(By.CSS_SELECTOR, content_sel)
+            if els:
+                target = els[-1]
                 break
+        if target is None:
+            logger.debug("클립보드 방식: 본문 포커스 대상을 찾지 못함 - 스킵")
+            return False
+
+        try:
+            driver.execute_script("arguments[0].scrollIntoView({block:'center'});", target)
+        except Exception:
+            pass
+        try:
+            ActionChains(driver).move_to_element(target).click().perform()
+        except Exception:
+            try:
+                driver.execute_script("arguments[0].click();", target)
             except Exception:
-                continue
+                pass
+        try:
+            driver.execute_script(
+                """
+                const el = arguments[0];
+                el.focus();
+                const sel = window.getSelection();
+                if (sel) {
+                    const range = document.createRange();
+                    range.selectNodeContents(el);
+                    range.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                }
+                """,
+                target,
+            )
+        except Exception:
+            pass
 
-        time.sleep(0.3)
+        time.sleep(0.4)
 
-        # Ctrl+V (Mac은 Meta+V)
+        # Ctrl+V (Mac은 Meta+V) - 실제 키 이벤트로 전달
         if platform.system() == "Darwin":
             ActionChains(driver).key_down(Keys.META).send_keys('v').key_up(Keys.META).perform()
         else:
             ActionChains(driver).key_down(Keys.CONTROL).send_keys('v').key_up(Keys.CONTROL).perform()
 
-        time.sleep(3)
-        logger.info("이미지 업로드 성공 (클립보드 붙여넣기)")
+        # 붙여넣기 이벤트 전달까지만 담당. '성공' 여부는 호출부의
+        # _verify_editor_image_inserted 가 DOM 반영으로 판정한다(무검증 True 금지).
+        time.sleep(1.5)
+        logger.info("클립보드 붙여넣기 실행 완료 - 본문 반영은 검증 단계에서 확인")
         return True
 
     except Exception as e:

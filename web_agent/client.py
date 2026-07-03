@@ -324,6 +324,7 @@ class AimaxWebAgentClient:
         platform_label: str,
         device_label: str,
         readiness: dict[str, Any] | None = None,
+        progress_stage: str | None = None,
     ) -> dict[str, Any]:
         payload = {
             "status": status,
@@ -333,6 +334,10 @@ class AimaxWebAgentClient:
         }
         if readiness is not None:
             payload["readiness"] = readiness
+        # 현재 진행 단계(수신됨/워커기동/로그인/작성중/발행중). 서버측 대응은 맥에서
+        # 이어받으므로 러너는 값만 채워 보낸다. 미전송이면 서버가 하위호환 처리한다.
+        if progress_stage is not None:
+            payload["progress_stage"] = progress_stage
         return self._request(
             "POST",
             "/api/agent/heartbeat",

@@ -123,6 +123,24 @@ def _make_macos_dmg(app_name: str, release_dir: Path) -> Path:
     return dmg_path
 
 
+def _write_bundle_manifest(runtime_root: Path) -> Path:
+    """onedir 전체 파일의 {경로, sha256, size} 매니페스트를 onedir 루트에 생성한다.
+
+    app.py 가 시작 시(_verify_bundle_integrity) 이 매니페스트와 대조해 '업데이트 부분 교체'
+    혼합 상태(구버전 잔재/미교체 파일)를 실행 전에 감지한다. 매니페스트가 없는 산출물
+    (구버전, 맥 .app)은 검사에서 그냥 통과하므로 하위호환 걱정 없이 항상 생성한다.
+    반드시 런처/배포 문서까지 onedir 에 다 들어간 뒤(payload 확정 후) 호출해야 한다.
+    """
+    from aimax_compliance import APP_VERSION
+    from diagnostics.bundle_manifest import write_manifest
+
+    path = write_manifest(runtime_root, APP_VERSION)
+    import json as _json
+    file_count = _json.loads(path.read_text(encoding="utf-8")).get("file_count")
+    print(f"[BUILD] Bundle manifest: {path} ({file_count} files, {APP_VERSION})")
+    return path
+
+
 def _make_release_package(dist_app_dir: Path) -> Path:
     platform_tag = "windows" if IS_WIN else "macos" if IS_MAC else sys.platform
     if IS_MAC:
@@ -216,6 +234,18 @@ def _preflight_build_guard() -> None:
          "업데이트 팝업 재진입 가드 누락(무한로딩 회귀)"),
         (ROOT / "content" / "ai_text.py", "_normalize_gemini_model_id",
          "모델 정규화 누락(Pro 모델 계약 불일치)"),
+        (ROOT / "app.py", "AIMAXAgentAppMutex",
+         "설치기 AppMutex 뮤텍스 생성 누락(설치기가 실행 중 앱을 감지 못해 부분 교체 회귀)"),
+        (ROOT / "app.py", "_verify_bundle_integrity",
+         "시작 시 번들 무결성 자기검사 누락(부분 교체 혼합 상태 실행 회귀)"),
+        (ROOT / "diagnostics" / "bundle_manifest.py", "def verify_manifest",
+         "번들 매니페스트 검증 모듈 누락(무결성 자기검사 무력화)"),
+        (ROOT / "app.py", "_probe_critical_imports",
+         "핵심 모듈 임포트 조기 감지 누락(부분 교체 시 잡 실행 중 ImportError 회귀)"),
+        (ROOT / "local_agent" / "worker_watchdog.py", "evaluate_worker_watchdog",
+         "워커 기동 감시(2차 좀비보호) 판정 누락"),
+        (ROOT / "app.py", "_restart_runner_process",
+         "워커 미기동 시 실행기 자체 재시작(2차 좀비보호) 누락"),
     ]
     for path, marker, why in checks:
         try:
@@ -226,9 +256,12 @@ def _preflight_build_guard() -> None:
         if marker not in text:
             failures.append(f"{path.name}: '{marker}' 없음 — {why}")
 
-    # 3) build.py 자기검증: 런처에 버전 주입 ldflags 가 있는지
-    if "main.launcherVersion" not in Path(__file__).read_text(encoding="utf-8"):
+    # 3) build.py 자기검증: 런처 버전 주입 ldflags / 번들 매니페스트 생성이 있는지
+    build_py_text = Path(__file__).read_text(encoding="utf-8")
+    if "main.launcherVersion" not in build_py_text:
         failures.append("build.py: 런처 ldflags(main.launcherVersion) 주입 누락 — 옛 코어 종료 무력화")
+    if "_write_bundle_manifest" not in build_py_text:
+        failures.append("build.py: 번들 매니페스트 생성(_write_bundle_manifest) 누락 — 무결성 자기검사 무력화")
 
     # git 브랜치/커밋 로깅(추적용, 실패해도 비차단)
     try:
@@ -387,6 +420,11 @@ def main() -> int:
         _build_agent_launcher(onedir_dir)
     _patch_macos_bundle_metadata(app_artifact)
     release_payload = _make_release_payload(app_artifact)
+    # 매니페스트는 payload 확정(런처 빌드 + 배포 문서 복사) 후, 패키징 직전에 생성한다.
+    # 맥 .app 은 codesign 이후 파일 추가가 서명을 깨므로 onedir(dist/AIMAX)에만 생성 —
+    # 맥 런타임은 매니페스트가 없어 검사를 통과한다(구버전 호환 경로와 동일).
+    if onedir_dir.exists():
+        _write_bundle_manifest(onedir_dir)
     package_path = _make_release_package(release_payload)
     print(f"\n[BUILD] App artifact: {app_artifact}")
     print(f"[BUILD] Release payload: {release_payload}")

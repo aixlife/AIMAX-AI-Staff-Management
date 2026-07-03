@@ -17,6 +17,9 @@ from datetime import datetime, timezone
 # 프로젝트 루트를 sys.path에 추가
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 수신→워커 기동 사각지대(2차 좀비보호) 판정/라벨 순수 함수.
+from local_agent.worker_watchdog import evaluate_worker_watchdog, progress_stage_label
+
 
 def _ensure_tcl_tk_library():
     """uv/venv 로 실행 시 Tcl 이 base Python 의 tcl/tk 라이브러리를 못 찾아
@@ -109,6 +112,160 @@ def _preacquire_agent_lock():
 
 
 _preacquire_agent_lock()
+
+
+_APP_MUTEX_HANDLE = None
+
+
+def _create_app_mutex():
+    """Windows 에서 설치기(Inno Setup AppMutex 지시어)가 '앱 실행 중'을 감지할 수 있게
+    이름 있는 뮤텍스를 만든다. 설치기는 이 뮤텍스가 살아 있으면 종료를 유도/강제한 뒤
+    파일을 교체한다(업데이트 부분 교체 방지 1층). 맥/리눅스에서는 no-op.
+    이름은 packaging/windows/aimax_installer.iss 의 AppMutex 값과 반드시 일치해야 한다."""
+    global _APP_MUTEX_HANDLE
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        # 핸들은 프로세스 종료까지 유지해야 하므로 전역에 보관한다(닫으면 설치기가 감지 불능).
+        # 이미 같은 이름이 있어도(중복 실행) CreateMutexW 는 성공하므로 단일 실행 강제는
+        # 기존 single_instance 락이 계속 담당한다.
+        _APP_MUTEX_HANDLE = ctypes.windll.kernel32.CreateMutexW(None, False, "AIMAXAgentAppMutex")
+    except Exception:
+        _APP_MUTEX_HANDLE = None
+
+
+_create_app_mutex()
+
+
+def _startup_selfcheck_bypassed(argv=None):
+    """시작 시 자기검사(무결성/임포트)를 건너뛸 조건.
+
+    - --diagnostics-probe / --repair-local-state: 손상된 설치에서도 실행돼야 하는 진단/복구 경로.
+    - AIMAX_SKIP_INTEGRITY_CHECK: 지원용 긴급 우회(검사 오탐으로 사용자가 막혔을 때).
+    """
+    if _early_env_truthy("AIMAX_SKIP_INTEGRITY_CHECK"):
+        return True
+    argv = list(sys.argv[1:] if argv is None else argv)
+    for flag in ("--diagnostics-probe", "--repair-local-state"):
+        if any(arg == flag or arg.startswith(flag + "=") for arg in argv):
+            return True
+    return False
+
+
+def _report_broken_install(work_context, visible_error, detail):
+    """부분 교체/혼합 상태 감지 시 공용 처리: 오류 자동 보고 → 재설치 안내 창 → 실행 중단.
+
+    보고와 안내 창 각각이 실패해도(설치가 깨진 상태라 무엇이든 죽을 수 있음) 나머지 단계와
+    실행 중단은 반드시 진행한다. 혼합 상태로 계속 실행되는 것이 최악의 결과이기 때문이다.
+    """
+    try:
+        from diagnostics.error_reporter import submit_error_report
+
+        submit_error_report(
+            work_context=work_context,
+            visible_error=visible_error,
+            user_note="",
+            console_log=detail,
+        )
+    except Exception:
+        pass
+    try:
+        import tkinter as _tk
+        from tkinter import messagebox as _messagebox
+
+        _alert_root = _tk.Tk()
+        _alert_root.withdraw()
+        _messagebox.showerror(
+            "AIMAX 설치 오류",
+            "업데이트가 완전히 적용되지 않았습니다. 인스톨러를 다시 실행해주세요.\n\n"
+            "문제 정보는 자동으로 접수되었습니다.",
+            parent=_alert_root,
+        )
+        _alert_root.destroy()
+    except Exception:
+        pass
+    sys.exit(3)
+
+
+def _verify_bundle_integrity():
+    """frozen 번들 시작 시 빌드 매니페스트(aimax_manifest.json) 대조 — 부분 교체 감지 2층.
+
+    빌드 시 build.py 가 onedir 루트에 만든 파일별 sha256/size 매니페스트와 실제 설치
+    파일을 대조한다. 매니페스트가 없으면(구버전 설치본, 맥 .app) 통과. 검사기 자체의
+    예기치 못한 오류는 시작을 막지 않는다(보수적 통과) — 확인된 '불일치'만 실행을 중단한다.
+    """
+    if not (getattr(sys, "frozen", False) or "__compiled__" in globals()):
+        return
+    if _startup_selfcheck_bypassed():
+        return
+    try:
+        from diagnostics.bundle_manifest import verify_manifest
+
+        bundle_root = os.path.dirname(os.path.abspath(sys.executable))
+        result = verify_manifest(bundle_root)
+    except Exception:
+        return
+    if result.get("ok"):
+        return
+    mismatches = result.get("mismatches") or []
+    summary = ", ".join(str(m.get("path")) for m in mismatches[:5])
+    _report_broken_install(
+        work_context="startup bundle integrity check",
+        visible_error=(
+            f"bundle integrity mismatch: {result.get('mismatch_count')} file(s) "
+            f"(manifest {result.get('app_version')}, app {aimax_compliance_version()}): {summary}"
+        ),
+        detail=json.dumps(result, ensure_ascii=False)[:6000],
+    )
+
+
+def aimax_compliance_version():
+    """오류 보고 문맥용 앱 버전. 부트스트랩 초기라 실패해도 시작을 막지 않는다."""
+    try:
+        from aimax_compliance import APP_VERSION
+
+        return APP_VERSION
+    except Exception:
+        return "unknown"
+
+
+_verify_bundle_integrity()
+
+
+# 부분 교체 임포트 불일치가 가장 자주 터진 핵심 모듈(예: v1.0.3 의
+# "cannot import name 'measure_visible_char_count' from 'content.ai_text'" 24건).
+# 잡 실행 중이 아니라 시작 시점에 감지해 사용자에게 원인을 알려준다(방어 3층).
+_CRITICAL_BOOT_MODULES = ("content.ai_text", "posting.editor", "local_agent.runtime")
+
+
+def _probe_critical_imports():
+    """frozen 번들 시작 시 핵심 모듈을 try-import — 임포트 불일치 조기 감지.
+
+    ImportError(부분 교체의 전형 증상)만 재설치 안내 경로로 보낸다. 그 외 예외는
+    기존과 동일하게 사용 시점에 드러나도록 시작을 막지 않는다(오탐 방지).
+    """
+    if not (getattr(sys, "frozen", False) or "__compiled__" in globals()):
+        return
+    if _startup_selfcheck_bypassed():
+        return
+    import importlib
+
+    for module_name in _CRITICAL_BOOT_MODULES:
+        try:
+            importlib.import_module(module_name)
+        except ImportError:
+            _report_broken_install(
+                work_context="startup critical import probe",
+                visible_error=f"critical module import failed: {module_name} (app {aimax_compliance_version()})",
+                detail=traceback.format_exc()[:6000],
+            )
+        except Exception:
+            pass
+
+
+_probe_critical_imports()
 
 
 def _hidden_subprocess_kwargs():
@@ -1161,6 +1318,26 @@ def _save_secret_setting(key, value, *, delete_when_blank=False):
     _mark_secret_cleared(key)
 
 
+def _stamp_naver_account_saved_at(data, naver_id, naver_pw):
+    """네이버 자격증명(ID+비밀번호)이 실제로 저장될 때 그 시각(ISO 8601)을 기록한다.
+
+    서버는 readiness.naver_account.saved_at 을 마지막 로그인 실패 시각과 비교해
+    네이버 로그인 가드 자동 해제(M-2)에 쓴다. 빈 값 저장(기존 키 보존)일 때는
+    갱신하지 않아, 실제 자격증명이 저장된 시점만 반영되게 한다.
+    """
+    if (naver_id or "").strip() and (naver_pw or "").strip():
+        data["naver_account_saved_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def load_naver_account_saved_at():
+    """로컬 설정에 기록된 네이버 자격증명 저장 시각(ISO 8601). 없으면 None."""
+    data = _load_settings_data()
+    if not isinstance(data, dict):
+        return None
+    value = str(data.get("naver_account_saved_at") or "").strip()
+    return value or None
+
+
 def save_settings(naver_id, naver_pw, api_key, ai_model=_DEFAULT_AI_MODEL, claude_key="", openai_key="", apify_key=""):
     # 민감 정보는 로컬 보안 저장소에만 저장한다. 일반 저장에서 빈 값은 기존 키 보존으로 처리한다.
     _save_secret_setting("naver_pw", naver_pw)
@@ -1171,6 +1348,7 @@ def save_settings(naver_id, naver_pw, api_key, ai_model=_DEFAULT_AI_MODEL, claud
     data = _load_settings_data()
     data["naver_id"] = naver_id
     data["ai_model"] = _normalize_ai_model(ai_model)
+    _stamp_naver_account_saved_at(data, naver_id, naver_pw)
     _save_settings_data(data)
 
 
@@ -1181,6 +1359,7 @@ def save_local_security_settings(naver_id, naver_pw, ai_model=None):
     data["naver_id"] = naver_id
     if ai_model is not None:
         data["ai_model"] = _normalize_ai_model(ai_model)
+    _stamp_naver_account_saved_at(data, naver_id, naver_pw)
     _save_settings_data(data)
 
 
@@ -1468,6 +1647,9 @@ class NaverBlogApp:
         self.web_agent_active_job_kind = ""
         self.web_agent_active_job_stage = ""
         self.web_agent_active_job_latest_stage_error = ""
+        # 실행 워커 스레드가 실제로 첫 줄을 실행한 시각(time.monotonic). 0 이면 미기동.
+        # 2차 좀비보호(워커 기동 감시)의 핵심 신호.
+        self.web_agent_worker_started_at = 0.0
         self._shown_update_popup_keys = set()
         # 웹앱 명령 재진입/중복 처리 방지: open_settings 가 done 처리되기 전 폴링마다
         # 재전달되어 설정창이 중첩되며 무한 로딩되는 문제를 막는다.
@@ -2005,6 +2187,7 @@ class NaverBlogApp:
                     platform_label=current_platform_label(),
                     device_label=default_device_label(),
                     readiness=self._collect_web_agent_readiness(),
+                    progress_stage=self._current_progress_stage(),
                 )
                 self.queue.put(("log", "[웹앱 연결] 설정 변경 상태를 대시보드에 즉시 반영했습니다."))
             except Exception as error:
@@ -2248,6 +2431,7 @@ class NaverBlogApp:
         self.web_agent_active_job_kind = ""
         self.web_agent_active_job_stage = ""
         self.web_agent_active_job_latest_stage_error = ""
+        self.web_agent_worker_started_at = 0.0
 
     def _clear_web_agent_active_job(self):
         self._reset_web_agent_active_job()
@@ -2260,6 +2444,33 @@ class NaverBlogApp:
         self.web_agent_active_job_stage = str(stage or "")[:80]
         if error:
             self.web_agent_active_job_latest_stage_error = str(error)[:200]
+        # 계측(2차 좀비보호 근거): 수신→워커 기동 구간의 각 단계 전이를 로그로 남긴다.
+        # self._log 은 큐 경유라 폴링/워커/UI 어느 스레드에서 호출해도 안전하다.
+        try:
+            jid = str(self.web_agent_active_job_id or "-")[:80]
+            label = progress_stage_label(self.web_agent_active_job_stage)
+            line = f"[웹앱 작업][단계] {self.web_agent_active_job_stage} ({label}) job={jid}"
+            if error:
+                line += f" 오류={str(error)[:120]}"
+            self._log(line)
+        except Exception:
+            pass
+
+    def _mark_web_agent_progress(self, stage):
+        """실행 워커 안에서 진행 단계(로그인/작성중/발행중 등)를 갱신한다.
+
+        원격 잡을 물고 있을 때만 갱신하여 로컬(UI 버튼) 작업의 진단을 오염시키지 않는다.
+        갱신된 단계는 하트비트 progress_stage 로 서버에 전송된다.
+        """
+        if not getattr(self, "web_agent_active_job_id", None):
+            return
+        self._set_web_agent_active_job_stage(stage)
+
+    def _current_progress_stage(self):
+        """하트비트로 보낼 현재 진행 단계(한국어). 활성 잡이 없으면 None."""
+        if not getattr(self, "web_agent_active_job_id", None):
+            return None
+        return progress_stage_label(getattr(self, "web_agent_active_job_stage", ""))
 
     def _web_agent_active_job_diagnostics(self):
         job_id = str(getattr(self, "web_agent_active_job_id", "") or "")[:80]
@@ -2366,6 +2577,9 @@ class NaverBlogApp:
                 "status": self._web_agent_status_value(naver_ready),
                 "has_id": bool(naver_id),
                 "has_password": bool(naver_pw),
+                # 네이버 자격증명이 로컬 설정에 저장된 시각(ISO 8601). 없으면 null.
+                # 서버는 이 값이 마지막 로그인 실패 이후이면 로그인 가드를 자동 해제(M-2).
+                "saved_at": load_naver_account_saved_at(),
             },
             "ai_keys": {
                 "gemini": self._web_agent_status_value(has_gemini),
@@ -2413,7 +2627,16 @@ class NaverBlogApp:
         heartbeat_only = env_truthy("AIMAX_AGENT_HEARTBEAT_ONLY")
         skip_commands = heartbeat_only or env_truthy("AIMAX_AGENT_DISABLE_COMMANDS")
         skip_jobs = heartbeat_only or env_truthy("AIMAX_AGENT_DISABLE_JOBS")
-        runner_start_timeout_seconds = max(10, int(os.environ.get("AIMAX_AGENT_RUNNER_START_TIMEOUT_SECONDS", "90") or 90))
+        # 2차 좀비보호(워커 기동 감시): 잡 수신 후 N초 안에 실행 워커가 기동하지 않으면
+        # 서버에 실패 보고 후 실행기 프로세스를 자체 재시작한다. 기본 30초.
+        worker_watchdog_seconds = max(10, int(os.environ.get("AIMAX_AGENT_WORKER_WATCHDOG_SECONDS", "30") or 30))
+        # 안전 밸브: 자동 재시작을 끄고 실패 보고+리셋만 하려면 이 환경변수를 켠다.
+        # macOS 재시작(respawn) 경로는 실기 미검증이라 검증 전까지 기본 OFF —
+        # 명시 opt-in(AIMAX_AGENT_ENABLE_WORKER_RESTART)으로만 켠다. 실패 보고+리셋은 동일하게 동작.
+        if sys.platform.startswith("win"):
+            worker_restart_enabled = not env_truthy("AIMAX_AGENT_DISABLE_WORKER_RESTART")
+        else:
+            worker_restart_enabled = env_truthy("AIMAX_AGENT_ENABLE_WORKER_RESTART")
         self._web_agent_polling_diagnostics = {
             "heartbeat_only": heartbeat_only,
             "skip_commands": skip_commands,
@@ -2485,36 +2708,53 @@ class NaverBlogApp:
         while not self.web_agent_stop_event.is_set() and getattr(self, "_web_agent_poll_generation", generation) == generation:
             try:
                 now = time.monotonic()
-                if self.web_agent_active_job_id and not self.running:
-                    claimed_at = float(getattr(self, "web_agent_active_job_claimed_at", 0.0) or 0.0)
-                    if claimed_at and now - claimed_at >= runner_start_timeout_seconds:
+                # 2차 좀비보호: 잡 수신(claim) 후 실행 워커 스레드가 제때 기동했는지 감시한다.
+                # 하트비트가 살아 있어도 워커가 안 올라오는 사각지대를 러너 스스로 판정한다.
+                # 단, 모달 설정창이 열려 있으면 UI 큐가 의도적으로 막혀 있는 것이므로(사용자
+                # 입력 중) 오탐/입력 유실을 막기 위해 감시를 건너뛴다.
+                if self.web_agent_active_job_id and not getattr(self, "_local_settings_dialog_open", False):
+                    worker_thread = getattr(self, "worker_thread", None)
+                    watchdog = evaluate_worker_watchdog(
+                        has_active_job=bool(self.web_agent_active_job_id),
+                        claimed_at=float(getattr(self, "web_agent_active_job_claimed_at", 0.0) or 0.0),
+                        now=now,
+                        worker_started_at=float(getattr(self, "web_agent_worker_started_at", 0.0) or 0.0),
+                        worker_thread_alive=bool(worker_thread is not None and worker_thread.is_alive()),
+                        stage=self.web_agent_active_job_stage,
+                        timeout_seconds=worker_watchdog_seconds,
+                    )
+                    if watchdog:
                         stuck_job_id = self.web_agent_active_job_id
                         active_job = self._web_agent_active_job_diagnostics()
-                        stage = active_job.get("active_job_stage") or "claimed"
-                        error = "local_ui_queue_not_processed_after_claim" if stage in {"claimed", "queued_to_ui"} else "local_worker_not_started_after_claim"
-                        message = (
-                            "로컬 실행기가 작업을 받았지만 내부 UI 큐가 작업 시작을 처리하지 못했습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
-                            if error == "local_ui_queue_not_processed_after_claim"
-                            else "로컬 실행기가 작업을 받았지만 내부 실행 워커가 시작되지 않았습니다. 실행기를 재시작한 뒤 다시 시도해주세요."
-                        )
+                        self.queue.put((
+                            "log",
+                            f"[웹앱 작업] 워커 기동 감시: {watchdog['elapsed']}초 안에 실행 워커가 기동하지 않았습니다 "
+                            f"(단계={watchdog['stage']}, 사유={watchdog['error']}).",
+                        ))
+                        # (a) 서버에 명확한 실패 보고(동기 호출이라 재시작 전 전송이 보장된다).
                         try:
                             client.update_job(
                                 stuck_job_id,
                                 "failed",
-                                message,
+                                watchdog["message"],
                                 "error",
                                 result={
                                     "ok": False,
-                                    "stage": "runner_start_timeout",
-                                    "active_job_stage": stage,
-                                    "error": error,
+                                    "stage": "worker_watchdog_timeout",
+                                    "active_job_stage": watchdog["stage"],
+                                    "error": watchdog["error"],
+                                    "watchdog_seconds": worker_watchdog_seconds,
                                     "active_job": active_job,
                                 },
                             )
                         except Exception as update_error:
-                            self.queue.put(("log", f"[웹앱 작업] 시작 타임아웃 상태 전송 오류: {update_error}"))
-                        self.queue.put(("log", f"[웹앱 작업] 시작 타임아웃으로 작업을 실패 처리했습니다: {stuck_job_id}"))
+                            self.queue.put(("log", f"[웹앱 작업] 워커 기동 감시 실패 보고 전송 오류: {update_error}"))
+                        self.queue.put(("log", f"[웹앱 작업] 워커 기동 감시로 작업을 실패 처리했습니다: {stuck_job_id}"))
                         self._reset_web_agent_active_job()
+                        # (b) 실행기 프로세스 자체 재시작(런처는 감독하지 않으므로 새 인스턴스를 직접 띄운다).
+                        if worker_restart_enabled:
+                            self._restart_runner_process(reason=watchdog["error"])
+                            return  # 재시작 경로는 os._exit 로 종료되므로 정상적으로는 도달하지 않음
 
                 if now >= next_version_check_at:
                     next_version_check_at = now + version_check_seconds
@@ -2529,6 +2769,7 @@ class NaverBlogApp:
                         platform_label=platform_label,
                         device_label=device_label,
                         readiness=self._collect_web_agent_readiness(),
+                        progress_stage=self._current_progress_stage(),
                     )
                     if version_status:
                         self.queue.put(("web_agent_status", (f"웹앱 연결됨. {version_status}.", "#C0392B")))
@@ -2578,6 +2819,8 @@ class NaverBlogApp:
                             self.web_agent_active_job_id = job_id
                             self.web_agent_active_job_kind = str(job_kind or "")[:80]
                             self.web_agent_active_job_claimed_at = time.monotonic()
+                            # 새 잡 수신 시 워커 기동 신호를 초기화(이전 잡의 값 잔재 방지).
+                            self.web_agent_worker_started_at = 0.0
                             self._set_web_agent_active_job_stage("claimed", job_id=job_id, kind=job_kind)
                             try:
                                 client.update_job(
@@ -3211,6 +3454,70 @@ class NaverBlogApp:
 
         threading.Thread(target=_shutdown, daemon=True).start()
 
+    def _restart_runner_process(self, reason=""):
+        """2차 좀비보호: 실행 워커가 기동하지 못한 경우 실행기 프로세스를 자체 재시작한다.
+
+        Go 런처(aimax_agent_launcher.go)는 코어를 8초 뒤 핸드오프하고 스스로 종료하므로
+        코어를 감독(재기동)하지 않는다. 따라서 _handle_stop_agent_command 처럼 os._exit 만
+        하면 아무도 코어를 다시 띄우지 않는다. 그래서 런처에 의존하지 않고 새 코어 인스턴스를
+        직접(detached) 띄운 뒤 현재 프로세스를 종료한다.
+
+        단일 인스턴스 락은 실행 중인 옛 PID 를 소유자로 보므로, 새 인스턴스가 기동을
+        거부당하지 않도록 종료 직전에 락을 먼저 해제(파일 삭제)한 뒤 새 인스턴스를 띄운다.
+        폴링(백그라운드) 스레드에서 호출되며 Tk UI 는 건드리지 않는다.
+        """
+        import subprocess as _sub
+        import time as _t
+        self.queue.put(("log", f"[웹앱 작업][자동복구] 실행 워커가 기동하지 않아 실행기를 자동 재시작합니다. (사유: {reason})"))
+        try:
+            self.web_agent_stop_event.set()
+            self.stop_event.set()
+            self.running = False
+        except Exception:
+            pass
+        if getattr(self, "driver", None):
+            try:
+                self.driver.quit()
+            except Exception:
+                pass
+        # 재기동 대상/인자: 프리즌(배포)에서는 sys.executable 이 AIMAX.exe 다.
+        if getattr(sys, "frozen", False):
+            args = [sys.executable, "--agent", "--connect"]
+            cwd = os.path.dirname(sys.executable)
+        else:
+            args = [sys.executable, os.path.abspath(__file__), "--agent", "--connect"]
+            cwd = os.path.dirname(os.path.abspath(__file__))
+        # 단일 인스턴스 락 해제(파일 삭제) — 새 인스턴스가 옛 PID 락 때문에 거부되지 않게.
+        lock = getattr(self, "_single_instance_lock", None)
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception:
+                pass
+            self._single_instance_lock = None
+        _t.sleep(0.3)  # 락 파일 삭제 반영 대기
+        spawned = False
+        try:
+            popen_kwargs = {"cwd": cwd, "close_fds": True}
+            if sys.platform.startswith("win"):
+                creationflags = getattr(_sub, "DETACHED_PROCESS", 0) | getattr(_sub, "CREATE_NEW_PROCESS_GROUP", 0)
+                if creationflags:
+                    popen_kwargs["creationflags"] = creationflags
+                try:
+                    startupinfo = _sub.STARTUPINFO()
+                    startupinfo.dwFlags |= _sub.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = _sub.SW_HIDE
+                    popen_kwargs["startupinfo"] = startupinfo
+                except Exception:
+                    pass
+            _sub.Popen(args, **popen_kwargs)
+            spawned = True
+            self.queue.put(("log", "[웹앱 작업][자동복구] 새 실행기 인스턴스를 시작했습니다. 잠시 후 자동으로 다시 연결됩니다."))
+        except Exception as error:
+            self.queue.put(("log", f"[웹앱 작업][자동복구] 실행기 재시작 실패: {error}"))
+        _t.sleep(1.0)  # 로그/보고가 전송될 최소 시간 확보
+        os._exit(0 if spawned else 1)
+
     def _handle_web_agent_command(self, data):
         client = data.get("client")
         command = data.get("command") or {}
@@ -3385,6 +3692,9 @@ class NaverBlogApp:
     def _run_remote_job_worker(self, client, job):
         job_id = job.get("id") or ""
         kind = job.get("kind") or ""
+        # 워커 스레드가 실제로 기동했음을 표시(2차 좀비보호 감시의 핵심 신호).
+        # 단순 float 대입이라 GIL 하에서 스레드 안전하다.
+        self.web_agent_worker_started_at = time.monotonic()
         self._set_web_agent_active_job_stage("worker_thread_started", job_id=job_id, kind=kind)
         try:
             client.update_job(
@@ -6019,6 +6329,7 @@ class NaverBlogApp:
                 self._log("스텔스 브라우저 시작...")
                 self.driver = create_stealth_driver()
                 stage = "naver_login"
+                self._mark_web_agent_progress("login")
                 self._log("네이버 로그인 중...")
                 login(self.driver, nid, npw)
 
@@ -6094,6 +6405,7 @@ class NaverBlogApp:
                         self._log("사용자에 의해 중지됨")
                         break
                     post_stage = "content_generation"
+                    self._mark_web_agent_progress("writing")
                     post_usage = {}
                     # 콘텐츠 생성/로드
                     if post["type"] == "artifact":
@@ -6286,6 +6598,7 @@ class NaverBlogApp:
                             if self.stop_event.is_set():
                                 self.running = False
                                 break
+                            self._mark_web_agent_progress("publishing")
                             if effective_mode == "save":
                                 post_stage = "smart_editor_save"
                                 stage = post_stage
