@@ -16,7 +16,6 @@ from constants import (
     FONT_DROPDOWN, FONT_OPTIONS,
 )
 from browser.human_actions import human_type, human_click, send_keys_action
-from browser.session_manager import sync_pc_blog_login
 from content.gemini_image import generate_image as generate_gemini_image
 from content.openai_image import generate_image as generate_openai_image
 from utils.delays import wait_short, wait_medium, wait_long
@@ -339,8 +338,14 @@ def navigate_to_editor(driver, naver_id=None, naver_pw=None):
             )
 
         login_on_current_nid_page(driver, naver_id, naver_pw)
-        # NID 재로그인 뒤에는 blog.naver.com 쿠키를 다시 심어 주는 편이 안정적이다.
-        sync_pc_blog_login(driver)
+        # NID 재로그인은 원래 목적지(글쓰기 URL)로 리다이렉트하며 그 과정에서 blog.naver.com
+        # 쿠키까지 설정된다. 예전처럼 여기서 무조건 sync_pc_blog_login(NID 재경유)을 부르면
+        # 방금 도착한 편집 페이지에서 다시 이탈하고, 세션 전파 타이밍에 따라 "NID 세션 미인식"
+        # 스퓨리어스 경고까지 남긴다(2026-07-04 실측). 글쓰기 URL에 도착했으면 그대로 진행하고,
+        # 다른 페이지에 착지했으면 다음 시도에서 글쓰기 URL 재진입만 한다(sync 불필요).
+        current_after_nid = driver.current_url or ""
+        if "nidlogin.login" not in current_after_nid and "Redirect=Write" in current_after_nid:
+            break
         time.sleep(1)
 
         if attempt == 1 and "nidlogin.login" in driver.current_url:
