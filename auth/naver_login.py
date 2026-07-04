@@ -2,13 +2,20 @@ import json
 import time
 import random
 import platform
+from urllib.parse import urlparse
 import pyperclip
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
 from constants import NAVER_LOGIN_URL, LOGIN_BUTTON
-from browser.session_manager import save_session, load_session, sync_pc_blog_login
+from browser.session_manager import (
+    save_session,
+    load_session,
+    load_session_cdp,
+    has_recent_session_file,
+    sync_pc_blog_login,
+)
 from utils.delays import wait_medium, wait_short
 from utils.logger import get_logger
 
@@ -160,27 +167,82 @@ def login_on_current_nid_page(driver, naver_id, naver_pw, wait_seconds=4):
     return True
 
 
-def login(driver, naver_id, naver_pw):
-    """클립보드 기반 네이버 로그인
+def _blog_session_ready(driver, naver_id=None):
+    """blog.naver.com에 접속해 로그인 상태인지 빠르게 확인한다.
 
-    1) 저장된 세션(쿠키) 복원 시도
-    2) 세션 복원 성공 시 → NID 경유 PC 블로그(blog.naver.com) 로그인 동기화
-       - 동기화 실패 시 → 재로그인(fresh login)으로 폴백
-    3) 세션 없거나 복원 실패 시 → 직접 로그인 후 PC 블로그 동기화
+    sync_pc_blog_login이 쓰는 로그아웃 마커('btn_blog_login')를 그대로 사용하므로
+    cbox 댓글까지 동일한 유효성을 보장한다. 페이지 이동 1회 + page_source 읽기만 수행하며,
+    키보드/JS 주입은 하지 않는다(CAPTCHA/봇 탐지 민감 구간이라 fast path에서는 읽기만).
+
+    - 현재 호스트가 blog.naver.com / *.blog.naver.com(예: section.blog.naver.com)이고
+      page_source에 'btn_blog_login'이 없으면 로그인 상태로 판단.
+    - 네이버 강제 재인증으로 nid.naver.com으로 튕기면 준비 안 된 것으로 간주(여기서 로그인 시도 안 함).
+    주의: 이 함수는 "로그인됨"만 판단하고 어느 계정인지는 판단하지 않는다 — 로그인된
+      블로그 페이지 초기 HTML에는 계정 ID가 노출되지 않음을 실측으로 확인함(2026-07-04).
+      계정 일치는 호출부(login)의 세션 파일 게이트가 담당한다.
     """
-    # 세션 복원 시도
-    if load_session(driver, naver_id):
-        # PC 블로그 로그인 동기화 (cbox 댓글에 필수)
-        if sync_pc_blog_login(driver):
-            logger.info("저장된 세션으로 로그인 성공 (PC 블로그 동기화 완료)")
-            return True
-        else:
-            logger.info("PC 블로그 동기화 실패 - 재로그인 진행...")
-            # fall through to fresh login
+    try:
+        driver.get("https://blog.naver.com")
+        wait_medium()
 
-    # 직접 로그인
+        current_host = urlparse(driver.current_url or "").hostname or ""
+        # NID 강제 재인증으로 튕긴 경우 → not-ready. 로그인은 login()의 폴백 흐름이 처리한다.
+        if current_host == "nid.naver.com" or current_host.endswith(".nid.naver.com"):
+            return False
+
+        is_blog_host = (
+            current_host == "blog.naver.com"
+            or current_host.endswith(".blog.naver.com")
+        )
+        if not is_blog_host:
+            return False
+
+        # sync_pc_blog_login과 동일한 로그아웃 마커
+        if "btn_blog_login" in driver.page_source:
+            return False
+        return True
+    except Exception as e:
+        logger.warning(f"블로그 세션 확인 중 오류: {e}")
+        return False
+
+
+def login(driver, naver_id, naver_pw):
+    """네이버 로그인 (기존 세션 우선 확인 방식)
+
+    사용자가 로그인 창 깜빡임/페이지 바운스를 겪지 않도록, 매번 전체 로그인
+    시퀀스를 도는 대신 살아있는 세션을 먼저 확인한다.
+
+    1) 빠른 경로(프로필 세션): 브라우저 영구 프로필에 세션이 살아있으면 blog.naver.com
+       확인만 하고 추가 이동 없이 종료. 쿠키 파일은 건드리지 않음.
+    2) 쿠키 복원(CDP): 페이지 이동 없이 쿠키 파일을 CDP로 주입 후 세션 재확인.
+    3) 신규 로그인 폴백: 위 두 경로 실패 시 기존과 동일하게 직접 로그인 + PC 블로그 동기화.
+
+    최악의 경우에도 오늘과 완전히 동일한 동작(신규 로그인 + sync)으로 degrade 된다.
+    함수 시그니처와 True 반환 / 예외 발생 계약은 기존과 동일하게 유지한다.
+    """
+    # 1) 빠른 경로: 브라우저 프로필 세션 확인 (쿠키 파일 미사용, save_session 호출 없음)
+    # 계정 게이트: 프로필은 계정을 바꿔 저장한 뒤에도 이전 계정 세션을 들고 있을 수 있다.
+    # 페이지에서 계정 ID 를 읽을 수 없으므로(초기 HTML 미노출 실측), "이 계정으로 이 기기에서
+    # 로그인한 이력(=계정별 세션 파일, 30일 이내)"이 있을 때만 fast path 를 허용한다.
+    # 새 계정으로 바꾸면 파일이 없어 자동으로 신규 로그인 경로를 타고, 예리 글쓰기 URL 은
+    # 소유자가 아니면 NID 재인증을 요구하므로 2차 방어선이 된다.
+    if has_recent_session_file(naver_id) and _blog_session_ready(driver, naver_id):
+        logger.info("브라우저 프로필 세션으로 로그인 확인 — 추가 이동 없이 진행 (경로: 프로필 세션)")
+        return True
+
+    # 2) 쿠키 복원(CDP): 페이지 이동 없이 쿠키만 주입 후 재확인 (쿠키가 파일에서 왔으므로 save 불필요)
+    # 주의: 복원이 실제로 이뤄졌을 때만 재확인한다 — 이 계정의 쿠키 파일이 없는데도 재확인하면
+    # 프로필에 남은 다른 계정 세션이 이 단계로 통과할 수 있다(fast path 게이트 우회 방지).
+    if load_session_cdp(driver, naver_id) and _blog_session_ready(driver, naver_id):
+        logger.info("쿠키 복원(CDP)으로 로그인 확인 — 추가 이동 없이 진행 (경로: 쿠키 복원(CDP))")
+        return True
+
+    # 3) 신규 로그인 폴백 (기존 동작과 동일)
+    logger.info("기존 세션 확인 실패 - 신규 로그인 진행 (경로: 신규 로그인)")
     _fresh_login(driver, naver_id, naver_pw)
 
-    # 로그인 후 PC 블로그 세션 동기화
+    # 신규 로그인 직후 이미 blog 세션이 잡혔으면 sync 생략, 아니면 기존과 동일하게 sync
+    if _blog_session_ready(driver, naver_id):
+        return True
     sync_pc_blog_login(driver)
     return True
