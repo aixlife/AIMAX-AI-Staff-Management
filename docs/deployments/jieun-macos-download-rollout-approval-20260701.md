@@ -17,9 +17,14 @@
 
 - Local file: `dist/upload_installers/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg`
 - Size: 36 MB
-- SHA256: `4f509535844595cf0d7d8c84b3c1d701b27d989d30b74695feacb1838e536a1b`
+- SHA256: `14c4c6d4099fee057100ba0ea0ae469730854c6a6a7c80e807fbf4dd938a8619`
 - Built from source branch: `https://github.com/aixlife/aimax-viseo/tree/feature/jieun-tauri-macos-v017`
-- Source commit: `441c481 Add Tauri macOS distribution build`
+- Source commit: `d6ae2eb Disable native window shadow and align macOS memo copy`
+- Supersedes the 2026-07-01 DMG (`4f509535…`), which is discarded due to a
+  Retina coordinate bug that could place the character window off-screen.
+- 2026-07-04 rebuild also includes: macOS-unsupported action buttons fully
+  hidden, monochrome line icon set, native window shadow disabled (removed
+  the sticker-like outline next to the character), Spaces visibility fix.
 
 ## Prepared AIMAX Web Branch
 
@@ -59,6 +64,11 @@
 - Pre-deploy production smoke intentionally fails because production still has no macOS Jieun option:
   - `node scripts/smoke_jieun_macos_download.mjs`
   - observed error: `Jieun supported_platforms does not include macos`
+- 2026-07-04 desktop cleanup (`바탕화면 청소`/`바탕화면 복구`) real-device e2e:
+  hide pass flagged every Desktop item via `chflags hidden` and wrote the
+  manifest (`~/Library/Application Support/AIMAX Office Manager/desktop_hidden_tauri.json`),
+  restore pass cleared all hidden flags and emptied the manifest. Verified on
+  the installed production build (cdhash identical to the DMG payload).
 
 ## Deployment Commands
 
@@ -80,7 +90,7 @@ node scripts/smoke_jieun_macos_download.mjs
 Expected:
 
 - DMG URL returns `HTTP 200`.
-- Remote SHA256 matches `4f509535844595cf0d7d8c84b3c1d701b27d989d30b74695feacb1838e536a1b`.
+- Remote SHA256 matches `14c4c6d4099fee057100ba0ea0ae469730854c6a6a7c80e807fbf4dd938a8619`.
 - `/api/workers` shows Jieun with `windows` and `macos`.
 - AIMAX web app shows a Mac download option on macOS.
 - `scripts/smoke_jieun_macos_download.mjs` exits 0 and prints `ok: true`.
@@ -88,6 +98,19 @@ Expected:
 ## Important Release Risk
 
 This DMG is ad-hoc signed because this Mac currently has `0 valid identities` for code signing. It can be downloaded, mounted, copied, and launched locally, but users who download it from the browser may see macOS Gatekeeper warnings until a Developer ID Application certificate and Apple notarization are applied.
+
+Ad-hoc signing also affects the screen capture permission: macOS ties the
+Screen Recording grant to the binary's code hash, so every new app version
+users install resets the permission and macOS shows the "시스템 설정 열기"
+prompt again on first capture. Users grant once per installed version. If a
+stale grant from an older binary lingers, `tccutil reset ScreenCapture
+com.aimaxviseo.office` clears it. A stable signing identity (Developer ID)
+would make the grant survive updates.
+
+The same caveat applies to the Desktop-folder permission used by `바탕화면
+청소`: on a fresh machine the first cleanup click may show a one-time
+"데스크탑 폴더의 파일에 접근" consent prompt, and an ad-hoc re-signed update
+can require granting it again.
 
 For a public customer release with fewer macOS trust warnings, first rebuild with:
 
