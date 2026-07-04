@@ -132,6 +132,66 @@ def load_session(driver, account_id):
         return False
 
 
+def load_session_cdp(driver, account_id):
+    """페이지 이동 없이 CDP(Network.setCookie)로 쿠키를 주입해 세션을 복원한다.
+
+    load_session과 동일한 파일 존재/만료 검사를 거치되, driver.get 같은 페이지 이동 없이
+    쿠키만 심는다. 사용자가 겪는 로그인 창 깜빡임/페이지 바운스를 없애기 위함.
+
+    필드 매핑: name, value, domain, path, secure, httpOnly, expiry -> expires.
+    name/value 없는 쿠키는 건너뛴다. 성공 개수를 센다.
+
+    어떤 예외든 발생하면 기존 load_session(페이지 이동 방식)으로 폴백한다.
+    반환값: 쿠키 주입 성공 여부(True/False). 실제 로그인 유효성은 호출부에서 다시 확인한다.
+    """
+    try:
+        cookie_path = _get_cookie_path(account_id)
+        if not os.path.exists(cookie_path):
+            logger.info(f"저장된 세션 없음(CDP): {account_id}")
+            return False
+
+        # 쿠키 파일이 너무 오래됐으면 무시한다. 실제 유효성은 복원 후 다시 확인한다.
+        file_age = time.time() - os.path.getmtime(cookie_path)
+        if file_age > _SESSION_MAX_AGE_SECONDS:
+            logger.info(f"세션 파일 만료(CDP, 30일 초과): {account_id}")
+            os.remove(cookie_path)
+            return False
+
+        with open(cookie_path, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+
+        added = 0
+        skipped = 0
+        for cookie in cookies:
+            name = cookie.get("name")
+            value = cookie.get("value")
+            if not name or value is None:
+                skipped += 1
+                continue
+
+            params = {"name": name, "value": value}
+            domain = cookie.get("domain")
+            if domain:
+                params["domain"] = domain
+            params["path"] = cookie.get("path", "/")
+            if "secure" in cookie:
+                params["secure"] = bool(cookie.get("secure"))
+            if "httpOnly" in cookie:
+                params["httpOnly"] = bool(cookie.get("httpOnly"))
+            if cookie.get("expiry") is not None:
+                params["expires"] = cookie.get("expiry")
+
+            # 예외는 바깥 try로 전파시켜 기존 load_session으로 폴백하도록 한다.
+            driver.execute_cdp_cmd("Network.setCookie", params)
+            added += 1
+
+        logger.info(f"쿠키 CDP 주입: {added}개 성공, {skipped}개 건너뜀 (페이지 이동 없음)")
+        return added > 0
+    except Exception as e:
+        logger.warning(f"CDP 세션 복원 실패 - 기존 방식으로 폴백: {e}")
+        return load_session(driver, account_id)
+
+
 def sync_pc_blog_login(driver):
     """blog.naver.com 로그인 세션 동기화 (NID 경유)
 
