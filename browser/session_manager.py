@@ -132,6 +132,20 @@ def load_session(driver, account_id):
         return False
 
 
+def has_recent_session_file(account_id):
+    """이 계정으로 이 기기에서 로그인한 이력이 있는지(계정별 세션 파일, 30일 이내) 확인한다.
+
+    fast path 계정 게이트용 — 파일을 읽지 않고 존재/나이만 본다. 판단 불가 시 False(보수적).
+    """
+    try:
+        cookie_path = _get_cookie_path(account_id)
+        if not os.path.exists(cookie_path):
+            return False
+        return (time.time() - os.path.getmtime(cookie_path)) <= _SESSION_MAX_AGE_SECONDS
+    except Exception:
+        return False
+
+
 def load_session_cdp(driver, account_id):
     """페이지 이동 없이 CDP(Network.setCookie)로 쿠키를 주입해 세션을 복원한다.
 

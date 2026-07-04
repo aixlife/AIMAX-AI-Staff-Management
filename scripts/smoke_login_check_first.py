@@ -21,7 +21,9 @@ from auth import naver_login
 from browser import session_manager
 
 
-LOGGED_IN_BLOG = "<html><body>블로그 홈 (로그인됨)</body></html>"
+LOGGED_IN_BLOG = "<html><body>블로그 홈 (로그인됨) 내 블로그 blog.naver.com/tester</body></html>"
+# 프로필에 남은 "다른 계정" 세션 — 로그인 상태이지만 설정된 계정(tester)이 페이지에 없음
+LOGGED_IN_OTHER_ACCOUNT = "<html><body>블로그 홈 (로그인됨) 내 블로그 blog.naver.com/someoneelse</body></html>"
 LOGGED_OUT_BLOG = "<html><body><a class='btn_blog_login'>로그인</a></body></html>"
 
 
@@ -244,9 +246,55 @@ def test_4_all_fail_fresh_login_and_sync():
         _restore(mp)
 
 
+
+
+def scenario_account_gate():
+    """계정별 세션 파일이 없으면(=이 계정 로그인 이력 없음) fast path 를 건너뛰고 폴백."""
+    calls = {"fresh": 0, "gate": 0}
+
+    def resolve(url, drv):
+        if url.startswith("https://blog.naver.com"):
+            return ("https://blog.naver.com/home", LOGGED_IN_BLOG)
+        return (url, "")
+
+    drv = FakeDriver(resolve)
+
+    import auth.naver_login as naver_login
+
+    def fake_gate(account_id):
+        calls["gate"] += 1
+        return False  # 이 계정으로 로그인한 이력 없음 → fast path 금지
+
+    def fake_fresh(driver, nid, npw):
+        calls["fresh"] += 1
+
+    orig_gate = naver_login.has_recent_session_file
+    orig_fresh = naver_login._fresh_login
+    orig_cdp = naver_login.load_session_cdp
+    naver_login.has_recent_session_file = fake_gate
+    naver_login._fresh_login = fake_fresh
+    naver_login.load_session_cdp = lambda d, a: False
+    try:
+        result = naver_login.login(drv, "tester", "pw")
+    finally:
+        naver_login.has_recent_session_file = orig_gate
+        naver_login._fresh_login = orig_fresh
+        naver_login.load_session_cdp = orig_cdp
+
+    assert result is True
+    assert calls["gate"] == 1, f"세션 파일 게이트 미호출: {calls}"
+    assert calls["fresh"] == 1, f"게이트 차단인데 fresh login 미호출: {calls}"
+    print("PASS (5) 세션 파일 없는 계정 → fast path 게이트 차단 + 신규 로그인 폴백")
+
+
 if __name__ == "__main__":
+    # fast path 시나리오(1,2)는 "이 계정 로그인 이력 있음"이 전제 — 게이트를 일괄 통과시킨다.
+    # 시나리오 5 는 자체적으로 게이트를 False 로 오버라이드해 차단 경로를 검증한다.
+    import auth.naver_login as _nl
+    _nl.has_recent_session_file = lambda account_id: True
     test_1_fast_path()
     test_2_cdp_restore()
     test_3_cdp_raises_falls_back_to_legacy()
     test_4_all_fail_fresh_login_and_sync()
+    scenario_account_gate()
     print("ALL SMOKE PASS")
