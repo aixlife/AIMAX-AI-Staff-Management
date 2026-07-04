@@ -6,7 +6,7 @@
 
 ## Current Production State
 
-- `https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg` returns `HTTP 404`.
+- `https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-macOS-0.2.1-aarch64.dmg` returns `HTTP 404` (no macOS DMG deployed yet; the 0.2.0 URL was also 404).
 - `/api/workers` production catalog still reports Jieun:
   - `supported_platforms=["windows"]`
   - `setup_download_url=https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-Setup-0.1.6.exe`
@@ -15,34 +15,49 @@
 
 ## Prepared Local Artifact
 
-- Local file: `dist/upload_installers/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg`
+- Local file: `dist/upload_installers/AIMAX-Office-Manager-macOS-0.2.1-aarch64.dmg`
 - Size: 36 MB
-- SHA256: `14c4c6d4099fee057100ba0ea0ae469730854c6a6a7c80e807fbf4dd938a8619`
+- SHA256: `fbdbc8bb69bfa4ea07107b295ed34ec41f383294fb342466f17803f62abfd543`
 - Built from source branch: `https://github.com/aixlife/aimax-viseo/tree/feature/jieun-tauri-macos-v017`
-- Source commit: `d6ae2eb Disable native window shadow and align macOS memo copy`
-- Supersedes the 2026-07-01 DMG (`4f509535…`), which is discarded due to a
-  Retina coordinate bug that could place the character window off-screen.
-- 2026-07-04 rebuild also includes: macOS-unsupported action buttons fully
+- Source commit: `7d6b6ff Fix multi-monitor capture, cursor drag, add tray minimize for v0.2.1`
+- Supersedes the 2026-07-04 v0.2.0 DMG (`14c4c6d4…`), which was held back at
+  the deploy gate after CEO real-device feedback (multi-monitor capture gap,
+  drag cursor separation, no minimize), and the 2026-07-01 DMG (`4f509535…`),
+  discarded for a Retina coordinate bug.
+- v0.2.1 (2026-07-04) fixes, all verified on a 2-display real device:
+  - Multi-monitor capture: one overlay window per display (macOS
+    separate-Spaces forbids a single window spanning displays, so the
+    built-in MacBook screen could never be selected before)
+  - Drag: OS-native `start_dragging` replaces manual per-monitor delta
+    scaling — cursor and character no longer separate across mixed-DPI
+    monitor boundaries; click-to-toggle-menu behavior unchanged
+  - New minimize/restore: 최소화 menu row hides the character; a menu-bar
+    tray icon (left click) toggles it back, right-click menu has 종료
+  - Capture flow no longer leaves the character window expanded-size with a
+    transparent click-blocking zone above it (expand/collapse idempotent)
+  - First click on the character reacts even when the app is inactive
+    (`acceptFirstMouse`)
+- v0.2.0 (2026-07-04) base includes: macOS-unsupported action buttons fully
   hidden, monochrome line icon set, native window shadow disabled (removed
   the sticker-like outline next to the character), Spaces visibility fix.
 
 ## Prepared AIMAX Web Branch
 
 - Branch: `https://github.com/aixlife/AIMAX-AI-Staff-Management/tree/codex/jieun-macos-download`
-- Commit: `475e3b6 Prepare Jieun macOS download rollout`
+- Commit: see PR #1 head (Jieun macOS v0.2.1 rollout refresh)
 - Draft PR: `https://github.com/aixlife/AIMAX-AI-Staff-Management/pull/1`
 
 ## Prepared Jieun App Source Branch
 
 - Branch: `https://github.com/aixlife/aimax-viseo/tree/feature/jieun-tauri-macos-v017`
-- Commit: `441c481 Add Tauri macOS distribution build`
+- Commit: `7d6b6ff Fix multi-monitor capture, cursor drag, add tray minimize for v0.2.1`
 - Draft PR: `https://github.com/aixlife/aimax-viseo/pull/5`
 - Base branch: `feature/windows-shutdown-button`
 - Note: the Windows v0.1.6 chain PRs are still open upstream, so this Tauri PR intentionally targets the Windows shutdown branch rather than `main`.
 
 ## Changes To Deploy
 
-- Upload DMG to `/home/ubuntu/aimax-downloads/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg`
+- Upload DMG to `/home/ubuntu/aimax-downloads/AIMAX-Office-Manager-macOS-0.2.1-aarch64.dmg`
 - Update `server.js` public download whitelist.
 - Update Jieun worker catalog:
   - `supportedPlatforms=["windows", "macos"]`
@@ -82,7 +97,7 @@ scripts/deploy_oracle.sh web
 ## Post-Deploy Verification
 
 ```bash
-curl -I -L https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg
+curl -I -L https://api.aimax.ai.kr/downloads/AIMAX-Office-Manager-macOS-0.2.1-aarch64.dmg
 curl -sS -L https://api.aimax.ai.kr/api/workers | rg 'AIMAX-Office-Manager-macOS|supported_platforms|execution_options|jieun'
 node scripts/smoke_jieun_macos_download.mjs
 ```
@@ -90,7 +105,7 @@ node scripts/smoke_jieun_macos_download.mjs
 Expected:
 
 - DMG URL returns `HTTP 200`.
-- Remote SHA256 matches `14c4c6d4099fee057100ba0ea0ae469730854c6a6a7c80e807fbf4dd938a8619`.
+- Remote SHA256 matches `fbdbc8bb69bfa4ea07107b295ed34ec41f383294fb342466f17803f62abfd543`.
 - `/api/workers` shows Jieun with `windows` and `macos`.
 - AIMAX web app shows a Mac download option on macOS.
 - `scripts/smoke_jieun_macos_download.mjs` exits 0 and prints `ok: true`.

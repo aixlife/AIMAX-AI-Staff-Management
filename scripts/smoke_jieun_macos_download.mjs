@@ -3,8 +3,8 @@ import crypto from "node:crypto";
 import https from "node:https";
 
 const BASE_URL = process.env.AIMAX_BASE_URL || "https://api.aimax.ai.kr";
-const DMG_FILENAME = "AIMAX-Office-Manager-macOS-0.2.0-aarch64.dmg";
-const EXPECTED_SHA256 = "4f509535844595cf0d7d8c84b3c1d701b27d989d30b74695feacb1838e536a1b";
+const DMG_FILENAME = "AIMAX-Office-Manager-macOS-0.2.1-aarch64.dmg";
+const EXPECTED_SHA256 = "fbdbc8bb69bfa4ea07107b295ed34ec41f383294fb342466f17803f62abfd543";
 const EXPECTED_MIN_BYTES = 30 * 1024 * 1024;
 
 function request(url, options = {}) {
