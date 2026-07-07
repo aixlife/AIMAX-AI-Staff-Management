@@ -73,6 +73,35 @@ assert watchdog.open_tickets(
     {approval_report["report_id"]: "working"},
 ) == []
 
+deploy_waiting_report = {
+    "report_id": "AIMAX-RPT-DEPLOY-WAITING",
+    "status": "working",
+    "status_updated_at": old,
+    "stored_at": old,
+    "public_message": "코드 수정 완료, 운영 배포 전 승인 대기 중입니다.",
+    "next_update_message": "배포가 승인되면 새 작업부터 반영됩니다.",
+}
+assert watchdog.stale_reports([deploy_waiting_report], now, timedelta(minutes=60), timedelta(days=14)) == []
+
+normal_working_report = {
+    **deploy_waiting_report,
+    "report_id": "AIMAX-RPT-NORMAL-WORKING",
+    "public_message": "운영자가 원인을 확인 중입니다.",
+    "next_update_message": "조치가 끝나면 안내하겠습니다.",
+}
+assert len(watchdog.stale_reports([normal_working_report], now, timedelta(minutes=60), timedelta(days=14))) == 1
+
+deploy_waiting_ticket = {
+    "ticket_id": "AIMAX-AUTO-DEPLOY-WAITING",
+    "status": "working",
+    "report_id": "AIMAX-RPT-DEPLOY-WAITING",
+    "created_at": old,
+    "updated_at": old,
+    "work_context": "코드 수정 완료, 배포 승인 대기",
+    "suggested_next_action": "민수님 배포 승인 후 운영 반영",
+}
+assert watchdog.open_tickets([deploy_waiting_ticket], now, timedelta(minutes=60), timedelta(days=14)) == []
+
 with tempfile.TemporaryDirectory(prefix="aimax-report-ticket-sync-") as tmp:
     data_dir = Path(tmp)
     (data_dir / "automation-tickets.jsonl").write_text(f"{json.dumps(ticket)}\n", encoding="utf-8")

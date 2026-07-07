@@ -16211,6 +16211,7 @@ module.exports = {
     imageCompletionIssue,
     normalizeYeriDuplicateNumberPrefixes,
     requestedImageCount,
+    normalizeYeriDuplicateNumberPrefixes,
     versionPayload,
   },
   __songiSubscriptionTest: {
