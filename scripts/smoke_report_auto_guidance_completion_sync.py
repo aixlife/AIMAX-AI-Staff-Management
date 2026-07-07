@@ -393,3 +393,65 @@ with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-driver-block-") a
     assert guidance.latest_ticket_statuses(data_dir)[driver_block_ticket_id] == "waiting_user"
 
 print("REPORT_AUTO_GUIDANCE_DRIVER_BLOCK_SMOKE_OK")
+
+
+integrity_report_id = "AIMAX-RPT-SMOKE-BUNDLE-INTEGRITY"
+integrity_ticket_id = "AIMAX-AUTO-SMOKE-BUNDLE-INTEGRITY"
+
+with tempfile.TemporaryDirectory(prefix="aimax-report-guidance-bundle-integrity-") as tmp:
+    data_dir = Path(tmp)
+    report_dir = data_dir / "reports" / stored_at[:10]
+    report_dir.mkdir(parents=True)
+    index_row = {
+        "report_id": integrity_report_id,
+        "stored_at": stored_at,
+        "date": stored_at[:10],
+        "status": "new",
+        "status_updated_at": stored_at,
+        "product": "bundle",
+        "os": "Windows",
+        "work_context": "startup bundle integrity check",
+        "visible_error": "bundle integrity mismatch: 1 file(s) (manifest v1.0.56, app v1.0.56): _internal/_asyncio.pyd",
+        "automation_ticket_id": integrity_ticket_id,
+    }
+    detail = {
+        "server_received_at": stored_at,
+        "support": {"automation_ticket_id": integrity_ticket_id},
+        "user_input": {
+            "work_context": index_row["work_context"],
+            "visible_error": index_row["visible_error"],
+        },
+        "system": {
+            "app": {"version": "v1.0.56"},
+            "runtime": {"system": "Windows"},
+        },
+    }
+    (data_dir / "reports-index.jsonl").write_text(f"{json.dumps(index_row, ensure_ascii=False)}\n", encoding="utf-8")
+    (data_dir / "automation-tickets.jsonl").write_text(
+        f"{json.dumps({'ticket_id': integrity_ticket_id, 'status': 'open', 'report_id': integrity_report_id, 'updated_at': stored_at})}\n",
+        encoding="utf-8",
+    )
+    (data_dir / "jobs.json").write_text(f"{json.dumps({'jobs': []})}\n", encoding="utf-8")
+    (report_dir / f"{integrity_report_id}.json").write_text(f"{json.dumps(detail, ensure_ascii=False)}\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "aimax_report_auto_guidance.py"),
+            "--data-dir",
+            str(data_dir),
+            "--min-age-minutes",
+            "0",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    assert payload["touched_count"] == 1, payload
+    assert payload["touched"][0]["category"] == "bundle_integrity_mismatch", payload
+    rows = guidance.read_rows(data_dir / "reports-index.jsonl")
+    assert rows[0]["status"] == "waiting_user", rows[0]
+    assert guidance.latest_ticket_statuses(data_dir)[integrity_ticket_id] == "waiting_user"
+
+print("REPORT_AUTO_GUIDANCE_BUNDLE_INTEGRITY_SMOKE_OK")

@@ -176,6 +176,19 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
         next_update_message="웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
     ),
+    "bundle_integrity_mismatch": Guidance(
+        category="bundle_integrity_mismatch",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message=(
+            "Windows AIMAX 실행기 설치 파일 일부가 설치 후 달라졌거나 손상되어 시작 전 안전 검사를 통과하지 못했습니다. "
+            "작업 데이터나 AI 키 문제가 아니라 로컬 실행기 파일 상태 확인이 필요한 케이스입니다."
+        ),
+        next_update_message=(
+            "AIMAX와 열린 브라우저를 모두 닫고, 웹앱 업데이트 탭에서 공식 Windows 통합 설치 파일을 다시 받아 설치해주세요. "
+            "Windows 보안 또는 백신 보호 기록에서 AIMAX 파일 격리/차단 내역이 있으면 복원 또는 허용한 뒤 실행기 연결을 다시 눌러주세요."
+        ),
+    ),
     "browser_driver_policy_blocked": Guidance(
         category="browser_driver_policy_blocked",
         status="waiting_user",
@@ -441,6 +454,13 @@ def is_browser_driver_policy_blocked(text: str) -> bool:
     )
 
 
+def is_bundle_integrity_mismatch(text: str) -> bool:
+    return bool(
+        re.search(r"bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성", text, re.I)
+        and re.search(r"mismatch|failed|손상|불일치|검사", text, re.I)
+    )
+
+
 def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | None:
     row_text = " ".join(
         str(row.get(key) or "")
@@ -458,6 +478,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
         return GUIDANCE["v1052_update_verify"]
 
     row_first_rules: list[tuple[str, str]] = [
+        ("bundle_integrity_mismatch", r"bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성"),
         ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
         ("web_login_failed", r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지"),
         ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
@@ -469,10 +490,13 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
         ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
     ]
     for key, pattern in row_first_rules:
-        if re.search(pattern, row_text, re.I):
+        if key == "bundle_integrity_mismatch" and is_bundle_integrity_mismatch(row_text):
+            return GUIDANCE[key]
+        if key != "bundle_integrity_mismatch" and re.search(pattern, row_text, re.I):
             return GUIDANCE[key]
 
     rules: list[tuple[str, str]] = [
+        ("bundle_integrity_mismatch", r"bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성"),
         ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
         ("image_generation_failed", r"image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted"),
@@ -489,7 +513,9 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
         ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
     ]
     for key, pattern in rules:
-        if re.search(pattern, text, re.I):
+        if key == "bundle_integrity_mismatch" and is_bundle_integrity_mismatch(text):
+            return GUIDANCE[key]
+        if key != "bundle_integrity_mismatch" and re.search(pattern, text, re.I):
             return GUIDANCE[key]
 
     return None

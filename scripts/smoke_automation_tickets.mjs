@@ -82,6 +82,28 @@ try {
   assert(ticketUpdate.status === "waiting_user", "ticket_update_status_mismatch");
   assert(__automationTest.latestAutomationTickets().find((item) => item.ticket_id === guidedTicket.ticket_id)?.status === "waiting_user", "latest_ticket_status_mismatch");
 
+  const integrityReport = {
+    report_id: "AIMAX-RPT-20260703085700-24b89043",
+    source: "app",
+    account: { product: "bundle" },
+    user_input: {
+      work_context: "startup bundle integrity check",
+      visible_error: "bundle integrity mismatch: 1 file(s) (manifest v1.0.56, app v1.0.56): _internal/_asyncio.pyd",
+    },
+    system: {
+      app: { version: "v1.0.56" },
+      runtime: { system: "Windows" },
+    },
+    support: { status: "new", updated_at: storedAt },
+  };
+  const integrityGuidance = __automationTest.applyReportAutoGuidance(integrityReport, storedAt);
+  assert(integrityGuidance, "integrity_guidance_missing");
+  assert(integrityReport.support.status === "waiting_user", "integrity_status_mismatch");
+  assert(integrityReport.support.auto_guidance_category === "bundle_integrity_mismatch", "integrity_guidance_category_mismatch");
+  const integrityTicket = __automationTest.buildAutomationTicketForReport(integrityReport, storedAt, storedAt.slice(0, 10));
+  assert(integrityTicket.category === "local_runner", "integrity_ticket_category_mismatch");
+  assert(integrityTicket.priority === "high", "integrity_ticket_priority_mismatch");
+
   const transientReport = {
     report_id: "AIMAX-RPT-20260618122443-d8ccac1e",
     source: "aimax-webapp",
