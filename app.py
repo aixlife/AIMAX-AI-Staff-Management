@@ -1624,6 +1624,12 @@ class NaverBlogApp:
             raise SystemExit(0)
 
         self.queue = Queue()
+        try:
+            from auth.naver_login import set_manual_login_notifier
+
+            set_manual_login_notifier(self._log)
+        except Exception:
+            pass
         self.running = False
         self.worker_thread = None
         self.driver = None

@@ -20,6 +20,21 @@ from utils.delays import wait_medium, wait_short
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+_manual_login_notifier = None
+
+
+def set_manual_login_notifier(fn):
+    """수동 로그인 안내를 UI 로그 등으로 전달하는 콜백을 등록한다."""
+    global _manual_login_notifier
+    _manual_login_notifier = fn
+
+
+def _notify_manual_login(message):
+    if _manual_login_notifier:
+        try:
+            _manual_login_notifier(message)
+        except Exception:
+            pass
 
 
 def _inject_credentials(driver, naver_id, naver_pw):
@@ -71,6 +86,42 @@ def _wait_until_leave_nid(driver, timeout=10):
         return True
     except Exception:
         return False
+
+
+def _is_nid_host(url):
+    host = urlparse(url or "").hostname or ""
+    return host == "nid.naver.com" or host.endswith(".nid.naver.com")
+
+
+def _wait_for_manual_login(driver, naver_id, timeout_seconds=180, reason=""):
+    """열린 브라우저에서 사용자가 직접 로그인하기를 기다린 뒤 세션을 저장한다."""
+    current_url = driver.current_url or ""
+    if "nidlogin.login" not in current_url:
+        driver.get(NAVER_LOGIN_URL)
+
+    try:
+        driver.execute_cdp_cmd("Page.bringToFront", {})
+    except Exception:
+        pass
+
+    message = "네이버 자동 로그인이 막혔습니다. 열려 있는 브라우저 창에서 3분 안에 직접 로그인해 주세요. 로그인이 확인되면 작업이 자동으로 이어집니다."
+    if reason:
+        logger.info(f"{message} (원인: {reason})")
+    else:
+        logger.info(message)
+    _notify_manual_login(message)
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        current_url = driver.current_url or ""
+        if "nidlogin.login" not in current_url and not _is_nid_host(current_url):
+            if _blog_session_ready(driver, naver_id):
+                save_session(driver, naver_id)
+                logger.info("수동 네이버 로그인 확인 - 세션 저장 완료")
+                return True
+        time.sleep(2)
+    logger.warning("수동 네이버 로그인 대기 시간 초과")
+    return False
 
 
 def _clipboard_login(driver, naver_id, naver_pw):
@@ -158,8 +209,13 @@ def login_on_current_nid_page(driver, naver_id, naver_pw, wait_seconds=4):
     current_url = driver.current_url
     if "nidlogin.login" in current_url:
         page = driver.page_source
-        if "captcha" in current_url.lower() or "자동입력" in page:
-            raise RuntimeError("CAPTCHA가 발생했습니다. 잠시 후 다시 시도하거나 수동으로 로그인해주세요.")
+        is_captcha = "captcha" in current_url.lower() or "자동입력" in page
+        reason = "CAPTCHA 또는 자동입력 방지 화면" if is_captcha else "NID 로그인 페이지 유지"
+        if _wait_for_manual_login(driver, naver_id, reason=reason):
+            return True
+        if is_captcha:
+            # 'captcha' 키워드 보존: 서버 자동안내 분류 regex의 naver_login_required 신호
+            raise RuntimeError("CAPTCHA가 발생했고 수동 로그인도 완료되지 않았습니다. NID 로그인 후에도 로그인 페이지에 머무릅니다.")
         raise RuntimeError("NID 로그인 후에도 로그인 페이지에 머무릅니다.")
 
     save_session(driver, naver_id)
@@ -220,7 +276,7 @@ def login(driver, naver_id, naver_pw):
     최악의 경우에도 오늘과 완전히 동일한 동작(신규 로그인 + sync)으로 degrade 된다.
     함수 시그니처와 True 반환 / 예외 발생 계약은 기존과 동일하게 유지한다.
     """
-    # 1) 빠른 경로: 브라우저 프로필 세션 확인 (쿠키 파일 미사용, save_session 호출 없음)
+    # 1) 빠른 경로: 브라우저 프로필 세션 확인
     # 계정 게이트: 프로필은 계정을 바꿔 저장한 뒤에도 이전 계정 세션을 들고 있을 수 있다.
     # 페이지에서 계정 ID 를 읽을 수 없으므로(초기 HTML 미노출 실측), "이 계정으로 이 기기에서
     # 로그인한 이력(=계정별 세션 파일, 30일 이내)"이 있을 때만 fast path 를 허용한다.
@@ -228,18 +284,26 @@ def login(driver, naver_id, naver_pw):
     # 소유자가 아니면 NID 재인증을 요구하므로 2차 방어선이 된다.
     if has_recent_session_file(naver_id) and _blog_session_ready(driver, naver_id):
         logger.info("브라우저 프로필 세션으로 로그인 확인 — 추가 이동 없이 진행 (경로: 프로필 세션)")
+        save_session(driver, naver_id)
         return True
 
-    # 2) 쿠키 복원(CDP): 페이지 이동 없이 쿠키만 주입 후 재확인 (쿠키가 파일에서 왔으므로 save 불필요)
+    # 2) 쿠키 복원(CDP): 페이지 이동 없이 쿠키만 주입 후 재확인
     # 주의: 복원이 실제로 이뤄졌을 때만 재확인한다 — 이 계정의 쿠키 파일이 없는데도 재확인하면
     # 프로필에 남은 다른 계정 세션이 이 단계로 통과할 수 있다(fast path 게이트 우회 방지).
     if load_session_cdp(driver, naver_id) and _blog_session_ready(driver, naver_id):
         logger.info("쿠키 복원(CDP)으로 로그인 확인 — 추가 이동 없이 진행 (경로: 쿠키 복원(CDP))")
+        save_session(driver, naver_id)
         return True
 
     # 3) 신규 로그인 폴백 (기존 동작과 동일)
     logger.info("기존 세션 확인 실패 - 신규 로그인 진행 (경로: 신규 로그인)")
-    _fresh_login(driver, naver_id, naver_pw)
+    try:
+        _fresh_login(driver, naver_id, naver_pw)
+    except RuntimeError as e:
+        if not _wait_for_manual_login(driver, naver_id, reason=str(e)):
+            raise RuntimeError(
+                f"네이버 로그인이 필요합니다. 자동 로그인이 막혀 브라우저 창에서 수동 로그인을 기다렸지만 완료되지 않았습니다. (원인: {e})"
+            ) from e
 
     # 신규 로그인 직후 이미 blog 세션이 잡혔으면 sync 생략, 아니면 기존과 동일하게 sync
     if _blog_session_ready(driver, naver_id):
