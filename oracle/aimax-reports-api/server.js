@@ -618,6 +618,8 @@ const PUBLIC_DOWNLOAD_FILES = new Set([
   "AIMAX-Office-Manager-portable.exe",
   "Pencil-Setup-1.0.0.exe",
   "Pencil-portable.exe",
+  "MaxAlert-Setup-0.1.3.exe",
+  "MaxAlert_0.2.0_aarch64.dmg",
 ]);
 const researchPaidLocks = new Map();
 const downloadTickets = new Map();
