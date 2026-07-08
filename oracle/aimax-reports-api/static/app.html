@@ -7176,6 +7176,7 @@
             description: worker.short_description || "기능 연결 전이라 기본 설정이 필요한 상태입니다.",
             meta: Array.isArray(worker.capabilities) ? worker.capabilities : [],
             executionOptions: Array.isArray(worker.execution_options) ? worker.execution_options : [],
+            resume: worker.resume && typeof worker.resume === "object" ? worker.resume : undefined,
           };
           continue;
         }
@@ -7211,6 +7212,7 @@
         employees[key].executionOptions = Array.isArray(worker.execution_options)
           ? worker.execution_options
           : employees[key].executionOptions;
+        if (worker.resume && typeof worker.resume === "object") employees[key].resume = worker.resume;
       }
       for (const jobKind of state.jobKindCatalog || []) {
         if (!jobKind.kind) continue;

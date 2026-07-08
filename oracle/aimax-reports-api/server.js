@@ -9328,6 +9328,8 @@ function publicWorker(worker) {
     short_description: worker.shortDescription || "",
     capabilities: worker.capabilities || [],
     execution_options: executionOptions,
+    // 이력서: 카탈로그에 resume 객체가 있으면 그대로 전달 (웹앱 employeeResumeData가 소비)
+    resume: worker.resume && typeof worker.resume === "object" ? worker.resume : undefined,
   };
 }
 
