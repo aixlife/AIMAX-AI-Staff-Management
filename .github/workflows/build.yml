@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   # ──────────────────────────────────────────
-  # Windows — NaverBlogAuto_windows.zip
+  # Windows — aimax-bundle-windows.exe (Inno Setup installer)
   # ──────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
@@ -45,20 +45,37 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
-      - name: Package into zip
+      # 배포용 설치 파일은 onedir(dist\AIMAX)을 Inno Setup 으로 패키징한 aimax-bundle-windows.exe 다.
+      # windows-latest 에 Inno Setup 은 기본 미포함 → choco 로 설치 후 iscc 실행.
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Package installer with Inno Setup
         shell: pwsh
         run: |
-          # build.py 의 APP_NAME='AIMAX' → 산출물은 dist\AIMAX 폴더로 생성됨
-          $distFolder = "dist\AIMAX"
-          if (-not (Test-Path $distFolder)) { throw "dist\AIMAX 폴더 없음 (build.py APP_NAME=AIMAX 산출물 확인)" }
-          Compress-Archive -Path "$distFolder\*" -DestinationPath "dist\NaverBlogAuto_windows.zip" -Force
-          Write-Host "zip 생성 완료: dist\NaverBlogAuto_windows.zip"
+          # aimax_compliance.py 의 APP_VERSION(vX.Y.Z) 을 그대로 읽어 Inno AppVersion(X.Y.Z)으로 전달
+          $verLine = Select-String -Path aimax_compliance.py -Pattern 'APP_VERSION\s*=\s*"v?([0-9]+\.[0-9]+\.[0-9]+)"' | Select-Object -First 1
+          if (-not $verLine) { throw "APP_VERSION 을 aimax_compliance.py 에서 찾지 못했습니다" }
+          $appVersion = $verLine.Matches[0].Groups[1].Value
+          Write-Host "AppVersion = $appVersion"
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe 없음: $iscc" }
+          if (-not (Test-Path "dist\AIMAX")) { throw "dist\AIMAX 없음 (build.py 산출물 확인)" }
+          & $iscc "packaging\windows\aimax_installer.iss" `
+            "/DSourceDir=dist\AIMAX" `
+            "/DOutputDir=dist\upload" `
+            "/DOutputBaseFilename=aimax-bundle-windows" `
+            "/DAppVersion=$appVersion"
+          if ($LASTEXITCODE -ne 0) { throw "iscc 실패 (exit $LASTEXITCODE)" }
+          if (-not (Test-Path "dist\upload\aimax-bundle-windows.exe")) { throw "설치 파일 미생성" }
+          Write-Host "설치 파일 생성 완료: dist\upload\aimax-bundle-windows.exe"
+          Get-Item "dist\upload\aimax-bundle-windows.exe" | Select-Object Name,Length
 
-      - name: Upload artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NaverBlogAuto-windows
-          path: dist/NaverBlogAuto_windows.zip
+          name: aimax-bundle-windows
+          path: dist/upload/aimax-bundle-windows.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -66,11 +83,11 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/NaverBlogAuto_windows.zip
+          files: dist/upload/aimax-bundle-windows.exe
           generate_release_notes: true
 
   # ──────────────────────────────────────────
-  # macOS — NaverBlogAuto_mac.zip
+  # macOS — aimax-bundle-macos.dmg
   # ──────────────────────────────────────────
   build-mac:
     runs-on: macos-latest
@@ -100,23 +117,20 @@ jobs:
           PYTHONIOENCODING: utf-8
           TK_SILENCE_DEPRECATION: "1"
 
-      - name: Package into zip
+      # build.py(_make_macos_dmg) 가 dist/AIMAX-macos.dmg 를 생성한다 → 배포명으로 복사
+      - name: Rename DMG to distribution name
         run: |
-          # build.py 의 APP_NAME='AIMAX' → .app 번들이 생성된 경우 우선 패키징
-          if [ -d "dist/AIMAX.app" ]; then
-            cd dist && zip -r ../NaverBlogAuto_mac.zip AIMAX.app
-          elif [ -d "dist/AIMAX" ]; then
-            cd dist && zip -r ../NaverBlogAuto_mac.zip AIMAX
-          else
-            echo "ERROR: dist 산출물 없음 (dist/AIMAX.app 또는 dist/AIMAX)" && exit 1
+          if [ ! -f "dist/AIMAX-macos.dmg" ]; then
+            echo "ERROR: dist/AIMAX-macos.dmg 없음 (build.py 산출물 확인)"; exit 1
           fi
-          echo "zip 생성 완료: NaverBlogAuto_mac.zip"
+          cp "dist/AIMAX-macos.dmg" "dist/aimax-bundle-macos.dmg"
+          ls -la dist/aimax-bundle-macos.dmg
 
-      - name: Upload artifact
+      - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NaverBlogAuto-mac
-          path: NaverBlogAuto_mac.zip
+          name: aimax-bundle-macos
+          path: dist/aimax-bundle-macos.dmg
           if-no-files-found: error
           retention-days: 30
 
@@ -124,4 +138,4 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: NaverBlogAuto_mac.zip
+          files: dist/aimax-bundle-macos.dmg
