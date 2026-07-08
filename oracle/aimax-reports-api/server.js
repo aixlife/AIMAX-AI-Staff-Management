@@ -183,7 +183,7 @@ const SETUP_HTML_PATH = path.join(STATIC_DIR, "setup.html");
 const ADMIN_COOKIE_NAME = "aimax_admin_session";
 const EUNSEO_ACCESS_COOKIE_NAME = "aimax_eunseo_access";
 const EUNSEO_ACCESS_TTL_MS = Number(process.env.AIMAX_EUNSEO_ACCESS_TTL_MS || 6 * 60 * 60 * 1000);
-const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "nakyung", "hyojin", "sangsu", "eunseo", "blog_team", "bundle"];
+const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "maxalert", "nakyung", "hyojin", "sangsu", "eunseo", "blog_team", "bundle"];
 const PRODUCTS = new Set(PRODUCT_ORDER);
 const MEMBER_ONLY_PRODUCTS = new Set(["eunseo"]);
 const BUNDLE_PRODUCTS = PRODUCT_ORDER.filter((product) => !MEMBER_ONLY_PRODUCTS.has(product));
@@ -448,6 +448,52 @@ const WORKERS = {
         url: `${PUBLIC_BASE_URL}/downloads/AIMAX-Office-Manager-macOS-0.2.1-aarch64.dmg`,
         primary: false,
         description: "Apple Silicon Mac용 Tauri v0.2.1 DMG입니다. 첫 실행 시 macOS 보안 확인이 뜨면 시스템 설정에서 허용 후 열어주세요.",
+      },
+    ],
+  },
+  max_alert: {
+    code: "max_alert",
+    staffCode: "max",
+    name: "맥스",
+    label: "맥스",
+    role: "일정 사이렌 알림",
+    category: "operations",
+    product: "maxalert",
+    jobKind: "",
+    execution: "external_download",
+    type: "desktop_app",
+    status: "available",
+    requiredSettings: [],
+    moduleKey: "schedule_alert",
+    profileImage: "/assets/avatar_max.png",
+    avatarImage: "/assets/avatar_max.png",
+    repoUrl: "https://github.com/aixlife/maxalert",
+    releaseUrl: "",
+    setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.3.exe`,
+    portableDownloadUrl: "",
+    downloadLabel: "설치 파일 다운로드",
+    supportedPlatforms: ["windows", "macos"],
+    version: "0.2.0",
+    shortDescription: "포스트잇 위젯과 마감 3분 전 전화면 사이렌으로 일정을 지키게 하는 데스크톱 직원입니다. 노션 일정과 양방향으로 동기화됩니다.",
+    capabilities: ["포스트잇 위젯", "일정 사이렌", "노션 동기화", "일일 업무 보고", "포인트·뱃지", "Mac 앱"],
+    executionOptions: [
+      {
+        kind: "windows_download",
+        label: "Windows Setup 다운로드",
+        platforms: ["windows"],
+        status: "available",
+        url: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.3.exe`,
+        primary: true,
+        description: "Windows용 맥스 v0.1.3 설치 파일입니다.",
+      },
+      {
+        kind: "mac_download",
+        label: "Apple Silicon Mac 앱 다운로드",
+        platforms: ["macos"],
+        status: "available",
+        url: `${PUBLIC_BASE_URL}/downloads/MaxAlert_0.2.0_aarch64.dmg`,
+        primary: false,
+        description: "Apple Silicon Mac용 Tauri v0.2.0 DMG입니다. 첫 실행 시 macOS 보안 확인이 뜨면 시스템 설정에서 허용 후 열어주세요.",
       },
     ],
   },
@@ -3391,6 +3437,14 @@ function adminProductCatalog() {
       label: "지은",
       price_won: 5500,
       products: productList("jieun"),
+      job_kinds: [],
+      download_product: "",
+    },
+    {
+      product: "maxalert",
+      label: "맥스",
+      price_won: 0,
+      products: productList("maxalert"),
       job_kinds: [],
       download_product: "",
     },

@@ -37,7 +37,7 @@ USAGE
 
 for arg in "$@"; do
   case "$arg" in
-    web|eunseo-mac|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all)
+    web|eunseo-mac|external-staff|maxalert|macos-bundle|windows-bundle|bundle-installers|installers|all)
       MODE="$arg"
       ;;
     --dry-run)
@@ -199,6 +199,12 @@ if [[ "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/AIMAX-Office-Manager-portable.exe" "$REMOTE_DOWNLOAD_DIR/AIMAX-Office-Manager-portable.exe" "Jieun Office portable"
   add_file "$ROOT_DIR/dist/upload_installers/Pencil-Setup-1.0.0.exe" "$REMOTE_DOWNLOAD_DIR/Pencil-Setup-1.0.0.exe" "Nakyung Pencil setup"
   add_file "$ROOT_DIR/dist/upload_installers/Pencil-portable.exe" "$REMOTE_DOWNLOAD_DIR/Pencil-portable.exe" "Nakyung Pencil portable"
+fi
+
+if [[ "$MODE" == "maxalert" || "$MODE" == "all" ]]; then
+  add_file "$ROOT_DIR/dist/upload_installers/MaxAlert-Setup-0.1.3.exe" "$REMOTE_DOWNLOAD_DIR/MaxAlert-Setup-0.1.3.exe" "Max MaxAlert setup"
+  add_file "$ROOT_DIR/dist/upload_installers/MaxAlert_0.2.0_aarch64.dmg" "$REMOTE_DOWNLOAD_DIR/MaxAlert_0.2.0_aarch64.dmg" "Max MaxAlert macOS DMG"
+  add_file "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_max.png" "$REMOTE_APP_DIR/static/assets/avatar_max.png" "avatar max"
 fi
 
 if [[ "$MODE" == "installers" || "$MODE" == "all" ]]; then
