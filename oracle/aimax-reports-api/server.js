@@ -465,8 +465,8 @@ const WORKERS = {
     status: "available",
     requiredSettings: [],
     moduleKey: "schedule_alert",
-    profileImage: "/assets/avatar_max.jpg",
-    avatarImage: "/assets/avatar_max.jpg",
+    profileImage: "/assets/avatar_max.jpg?v=20260708",
+    avatarImage: "/assets/avatar_max.jpg?v=20260708",
     repoUrl: "https://github.com/aixlife/maxalert",
     releaseUrl: "",
     setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.3.exe`,
@@ -2241,20 +2241,35 @@ function extractClaudeText(response) {
   return chunks.join("\n").trim();
 }
 
-function parseYeriGeneratedJson(text, codePrefix) {
+// meta.stop_reason: 제공자 응답의 종료 사유(claude stop_reason / gemini finishReason / openai status).
+// invalid_json 실패가 max_tokens 잘림인지, JSON 아닌 응답(거절/서문)인지 원인 확정용 —
+// 7/7 기준 yeri_claude_invalid_json 4건이 진단 정보 부재로 원인 미확정 상태였다.
+function parseYeriGeneratedJson(text, codePrefix, meta = {}) {
   const parsed = parseJsonObjectFromText(text);
   if (!parsed) {
     const error = new Error(`${codePrefix}_invalid_json`);
     error.code = `${codePrefix}_invalid_json`;
+    error.detail = yeriInvalidJsonDetail(text, meta);
     throw error;
   }
   const parsedMarkdown = String(parsed.content_markdown || parsed.markdown || parsed.content || "").trim();
   if (!parsedMarkdown) {
     const error = new Error(`${codePrefix}_empty_content`);
     error.code = `${codePrefix}_empty_content`;
+    error.detail = yeriInvalidJsonDetail(text, meta);
     throw error;
   }
   return parsed;
+}
+
+function yeriInvalidJsonDetail(text, meta = {}) {
+  const raw = String(text || "");
+  return [
+    meta.stop_reason ? `stop_reason=${String(meta.stop_reason).slice(0, 40)}` : "",
+    `text_len=${raw.length}`,
+    raw ? `head=${redactText(raw.slice(0, 120)).replace(/\s+/g, " ")}` : "",
+    raw.length > 120 ? `tail=${redactText(raw.slice(-80)).replace(/\s+/g, " ")}` : "",
+  ].filter(Boolean).join(" ").slice(0, 400);
 }
 
 function yeriProviderLabel(provider) {
@@ -2470,7 +2485,9 @@ async function generateYeriGeminiArtifact(job, userId) {
     response = await requestGemini(fallbackModel);
   }
   const text = extractGeminiText(response.json);
-  const parsed = parseYeriGeneratedJson(text, "yeri_gemini");
+  const parsed = parseYeriGeneratedJson(text, "yeri_gemini", {
+    stop_reason: response.json?.candidates?.[0]?.finishReason,
+  });
   return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, usedModel, yeriGeminiUsage(response.json?.usageMetadata));
 }
 
@@ -2499,7 +2516,9 @@ async function generateYeriOpenAiArtifact(job, userId) {
     onTransientRetry: yeriTransientRetryLogger("openai", job, userId),
   });
   const text = extractOpenAiText(response.json);
-  const parsed = parseYeriGeneratedJson(text, "yeri_openai");
+  const parsed = parseYeriGeneratedJson(text, "yeri_openai", {
+    stop_reason: response.json?.incomplete_details?.reason || response.json?.status,
+  });
   return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, model, yeriOpenAiUsage(response.json?.usage));
 }
 
@@ -2527,7 +2546,7 @@ async function generateYeriClaudeArtifact(job, userId) {
     onTransientRetry: yeriTransientRetryLogger("claude", job, userId),
   });
   const text = extractClaudeText(response.json);
-  const parsed = parseYeriGeneratedJson(text, "yeri_claude");
+  const parsed = parseYeriGeneratedJson(text, "yeri_claude", { stop_reason: response.json?.stop_reason });
   return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, model, yeriClaudeUsage(response.json?.usage));
 }
 
@@ -2799,6 +2818,7 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
       provider_status: Number(error?.status || 0),
       transient: Boolean(error?.transient),
       detail_code: String(error?.code || "").slice(0, 120),
+      detail: redactText(String(error?.detail || "")).slice(0, 400),
       diagnostic: target.diagnostic,
     };
     target.finished_at = nowIso();
@@ -9914,6 +9934,12 @@ const REPORT_AUTO_GUIDANCE = {
     public_message: "AI 제공자 서버가 일시적으로 응답하지 않아 실패한 건입니다. 코드나 실행기 고장보다는 외부 제공자 일시 장애 가능성이 큽니다.",
     next_update_message: "같은 작업을 여러 번 반복하지 말고 10~30분 뒤 새 작업 1건만 다시 시도해주세요. 반복되면 이 접수 ID로 다시 알려주세요.",
   },
+  ai_response_invalid: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "AI가 생성한 응답을 글 형식으로 해석하지 못해 글 생성 단계에서 중단되었습니다. 실행기나 API 키 문제가 아니라 선택한 AI 모델의 응답 형식 문제로, 같은 모델에서 반복될 수 있습니다.",
+    next_update_message: "설정 > AI/API 연결에서 모델을 AIMAX 기본 모델 또는 다른 모델로 바꾸거나, 잠시 뒤 새 작업 1건만 다시 시도해주세요. 같은 모델에서 반복되면 이 접수 ID로 알려주세요.",
+  },
   web_login_failed: {
     status: "waiting_user",
     status_label: "사용자 확인 필요",
@@ -9958,6 +9984,9 @@ const REPORT_AUTO_GUIDANCE = {
   },
 };
 
+// 자유 텍스트 분류 입력. 잡 데이터(jobs_recent JSON)와 OS 문자열(runtime.system/platform)은
+// 여기서 제외한다 — 잡의 정형 코드는 classifyStructuredJobGuidance 가 1순위로 처리하고,
+// OS 문자열이 텍스트에 섞이면 bare "macos" 류 키워드가 모든 맥 보고를 오분류시킨다(6/28 지은 보고 사례).
 function reportAutoGuidanceText(report) {
   return [
     report.source,
@@ -9967,9 +9996,6 @@ function reportAutoGuidanceText(report) {
     report.user_input?.user_note,
     report.feedback?.improve,
     report.feedback?.good,
-    report.system?.runtime?.system,
-    report.web_context?.platform,
-    JSON.stringify(reportRecentJobs(report).slice(0, 5)),
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
@@ -9978,20 +10004,118 @@ function isBundleIntegrityMismatchText(text) {
     && /mismatch|failed|손상|불일치|검사/i.test(text);
 }
 
+// 연결 잡의 정형 신호(머신 코드 + 서버/러너가 기록한 고정 문구)를 분류하는 1순위 룰.
+// 사용자 자유 텍스트와 달리 잡의 result.error/detail_code/stage/로그는 코드가 직접 기록한
+// 값이라 신뢰도가 높다. 여기 매칭되면 자유 텍스트 룰은 실행하지 않는다.
+const REPORT_STRUCTURED_JOB_GUIDANCE_RULES = [
+  ["ai_response_invalid", /invalid_json|server_generation_invalid_response|empty_content|응답을 글 형식으로 해석하지 못했/],
+  ["bundle_integrity_mismatch", /bundle_integrity|startup bundle integrity/],
+  ["browser_driver_policy_blocked", /browser_start|chromedriver|undetected_chromedriver|application control policy|애플리케이션 제어 정책|winerror 4551/],
+  ["api_key_missing", /key_missing|no api key|api 키가 없습니다|키가 없습니다/],
+  ["api_key_invalid", /server_generation_auth_failed|api_key_invalid|invalid api key|invalid x-api-key|api 키 인증/],
+  ["quota_exceeded", /server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|balance|out of credit|결제|크레딧/],
+  ["rate_limited", /server_generation_rate_limited|rate.?limit|resource_exhausted|429/],
+  ["model_not_found", /server_generation_model_not_found|model_not_found|unsupported model/],
+  ["organization_verification_required", /organization_verification_required|verify your organization|must be verified/],
+  ["image_paid_required", /image_paid_required|image_paid_reauired/],
+  ["image_generation_failed", /image_generation_failed|image_upload_failed|image_uploaded_but_not_inserted|이미지 생성 실패|이미지 생성용 로컬 api 키가 없어/],
+  ["naver_login_required", /naver_login|captcha|nid 로그인|로그인 실패: 아이디 또는 비밀번호|2단계 인증|인증 화면|로그인 페이지에 머무/],
+  ["runner_update_required", /update_required|runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_worker_not_started_after_claim|local_ui_queue_not_processed_after_claim|local_worker_progress_stalled/],
+  ["provider_transient", /server_generation_provider_transient|provider_transient|server_generation_timeout|server_generation_interrupted|overloaded|unavailable|temporar/],
+];
+
+// jobs_recent 는 "이 에이전트의 최근 잡" 롤링 윈도우라, 사용자가 보고를 낼 당시의
+// 실패와 무관한 며칠~몇 주 전 잡이 섞일 수 있다. 그런 낡은 잡의 정형 코드로 최신 보고를
+// 분류하면 오귀속이 발생한다(7/3 "실행기 연결 안 됨" 보고에 6/16 api-key 잡이 붙은 사례).
+// → 보고 접수 시각 기준 최근 창 안의 잡만 정형 신호로 신뢰한다.
+const REPORT_STRUCTURED_JOB_RECENCY_MS = 72 * 60 * 60 * 1000;
+const REPORT_STRUCTURED_JOB_FUTURE_SKEW_MS = 60 * 60 * 1000;
+
+function reportReceivedTimeMs(report) {
+  const candidates = [report?.server_received_at, report?.support?.updated_at, report?.stored_at];
+  for (const value of candidates) {
+    const ms = Date.parse(String(value || ""));
+    if (Number.isFinite(ms)) return ms;
+  }
+  return NaN;
+}
+
+function jobTimeMs(job) {
+  const candidates = [job?.finished_at, job?.updated_at, job?.created_at];
+  for (const value of candidates) {
+    const ms = Date.parse(String(value || ""));
+    if (Number.isFinite(ms)) return ms;
+  }
+  return NaN;
+}
+
+// 보고 접수 시각과 근접한(창 안) 잡만 남긴다. 보고 시각을 못 구하면(파싱 실패) 낡은-잡
+// 오귀속 위험이 크므로 보수적으로 빈 배열을 돌려 자유 텍스트 폴백으로 넘긴다.
+function recentJobsForReport(jobs, reportMs) {
+  if (!Array.isArray(jobs) || !jobs.length) return [];
+  if (!Number.isFinite(reportMs)) return [];
+  const lower = reportMs - REPORT_STRUCTURED_JOB_RECENCY_MS;
+  const upper = reportMs + REPORT_STRUCTURED_JOB_FUTURE_SKEW_MS;
+  return jobs.filter((job) => {
+    const ms = jobTimeMs(job);
+    return Number.isFinite(ms) && ms >= lower && ms <= upper;
+  });
+}
+
+// 보고에 연결된 대표 잡(서버 스냅샷 우선, 없으면 클라이언트 jobs_recent)에서 정형 신호
+// 텍스트를 만든다. 잡이 없거나 실패 정보가 없으면 "" 를 돌려 자유 텍스트 폴백으로 넘어간다.
+// 주의: 스냅샷은 클라이언트가 잡 id 를 직접 보낸 경우(job_ids)만 분류 신호로 쓴다 —
+// account_recent(계정 기준 추정 조인)는 무관한 잡을 보고에 귀속시킬 수 있어 참고용으로만 동봉한다.
+function reportStructuredJobSignal(report) {
+  const snapshot = report?.server_job_snapshot;
+  const snapshotJobs = snapshot?.matched_by === "job_ids" && Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+  const allJobs = snapshotJobs.length ? snapshotJobs : reportRecentJobs(report);
+  const jobs = recentJobsForReport(allJobs, reportReceivedTimeMs(report));
+  if (!jobs.length) return "";
+  const primary = jobs.find((job) => ["failed", "cancelled"].includes(String(job?.status || ""))) || jobs[0];
+  if (!primary || typeof primary !== "object") return "";
+  const result = primary.result && typeof primary.result === "object" ? primary.result : {};
+  const logs = Array.isArray(primary.logs) ? primary.logs : [];
+  const lastErrorLog = [...logs].reverse().find((log) => log && log.level === "error");
+  const clientLastLog = primary.last_log && primary.last_log.level === "error" ? primary.last_log.message : "";
+  return [
+    result.detail_code,
+    result.error,
+    primary.failed_stage || result.stage,
+    primary.failed_reason,
+    result.visible_error,
+    primary.diagnostic?.code,
+    lastErrorLog?.message || clientLastLog,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function classifyStructuredJobGuidance(report) {
+  const signal = reportStructuredJobSignal(report);
+  if (!signal) return null;
+  for (const [key, pattern] of REPORT_STRUCTURED_JOB_GUIDANCE_RULES) {
+    if (pattern.test(signal)) return { key, signal_tier: "job_structured", ...REPORT_AUTO_GUIDANCE[key] };
+  }
+  return null;
+}
+
 function classifyReportAutoGuidance(report) {
   if (isFeedbackReport(report)) return REPORT_AUTO_GUIDANCE.staff_feedback_reviewing;
+  const structured = classifyStructuredJobGuidance(report);
+  if (structured) return structured;
   const text = reportAutoGuidanceText(report);
+  // runner_update_required 는 naver_login 보다 먼저 검사한다 — 필수 업데이트 안내문에
+  // "네이버 자동 로그인이 빨라지고" 같은 릴리스 노트 문구가 섞여 오분류된 사례(7/7 맥 고착 보고).
   const rules = [
     ["bundle_integrity_mismatch", /bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성/],
     ["browser_driver_policy_blocked", /browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551/],
+    ["runner_update_required", /update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트/],
     ["web_login_failed", /로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지/],
     ["naver_login_required", /네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리/],
-    ["mac_gatekeeper", /macos|개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응/],
+    ["mac_gatekeeper", /개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응|확인되지 않은 개발자|손상되었기 때문에 열 수 없/],
     ["image_paid_required", /image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델/],
     ["image_generation_failed", /image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted/],
     ["organization_verification_required", /organization_verification_required|organization verification|verify your organization|must be verified|조직 인증/],
     ["model_not_found", /model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가/],
-    ["runner_update_required", /update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트/],
     ["api_key_missing", /api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안/],
     ["api_key_invalid", /api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized/],
     ["quota_exceeded", /quota_exceeded|insufficient_quota|billing|payment|credit|balance|크레딧|결제|요금제 한도|한도 초과/],
@@ -9999,8 +10123,8 @@ function classifyReportAutoGuidance(report) {
     ["provider_transient", /provider_transient|temporar|unavailable|overloaded|일시적 오류|잠시 후/],
   ];
   for (const [key, pattern] of rules) {
-    if (key === "bundle_integrity_mismatch" && isBundleIntegrityMismatchText(text)) return { key, ...REPORT_AUTO_GUIDANCE[key] };
-    if (key !== "bundle_integrity_mismatch" && pattern.test(text)) return { key, ...REPORT_AUTO_GUIDANCE[key] };
+    if (key === "bundle_integrity_mismatch" && isBundleIntegrityMismatchText(text)) return { key, signal_tier: "free_text", ...REPORT_AUTO_GUIDANCE[key] };
+    if (key !== "bundle_integrity_mismatch" && pattern.test(text)) return { key, signal_tier: "free_text", ...REPORT_AUTO_GUIDANCE[key] };
   }
   return null;
 }
@@ -10017,8 +10141,110 @@ function applyReportAutoGuidance(report, storedAt) {
     updated_at: storedAt,
     auto_guidance_category: guidance.key || "staff_feedback_reviewing",
     auto_guidance_source: "handleReport",
+    auto_guidance_signal: guidance.signal_tier || "free_text",
   };
   return guidance;
+}
+
+// ---------------------------------------------------------------------------
+// 보고 저장 시 서버 jobs.json 의 연결 잡 스냅샷을 보고 JSON 에 동봉한다.
+// 클라이언트 jobs_recent 는 전송 시점 스냅샷이라 result/logs 가 비어 있거나 낡을 수 있고,
+// 잡은 스윕으로 정리될 수 있어 보고-잡 조인이 나중엔 불가능해진다(7/7 오분류 3건의 공통 원인).
+// 실패해도 보고 접수는 막지 않는다.
+// ---------------------------------------------------------------------------
+const REPORT_JOB_SNAPSHOT_MAX_JOBS = 3;
+const REPORT_JOB_SNAPSHOT_LOG_TAIL = 8;
+const REPORT_JOB_SNAPSHOT_RECENT_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+function snapshotJobForReport(job) {
+  const result = job.result && typeof job.result === "object" ? job.result : {};
+  const images = result.images && typeof result.images === "object" ? result.images : {};
+  const logs = (Array.isArray(job.logs) ? job.logs : [])
+    .slice(-REPORT_JOB_SNAPSHOT_LOG_TAIL)
+    .map((log) => ({
+      at: String(log?.at || ""),
+      level: String(log?.level || ""),
+      message: redactText(String(log?.message || "")).slice(0, 300),
+    }));
+  return {
+    id: String(job.id || ""),
+    kind: String(job.kind || ""),
+    status: String(job.status || ""),
+    worker_code: String(job.worker_code || ""),
+    server_generation: String(job.server_generation || ""),
+    artifact_text_model: String(job.artifact_text_model || ""),
+    created_at: String(job.created_at || ""),
+    updated_at: String(job.updated_at || ""),
+    finished_at: String(job.finished_at || ""),
+    failed_stage: String(job.failed_stage || ""),
+    failed_reason: redactText(String(job.failed_reason || "")).slice(0, 200),
+    diagnostic: job.diagnostic && typeof job.diagnostic === "object"
+      ? {
+        code: String(job.diagnostic.code || ""),
+        title: redactText(String(job.diagnostic.title || "")).slice(0, 120),
+        message: redactText(String(job.diagnostic.message || "")).slice(0, 300),
+      }
+      : null,
+    result: {
+      ok: result.ok === true,
+      stage: String(result.stage || ""),
+      error: redactText(String(result.error || "")).slice(0, 300),
+      detail_code: String(result.detail_code || "").slice(0, 120),
+      detail: redactText(String(result.detail || "")).slice(0, 300),
+      visible_error: redactText(String(result.visible_error || "")).slice(0, 300),
+      failed_keyword: redactText(String(result.failed_keyword || "")).slice(0, 120),
+      provider: String(result.provider || ""),
+      model: String(result.model || ""),
+      provider_status: safeInt(result.provider_status, 0, 1000),
+      usage: result.usage && typeof result.usage === "object" ? result.usage : null,
+      images_attempted: safeInt(images.attempted, 0, 1000),
+      images_generated: safeInt(images.generated, 0, 1000),
+      images_inserted: safeInt(images.inserted, 0, 1000),
+      images_failure_count: safeInt(images.failure_count, 0, 1000),
+    },
+    logs,
+  };
+}
+
+function attachServerJobSnapshot(report) {
+  try {
+    if (isFeedbackReport(report) && !reportRecentJobs(report).length) return;
+    const ids = reportRecentJobs(report)
+      .map((job) => String(job.id || job.job_id || ""))
+      .filter(Boolean)
+      .slice(0, 5);
+    const userId = String(report.account?.user_id || "");
+    if (!ids.length && !userId) return;
+    const jobs = loadJobs().jobs;
+    let rows = [];
+    let matchedBy = "";
+    if (ids.length) {
+      const idSet = new Set(ids);
+      const byId = new Map(jobs.filter((job) => idSet.has(String(job.id || ""))).map((job) => [String(job.id), job]));
+      rows = ids.map((id) => byId.get(id)).filter(Boolean);
+      matchedBy = "job_ids";
+    }
+    if (!rows.length && userId) {
+      // 클라이언트가 잡 목록을 못 보낸 보고(웹 전용 화면 등)도 최근 48시간 내 같은 계정 잡으로 조인한다.
+      const cutoff = Date.now() - REPORT_JOB_SNAPSHOT_RECENT_WINDOW_MS;
+      rows = jobs
+        .filter((job) => String(job.user_id || "") === userId)
+        .filter((job) => {
+          const updated = Date.parse(String(job.updated_at || job.created_at || ""));
+          return Number.isFinite(updated) && updated >= cutoff;
+        })
+        .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+      matchedBy = rows.length ? "account_recent" : "";
+    }
+    if (!rows.length) return;
+    report.server_job_snapshot = {
+      fetched_at: nowIso(),
+      matched_by: matchedBy,
+      jobs: rows.slice(0, REPORT_JOB_SNAPSHOT_MAX_JOBS).map(snapshotJobForReport),
+    };
+  } catch (error) {
+    console.warn("[report] job snapshot attach failed", error?.message || error);
+  }
 }
 
 function reportFeedback(report) {
@@ -10097,8 +10323,17 @@ function reportJobSummary(report) {
       job_status: "",
       job_stage: "",
       job_failed_keyword: "",
+      job_error: "",
+      job_detail_code: "",
     };
   }
+  // 정형 코드는 서버 스냅샷(job_ids 매칭) 쪽이 최신이라 우선한다.
+  const snapshot = report?.server_job_snapshot;
+  const snapshotJob = snapshot?.matched_by === "job_ids" && Array.isArray(snapshot.jobs)
+    ? snapshot.jobs.find((item) => String(item?.id || "") === String(job.id || job.job_id || ""))
+    : null;
+  const result = (snapshotJob?.result && typeof snapshotJob.result === "object" ? snapshotJob.result : null)
+    || (job.result && typeof job.result === "object" ? job.result : {});
   return {
     job_id: job.id || job.job_id || "",
     job_kind: job.kind || "",
@@ -10106,6 +10341,8 @@ function reportJobSummary(report) {
     job_status: job.status || "",
     job_stage: reportJobStage(job),
     job_failed_keyword: reportJobFailedKeyword(job),
+    job_error: compactText(result.error || "", 200),
+    job_detail_code: compactText(result.detail_code || "", 120),
   };
 }
 
@@ -10187,6 +10424,11 @@ function summaryFor(report, storedAt, dateKey) {
     user_response_note: support.user_response_note || "",
     user_response_updated_at: support.user_response_updated_at || "",
     automation_ticket_id: support.automation_ticket_id || "",
+    // 자동 안내가 부여한 분류 카테고리를 인덱스에도 남긴다. 이게 없으면 재분류 스윕
+    // (aimax_report_auto_guidance)의 '운영자 수동설정 보호' 가드가 handleReport 로 자동
+    // 분류된 waiting_user 보고를 '수동'으로 오인해 재분류를 영구히 막는다(041852·628 사례).
+    auto_guidance_category: support.auto_guidance_category || "",
+    auto_guidance_signal: support.auto_guidance_signal || "",
   };
 }
 
@@ -15429,6 +15671,7 @@ async function handleReport(req, res) {
     next_update_message: supportMeta.nextUpdateMessage,
     updated_at: storedAt,
   };
+  attachServerJobSnapshot(report);
   applyReportAutoGuidance(report, storedAt);
 
   const dateKey = storedAt.slice(0, 10);
@@ -16280,6 +16523,12 @@ module.exports = {
   __automationTest: {
     AUTOMATION_TICKETS_PATH,
     applyReportAutoGuidance,
+    classifyReportAutoGuidance,
+    classifyStructuredJobGuidance,
+    reportStructuredJobSignal,
+    attachServerJobSnapshot,
+    snapshotJobForReport,
+    parseYeriGeneratedJson,
     appendAutomationTicket,
     appendAutomationTicketStatusUpdate,
     automationTicketCategory,

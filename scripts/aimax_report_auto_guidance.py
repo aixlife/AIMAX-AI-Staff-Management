@@ -134,6 +134,19 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="AI 제공자 서버가 일시적으로 응답하지 않아 실패한 건입니다. 코드나 실행기 고장보다는 외부 제공자 일시 장애 가능성이 큽니다.",
         next_update_message="같은 작업을 여러 번 반복하지 말고 10~30분 뒤 새 작업 1건만 다시 시도해주세요. 반복되면 이 접수 ID로 다시 알려주세요.",
     ),
+    "ai_response_invalid": Guidance(
+        category="ai_response_invalid",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message=(
+            "AI가 생성한 응답을 글 형식으로 해석하지 못해 글 생성 단계에서 중단되었습니다. "
+            "실행기나 API 키 문제가 아니라 선택한 AI 모델의 응답 형식 문제로, 같은 모델에서 반복될 수 있습니다."
+        ),
+        next_update_message=(
+            "설정 > AI/API 연결에서 모델을 AIMAX 기본 모델 또는 다른 모델로 바꾸거나, 잠시 뒤 새 작업 1건만 다시 시도해주세요. "
+            "같은 모델에서 반복되면 이 접수 ID로 알려주세요."
+        ),
+    ),
     "web_login_failed": Guidance(
         category="web_login_failed",
         status="waiting_user",
@@ -315,6 +328,13 @@ def load_jobs_by_id(data_dir: Path) -> dict[str, dict[str, Any]]:
     return {str(job.get("id") or ""): job for job in jobs if isinstance(job, dict) and job.get("id")}
 
 
+# 자유 텍스트 분류 입력. 두 가지를 의도적으로 제외한다:
+# (1) jobs_recent JSON 전체 덤프 — 잡의 정형 코드는 classify_structured_job 이 1순위로
+#     처리하고, 과거 잡 문구가 섞이면 무관한 키워드로 오분류된다(041852 사례).
+# (2) 보고의 이전 안내 문구(public_message/next_update_message) — 이건 지난 분류의 '출력'이라
+#     재분류 입력에 넣으면 옛 오분류가 스스로를 강화하는 피드백 루프가 된다. 예: 잘못 붙은
+#     mac_gatekeeper 메시지의 "최신 macOS 설치 파일을 다시 설치" 가 runner_update 로 재오분류
+#     (628 지은 채용 보고 사례). 분류는 사용자 신호(work_context/visible_error 등)로만.
 def combined_text(row: dict[str, Any], detail: dict[str, Any] | None) -> str:
     parts = [
         row.get("work_context"),
@@ -322,17 +342,133 @@ def combined_text(row: dict[str, Any], detail: dict[str, Any] | None) -> str:
         row.get("feedback_improve"),
         row.get("job_stage"),
         row.get("job_failed_keyword"),
-        row.get("public_message"),
-        row.get("next_update_message"),
     ]
     if detail:
         parts += [
             detail.get("user_input", {}).get("work_context"),
             detail.get("user_input", {}).get("visible_error"),
             detail.get("user_input", {}).get("user_note"),
-            json.dumps(detail.get("system", {}).get("jobs_recent", []), ensure_ascii=False),
         ]
     return " ".join(str(item or "") for item in parts).lower()
+
+
+def report_recent_jobs(detail: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(detail, dict):
+        return []
+    system = detail.get("system") if isinstance(detail.get("system"), dict) else {}
+    agent = system.get("agent") if isinstance(system.get("agent"), dict) else {}
+    agent_context = detail.get("agent_context") if isinstance(detail.get("agent_context"), dict) else {}
+    for candidate in (agent.get("jobs_recent"), system.get("jobs_recent"), agent_context.get("jobs_recent"), detail.get("jobs_recent")):
+        if isinstance(candidate, list):
+            return [job for job in candidate if isinstance(job, dict)]
+    return []
+
+
+# 연결 잡의 정형 신호(머신 코드 + 서버/러너 고정 문구) 1순위 룰. server.js 의
+# REPORT_STRUCTURED_JOB_GUIDANCE_RULES 와 의미를 맞춘다. 여기 매칭되면 자유 텍스트 룰은 건너뛴다.
+STRUCTURED_JOB_RULES: list[tuple[str, str]] = [
+    ("ai_response_invalid", r"invalid_json|server_generation_invalid_response|empty_content|응답을 글 형식으로 해석하지 못했"),
+    ("bundle_integrity_mismatch", r"bundle_integrity|startup bundle integrity"),
+    ("browser_driver_policy_blocked", r"browser_start|chromedriver|undetected_chromedriver|application control policy|애플리케이션 제어 정책|winerror 4551"),
+    ("api_key_missing", r"key_missing|no api key|api 키가 없습니다|키가 없습니다"),
+    ("api_key_invalid", r"server_generation_auth_failed|api_key_invalid|invalid api key|invalid x-api-key|api 키 인증"),
+    ("quota_exceeded", r"server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|balance|out of credit|결제|크레딧"),
+    ("rate_limited", r"server_generation_rate_limited|rate.?limit|resource_exhausted|429"),
+    ("model_not_found", r"server_generation_model_not_found|model_not_found|unsupported model"),
+    ("organization_verification_required", r"organization_verification_required|verify your organization|must be verified"),
+    ("image_paid_required", r"image_paid_required|image_paid_reauired"),
+    ("image_generation_failed", r"image_generation_failed|image_upload_failed|image_uploaded_but_not_inserted|이미지 생성 실패|이미지 생성용 로컬 api 키가 없어"),
+    ("naver_login_required", r"naver_login|captcha|nid 로그인|로그인 실패: 아이디 또는 비밀번호|2단계 인증|인증 화면|로그인 페이지에 머무"),
+    ("runner_update_required", r"update_required|runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_worker_not_started_after_claim|local_ui_queue_not_processed_after_claim|local_worker_progress_stalled"),
+    ("provider_transient", r"server_generation_provider_transient|provider_transient|server_generation_timeout|server_generation_interrupted|overloaded|unavailable|temporar"),
+]
+
+
+# jobs_recent 는 롤링 윈도우라 보고와 무관한 며칠~몇 주 전 잡이 섞인다. 낡은 잡의 정형
+# 코드로 최신 보고를 분류하면 오귀속된다(7/3 "실행기 연결 안 됨" 보고에 6/16 api-key 잡).
+# → 보고 접수 시각 기준 72h 창 안의 잡만 정형 신호로 신뢰한다. server.js 와 동일 정책.
+STRUCTURED_JOB_RECENCY = timedelta(hours=72)
+STRUCTURED_JOB_FUTURE_SKEW = timedelta(hours=1)
+
+
+def report_received_time(row: dict[str, Any], detail: dict[str, Any] | None) -> datetime | None:
+    for value in (
+        row.get("stored_at"),
+        (detail or {}).get("server_received_at"),
+        row.get("status_updated_at"),
+    ):
+        parsed = parse_time(str(value or ""))
+        if parsed:
+            return parsed
+    return None
+
+
+def job_time(job: dict[str, Any]) -> datetime | None:
+    for value in (job.get("finished_at"), job.get("updated_at"), job.get("created_at")):
+        parsed = parse_time(str(value or ""))
+        if parsed:
+            return parsed
+    return None
+
+
+def recent_jobs_for_report(jobs: list[dict[str, Any]], report_time: datetime | None) -> list[dict[str, Any]]:
+    # 보고 시각을 못 구하면 낡은-잡 오귀속 위험이 커 보수적으로 빈 리스트(자유텍스트 폴백).
+    if not jobs or report_time is None:
+        return []
+    lower = report_time - STRUCTURED_JOB_RECENCY
+    upper = report_time + STRUCTURED_JOB_FUTURE_SKEW
+    out = []
+    for job in jobs:
+        t = job_time(job)
+        if t and lower <= t <= upper:
+            out.append(job)
+    return out
+
+
+def structured_job_signal(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dict[str, dict[str, Any]]) -> str:
+    # 후보 잡: (1) 서버 스냅샷(job_ids 매칭만 — account_recent 추정 조인은 오귀속 위험으로 제외)
+    # (2) 클라이언트 jobs_recent (가능하면 jobs.json 의 최신 행으로 치환)
+    jobs: list[dict[str, Any]] = []
+    snapshot = (detail or {}).get("server_job_snapshot") or {}
+    if snapshot.get("matched_by") == "job_ids" and isinstance(snapshot.get("jobs"), list):
+        jobs = [job for job in snapshot["jobs"] if isinstance(job, dict)]
+    if not jobs:
+        for job in report_recent_jobs(detail):
+            fresh = jobs_by_id.get(str(job.get("id") or job.get("job_id") or ""))
+            jobs.append(fresh if fresh else job)
+    if not jobs:
+        row_job = jobs_by_id.get(str(row.get("job_id") or ""))
+        if row_job and job_user_matches_report(row_job, row):
+            jobs = [row_job]
+    jobs = recent_jobs_for_report(jobs, report_received_time(row, detail))
+    if not jobs:
+        return ""
+    primary = next((job for job in jobs if str(job.get("status") or "") in {"failed", "cancelled"}), jobs[0])
+    result = primary.get("result") if isinstance(primary.get("result"), dict) else {}
+    logs = primary.get("logs") if isinstance(primary.get("logs"), list) else []
+    last_error_log = next((log for log in reversed(logs) if isinstance(log, dict) and log.get("level") == "error"), None)
+    last_log = primary.get("last_log") if isinstance(primary.get("last_log"), dict) else {}
+    diagnostic = primary.get("diagnostic") if isinstance(primary.get("diagnostic"), dict) else {}
+    parts = [
+        result.get("detail_code"),
+        result.get("error"),
+        primary.get("failed_stage") or result.get("stage"),
+        primary.get("failed_reason"),
+        result.get("visible_error"),
+        diagnostic.get("code"),
+        (last_error_log or {}).get("message") or (last_log.get("message") if last_log.get("level") == "error" else ""),
+    ]
+    return " ".join(str(item or "") for item in parts if item).lower()
+
+
+def classify_structured_job(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dict[str, dict[str, Any]]) -> Guidance | None:
+    signal = structured_job_signal(row, detail, jobs_by_id)
+    if not signal:
+        return None
+    for key, pattern in STRUCTURED_JOB_RULES:
+        if re.search(pattern, signal, re.I):
+            return GUIDANCE[key]
+    return None
 
 
 def report_issue_text(row: dict[str, Any]) -> str:
@@ -399,7 +535,8 @@ def successful_yunmi_fallback_after_report(
     detail: dict[str, Any] | None,
     jobs_by_id: dict[str, dict[str, Any]],
 ) -> bool:
-    if "yunmi_ai_invalid_json" not in combined_text(row, detail):
+    yunmi_text = combined_text(row, detail) + " " + json.dumps(report_recent_jobs(detail), ensure_ascii=False).lower()
+    if "yunmi_ai_invalid_json" not in yunmi_text:
         return False
     report_time = parse_time(str(row.get("stored_at") or row.get("server_received_at") or ""))
     if not report_time:
@@ -461,7 +598,13 @@ def is_bundle_integrity_mismatch(text: str) -> bool:
     )
 
 
-def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | None:
+# mac_gatekeeper 에서 bare "macos" 제외(모든 맥 보고 오분류 — 6/28 지은 보고 사례),
+# runner_update_required 를 naver_login 앞으로(업데이트 안내문 속 "네이버 자동 로그인이
+# 빨라지고" 릴리스 노트 문구 오분류 — 7/7 맥 고착 보고 사례).
+MAC_GATEKEEPER_PATTERN = r"개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응|확인되지 않은 개발자|손상되었기 때문에 열 수 없"
+
+
+def classify(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dict[str, dict[str, Any]] | None = None) -> Guidance | None:
     row_text = " ".join(
         str(row.get(key) or "")
         for key in ("work_context", "visible_error", "feedback_improve", "job_stage", "job_failed_keyword")
@@ -474,20 +617,24 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
             return GUIDANCE["staff_feedback_reviewing"]
         return None
 
+    structured = classify_structured_job(row, detail, jobs_by_id or {})
+    if structured:
+        return structured
+
     if str(row.get("status") or "") == "working" and "v1.0.52" in text:
         return GUIDANCE["v1052_update_verify"]
 
     row_first_rules: list[tuple[str, str]] = [
         ("bundle_integrity_mismatch", r"bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성"),
         ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
+        ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
         ("web_login_failed", r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지"),
         ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
-        ("mac_gatekeeper", r"macos|개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응"),
+        ("mac_gatekeeper", MAC_GATEKEEPER_PATTERN),
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
         ("image_generation_failed", r"image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted"),
         ("organization_verification_required", r"organization_verification_required|organization verification|verify your organization|must be verified|조직 인증"),
         ("model_not_found", r"model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가"),
-        ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
     ]
     for key, pattern in row_first_rules:
         if key == "bundle_integrity_mismatch" and is_bundle_integrity_mismatch(row_text):
@@ -508,9 +655,9 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
         ("model_not_found", r"model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가"),
         ("provider_transient", r"provider_transient|temporar|unavailable|overloaded|일시적 오류|잠시 후"),
         ("web_login_failed", r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지"),
-        ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
-        ("mac_gatekeeper", r"macos|개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응"),
         ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
+        ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
+        ("mac_gatekeeper", MAC_GATEKEEPER_PATTERN),
     ]
     for key, pattern in rules:
         if key == "bundle_integrity_mismatch" and is_bundle_integrity_mismatch(text):
@@ -521,12 +668,27 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None) -> Guidance | N
     return None
 
 
-def should_touch(row: dict[str, Any], guidance: Guidance, min_age: timedelta) -> bool:
+AUTO_GUIDANCE_SOURCES = {"handleReport", "aimax_report_auto_guidance"}
+
+
+def report_auto_managed(row: dict[str, Any], detail: dict[str, Any] | None) -> bool:
+    # 이 보고의 현재 안내가 자동 분류(handleReport / 스윕)로 설정된 것인지.
+    # index 행에 category 가 있거나, detail.support.auto_guidance_source 가 자동 소스면 True.
+    if str(row.get("auto_guidance_category") or ""):
+        return True
+    source = str(((detail or {}).get("support") or {}).get("auto_guidance_source") or "")
+    return source in AUTO_GUIDANCE_SOURCES
+
+
+def should_touch(row: dict[str, Any], guidance: Guidance, min_age: timedelta, detail: dict[str, Any] | None = None) -> bool:
     if str(row.get("status") or "") == "done":
         return False
     if str(row.get("auto_guidance_category") or "") == guidance.category:
         return False
-    if str(row.get("status") or "") == "waiting_user" and not str(row.get("auto_guidance_category") or ""):
+    # waiting_user 인데 자동 안내 흔적이 전혀 없으면 운영자 수동설정으로 보고 건드리지 않는다.
+    # 단 handleReport 로 자동 분류됐지만 index 에 category 가 안 남은 과거 보고(041852·628)는
+    # detail.support.auto_guidance_source 로 자동설정을 식별해 재분류를 허용한다.
+    if str(row.get("status") or "") == "waiting_user" and not report_auto_managed(row, detail):
         return False
     updated_at = parse_time(str(row.get("status_updated_at") or row.get("stored_at") or ""))
     if updated_at and datetime.now(UTC) - updated_at < min_age:
@@ -612,8 +774,8 @@ def main(argv: list[str]) -> int:
                 detail = json.loads(path.read_text(encoding="utf-8", errors="replace"))
             except json.JSONDecodeError:
                 detail = None
-        guidance = completion_guidance(row, detail, jobs_by_id) or still_failing_guidance(row) or classify(row, detail)
-        if not guidance or not should_touch(row, guidance, min_age):
+        guidance = completion_guidance(row, detail, jobs_by_id) or still_failing_guidance(row) or classify(row, detail, jobs_by_id)
+        if not guidance or not should_touch(row, guidance, min_age, detail):
             continue
 
         previous = status
