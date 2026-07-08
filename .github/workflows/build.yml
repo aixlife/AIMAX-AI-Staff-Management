@@ -61,9 +61,13 @@ jobs:
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { throw "ISCC.exe 없음: $iscc" }
           if (-not (Test-Path "dist\AIMAX")) { throw "dist\AIMAX 없음 (build.py 산출물 확인)" }
+          # iscc 는 [Files] Source 상대경로를 .iss 파일 위치(packaging\windows) 기준으로 해석하므로
+          # SourceDir/OutputDir 는 반드시 절대경로로 넘긴다.
+          $srcDir = (Resolve-Path "dist\AIMAX").Path
+          $outDir = Join-Path (Get-Location) "dist\upload"
           & $iscc "packaging\windows\aimax_installer.iss" `
-            "/DSourceDir=dist\AIMAX" `
-            "/DOutputDir=dist\upload" `
+            "/DSourceDir=$srcDir" `
+            "/DOutputDir=$outDir" `
             "/DOutputBaseFilename=aimax-bundle-windows" `
             "/DAppVersion=$appVersion"
           if ($LASTEXITCODE -ne 0) { throw "iscc 실패 (exit $LASTEXITCODE)" }
