@@ -465,8 +465,8 @@ const WORKERS = {
     status: "available",
     requiredSettings: [],
     moduleKey: "schedule_alert",
-    profileImage: "/assets/avatar_max.png",
-    avatarImage: "/assets/avatar_max.png",
+    profileImage: "/assets/avatar_max.jpg",
+    avatarImage: "/assets/avatar_max.jpg",
     repoUrl: "https://github.com/aixlife/maxalert",
     releaseUrl: "",
     setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.3.exe`,
@@ -476,6 +476,32 @@ const WORKERS = {
     version: "0.2.0",
     shortDescription: "포스트잇 위젯과 마감 3분 전 전화면 사이렌으로 일정을 지키게 하는 데스크톱 직원입니다. 노션 일정과 양방향으로 동기화됩니다.",
     capabilities: ["포스트잇 위젯", "일정 사이렌", "노션 동기화", "일일 업무 보고", "포인트·뱃지", "Mac 앱"],
+    resume: {
+      employeeNo: "AIMAX-2026-MAX",
+      team: "일정관리팀",
+      experience: "6년차",
+      hometown: "대전 유성",
+      formerRole: "종합병원 코드블루 방송 담당",
+      statement: "\"마감 3분 전, 제가 먼저 웁니다\"",
+      intro: "화면 한쪽에 오늘 할 일을 포스트잇으로 붙여두고, 마감 3분 전이 되면 모든 모니터를 사이렌으로 덮어 도망갈 곳을 없애는 일정 지킴이입니다. 노션 일정과 양방향으로 맞추고, 하루가 끝나면 완료 목록을 업무 보고로 정리해 드립니다.",
+      career: [
+        { period: "2020-2022", org: "종합병원 원내방송실", note: "코드블루 방송을 맡으며 사람을 즉시 움직이게 하는 소리와 타이밍을 배웠습니다." },
+        { period: "2022-2024", org: "생산 라인 알림 시스템팀", note: "교대·점검 일정을 놓치면 안 되는 현장에서 다단계 알림 설계를 담당했습니다." },
+        { period: "2024-현재", org: "AIMAX 일정관리팀", note: "포스트잇과 사이렌으로 미루기 어려운 하루를 만드는 일을 합니다." },
+      ],
+      reference: {
+        quote: "맥스가 온 뒤로 '깜빡했다'는 말이 회의에서 사라졌습니다.",
+        from: "전 직장 생산관리 팀장",
+      },
+      interviewLine: "알림은 부드럽게, 마감은 시끄럽게 지키겠습니다.",
+      skills: [
+        { label: "일정 사이렌", score: 5 },
+        { label: "포스트잇 정리", score: 5 },
+        { label: "노션 동기화", score: 4 },
+        { label: "일일 업무 보고", score: 4 },
+        { label: "미루기 방지 설계", score: 5 },
+      ],
+    },
     executionOptions: [
       {
         kind: "windows_download",
