@@ -69,6 +69,19 @@ const CAFE24_REVIEW_ALERTS_ENABLED = String(process.env.AIMAX_CAFE24_REVIEW_ALER
 const CAFE24_TELEGRAM_MESSAGE_THREAD_ID = String(process.env.AIMAX_CAFE24_TELEGRAM_MESSAGE_THREAD_ID || TELEGRAM_MESSAGE_THREAD_ID).trim();
 const CAFE24_AUTO_SEND_ENABLED = String(process.env.AIMAX_CAFE24_AUTO_SEND_ENABLED || "1").trim() !== "0";
 const CAFE24_AUTO_PROCESS_LOCK_MS = Number(process.env.AIMAX_CAFE24_AUTO_PROCESS_LOCK_MS || 10 * 60 * 1000);
+const CAFE24_PARTNER_NOTION_TOKEN = String(process.env.AIMAX_CAFE24_PARTNER_NOTION_TOKEN || process.env.NOTION_MAKEFAMILY_API_KEY || "").trim();
+const CAFE24_PARTNER_NOTION_DATABASE_ID = String(process.env.AIMAX_CAFE24_PARTNER_NOTION_DATABASE_ID || "37bb31f1da5580bfb5d2f5980e223377").trim();
+const CAFE24_PARTNER_NOTION_DATA_SOURCE_ID = String(process.env.AIMAX_CAFE24_PARTNER_NOTION_DATA_SOURCE_ID || "").trim();
+const CAFE24_PARTNER_NOTION_VERSION = String(process.env.AIMAX_CAFE24_PARTNER_NOTION_VERSION || "2022-06-28").trim();
+const CAFE24_PARTNER_NOTION_CACHE_MS = Math.max(0, Number(process.env.AIMAX_CAFE24_PARTNER_NOTION_CACHE_MS || 0));
+const CAFE24_PARTNER_NOTION_TIMEOUT_MS = Math.max(1000, Number(process.env.AIMAX_CAFE24_PARTNER_NOTION_TIMEOUT_MS || 7000));
+const CAFE24_ADMIN_MALL_ID = String(process.env.AIMAX_CAFE24_ADMIN_MALL_ID || process.env.CAFE24_MALL_ID || "").trim();
+const CAFE24_ADMIN_CLIENT_ID = String(process.env.AIMAX_CAFE24_ADMIN_CLIENT_ID || process.env.CAFE24_CLIENT_ID || "").trim();
+const CAFE24_ADMIN_CLIENT_SECRET = String(process.env.AIMAX_CAFE24_ADMIN_CLIENT_SECRET || process.env.CAFE24_CLIENT_SECRET || "").trim();
+const CAFE24_ADMIN_ACCESS_TOKEN = String(process.env.AIMAX_CAFE24_ADMIN_ACCESS_TOKEN || process.env.CAFE24_ACCESS_TOKEN || "").trim();
+const CAFE24_ADMIN_REFRESH_TOKEN = String(process.env.AIMAX_CAFE24_ADMIN_REFRESH_TOKEN || process.env.CAFE24_REFRESH_TOKEN || "").trim();
+const CAFE24_ADMIN_TOKEN_FILE = expandHomePath(process.env.AIMAX_CAFE24_ADMIN_TOKEN_FILE || path.join(DATA_DIR, "cafe24-admin-token.json"));
+const CAFE24_ADMIN_TIMEOUT_MS = Math.max(1000, Number(process.env.AIMAX_CAFE24_ADMIN_TIMEOUT_MS || 7000));
 const KEYCHAIN_ACCOUNT = String(process.env.AIMAX_KEYCHAIN_ACCOUNT || "minsu-api").trim();
 const LOCAL_KEYRING_SERVICE = String(process.env.AIMAX_KEYRING_SERVICE || "AIMAX").trim();
 const LEGACY_KEYRING_SERVICE = String(process.env.AIMAX_LEGACY_KEYRING_SERVICE || "NaverBlogAuto").trim();
@@ -650,6 +663,7 @@ const PUBLIC_DOWNLOAD_FILES = new Set([
 const researchPaidLocks = new Map();
 const downloadTickets = new Map();
 const eunseoLaunchTickets = new Map();
+let cafe24PartnerNotionCache = { fetched_at: 0, rows: [] };
 const JOB_STATUSES = new Set(["queued", "generating", "ready_for_publish", "running", "done", "failed", "cancelled"]);
 const TERMINAL_JOB_STATUSES = new Set(["done", "failed", "cancelled"]);
 const AGENT_CLAIMABLE_JOB_STATUSES = new Set([
@@ -713,6 +727,27 @@ function json(req, res, statusCode, payload, extraHeaders = {}) {
   });
   res.end(body);
 }
+
+function html(req, res, statusCode, body, extraHeaders = {}) {
+  res.writeHead(statusCode, {
+    "content-type": "text/html; charset=utf-8",
+    "content-length": Buffer.byteLength(body),
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    ...corsHeaders(req),
+    ...extraHeaders,
+  });
+  res.end(body);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -2241,6 +2276,20 @@ function extractClaudeText(response) {
   return chunks.join("\n").trim();
 }
 
+// 강제 도구 호출(tool_choice: tool)의 tool_use 블록 input을 꺼낸다.
+// API가 JSON을 구조적으로 보장하므로 텍스트 JSON 파싱(리터럴 개행 등으로 invalid_json)이 필요 없다.
+// 역대 yeri_claude_invalid_json 4건이 전부 300~800자 소형 글(잘림 아님)이라 텍스트 포맷 문제로 판단, Gemini의 responseJsonSchema와 동일하게 Claude도 구조 강제로 전환 (2026-07-08).
+function extractClaudeToolInput(response, toolName) {
+  if (!response || typeof response !== "object") return null;
+  for (const item of response.content || []) {
+    if (!item || typeof item !== "object") continue;
+    if (item.type === "tool_use" && item.name === toolName && item.input && typeof item.input === "object") {
+      return item.input;
+    }
+  }
+  return null;
+}
+
 // meta.stop_reason: 제공자 응답의 종료 사유(claude stop_reason / gemini finishReason / openai status).
 // invalid_json 실패가 max_tokens 잘림인지, JSON 아닌 응답(거절/서문)인지 원인 확정용 —
 // 7/7 기준 yeri_claude_invalid_json 4건이 진단 정보 부재로 원인 미확정 상태였다.
@@ -2538,15 +2587,44 @@ async function generateYeriClaudeArtifact(job, userId) {
     },
     body: {
       model,
-      max_tokens: 8000,
+      // 8000 → 16000: 목표 글자수 상한 6000자(한글)의 토큰 여유 확보. 비스트리밍 안전 상한(~16K) 이내.
+      max_tokens: 16000,
+      // 강제 도구 호출로 JSON 구조를 API 차원에서 보장 (Gemini responseJsonSchema와 동급).
+      tools: [{
+        name: "emit_blog_post",
+        description: "작성 완료한 네이버 블로그 글을 제출한다. title과 content_markdown을 채워 정확히 한 번 호출한다.",
+        input_schema: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "블로그 글 제목" },
+            content_markdown: { type: "string", description: "'# 제목'으로 시작하는 한국어 마크다운 본문. [이미지] 줄 포함 규칙은 지시를 따른다." },
+          },
+          required: ["title", "content_markdown"],
+        },
+      }],
+      tool_choice: { type: "tool", name: "emit_blog_post" },
       messages: [{ role: "user", content: buildYeriGenerationPrompt(job.payload || {}) }],
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
     onTransientRetry: yeriTransientRetryLogger("claude", job, userId),
   });
-  const text = extractClaudeText(response.json);
-  const parsed = parseYeriGeneratedJson(text, "yeri_claude", { stop_reason: response.json?.stop_reason });
+  const toolInput = extractClaudeToolInput(response.json, "emit_blog_post");
+  let parsed;
+  if (toolInput) {
+    parsed = toolInput;
+    const parsedMarkdown = String(parsed.content_markdown || parsed.markdown || parsed.content || "").trim();
+    if (!parsedMarkdown) {
+      const error = new Error("yeri_claude_empty_content");
+      error.code = "yeri_claude_empty_content";
+      error.detail = yeriInvalidJsonDetail(JSON.stringify(toolInput), { stop_reason: response.json?.stop_reason });
+      throw error;
+    }
+  } else {
+    // 도구 블록이 없으면(모델 거절/max_tokens 잘림 등) 기존 텍스트 파싱 폴백 — invalid_json 코드·진단 계측 유지.
+    const text = extractClaudeText(response.json);
+    parsed = parseYeriGeneratedJson(text, "yeri_claude", { stop_reason: response.json?.stop_reason });
+  }
   return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, model, yeriClaudeUsage(response.json?.usage));
 }
 
@@ -7103,6 +7181,8 @@ const CAFE24_STAFF_PRODUCT_RULES = [
   { product: "yunmi", priceWon: 9900, patterns: [/윤미|yunmi|스크립트작가|스크립트/] },
   { product: "jieun", priceWon: 5500, patterns: [/지은|jieun|오피스매니저|오피스지원|office/] },
   { product: "nakyung", priceWon: 9900, patterns: [/나경|nakyung|판서쌤|판서|pencil/] },
+  // 카페24 상품번호 243 "PC 알람앱 맥스" 3,000원 (2026-07-08 실조회). 넓은 패턴이어도 priceWon 게이트가 오매칭을 needs_review로 막는다.
+  { product: "maxalert", priceWon: 3000, patterns: [/맥스|maxalert|max_alert|알람앱/] },
   { product: "hyojin", priceWon: 33000, reviewIssue: "product_not_ready", patterns: [/효진|hyojin|영상제작|아나운서/] },
   { product: "sangsu", priceWon: 0, patterns: [/상수|sangsu|견적|견적서|quote|quotation|estimate/] },
   { product: "bundle", priceWon: 0, patterns: [/전체통합|통합권한|통합설치|bundle|올인원|allinone/] },
@@ -7153,6 +7233,490 @@ function cafe24ExternalId(row) {
     compactText(row.order_date || row.orderDate || row.ordered_at || row.received_at, 80),
   ].join("|");
   return `derived:${crypto.createHash("sha256").update(fingerprint).digest("hex").slice(0, 32)}`;
+}
+
+
+function cleanPartnerCompareText(value) {
+  let text = String(value || "").trim();
+  if (!text) return "";
+  try {
+    text = decodeURIComponent(text);
+  } catch (_error) {}
+  return text
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .replace(/[?#].*$/, "")
+    .replace(/\/+$/, "")
+    .trim();
+}
+
+function partnerUrlTokens(value) {
+  const raw = String(value || "").trim();
+  const tokens = new Set();
+  if (!raw) return tokens;
+  const productNoToken = cafe24ProductNoToken(raw);
+  if (productNoToken) {
+    tokens.add(productNoToken);
+    return tokens;
+  }
+  tokens.add(raw);
+  tokens.add(cleanPartnerCompareText(raw));
+  try {
+    const parsed = new URL(raw);
+    tokens.add(cleanPartnerCompareText(`${parsed.hostname}${parsed.pathname}`));
+    for (const key of ["product_no", "partner", "ref", "utm_source", "utm_campaign", "coupon", "code"]) {
+      const item = parsed.searchParams.get(key);
+      if (key === "product_no") {
+        const itemToken = cafe24ProductNoToken(`product_no=${item || ""}`);
+        if (itemToken) tokens.add(itemToken);
+      } else if (item && String(item).trim().length >= 3) {
+        tokens.add(String(item).trim().toLowerCase());
+      }
+    }
+  } catch (_error) {}
+  return tokens;
+}
+
+function cafe24ProductNoToken(value) {
+  let text = String(value || "").trim();
+  if (!text) return "";
+  for (let i = 0; i < 2; i += 1) {
+    try {
+      const decoded = decodeURIComponent(text);
+      if (decoded === text) break;
+      text = decoded;
+    } catch (_error) {
+      break;
+    }
+  }
+  const match = text.match(/(?:^|[?&#/\s])product_no\s*=?\s*([0-9]{1,10})(?:\D|$)/i)
+    || text.match(/\bproduct_no(?:%3D|=)([0-9]{1,10})\b/i);
+  return match ? `product_no:${match[1]}` : "";
+}
+
+function compactPartnerToken(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^[#?&]+/, "")
+    .replace(/\s+/g, "");
+}
+
+function collectCafe24PartnerCandidates(input) {
+  const row = cafe24OrderSource(input);
+  const keys = [
+    "partner_url",
+    "partnerUrl",
+    "partner_page_url",
+    "partnerPageUrl",
+    "referral_url",
+    "referralUrl",
+    "landing_url",
+    "landingUrl",
+    "source_url",
+    "sourceUrl",
+    "page_url",
+    "pageUrl",
+    "product_url",
+    "productUrl",
+    "product_page_url",
+    "productPageUrl",
+    "referer",
+    "referrer",
+    "product_no",
+    "productNo",
+    "partner_ref",
+    "partnerRef",
+    "ref",
+    "coupon",
+    "coupon_code",
+    "couponCode",
+    "utm_source",
+    "utm_campaign",
+  ];
+  const values = [];
+  for (const source of [input, row]) {
+    if (!source || typeof source !== "object") continue;
+    for (const key of keys) {
+      const value = source[key];
+      if (value !== null && value !== undefined && String(value).trim()) {
+        const text = String(value).trim();
+        values.push((key === "product_no" || key === "productNo") ? `product_no=${text}` : text);
+      }
+    }
+  }
+  return [...new Set(values)].slice(0, 30);
+}
+
+function cafe24AdminConfigured() {
+  return Boolean(
+    CAFE24_ADMIN_MALL_ID
+      && (
+        CAFE24_ADMIN_ACCESS_TOKEN
+        || (CAFE24_ADMIN_REFRESH_TOKEN && CAFE24_ADMIN_CLIENT_ID && CAFE24_ADMIN_CLIENT_SECRET)
+        || fs.existsSync(CAFE24_ADMIN_TOKEN_FILE)
+      ),
+  );
+}
+
+function cafe24AdminOrderId(input) {
+  const row = cafe24OrderSource(input);
+  const keys = [
+    "order_id",
+    "orderId",
+    "order_no",
+    "orderNo",
+    "order_number",
+    "orderNumber",
+    "cafe24_order_id",
+    "cafe24OrderId",
+    "external_id",
+    "externalId",
+  ];
+  for (const source of [input, row]) {
+    if (!source || typeof source !== "object") continue;
+    for (const key of keys) {
+      const value = compactText(source[key], 80);
+      if (value && !value.startsWith("derived:")) return value;
+    }
+  }
+  return "";
+}
+
+function readCafe24AdminTokenState() {
+  const fileState = readJsonFile(CAFE24_ADMIN_TOKEN_FILE, {}, { allowFallbackOnError: true });
+  return {
+    access_token: compactText(fileState.access_token || CAFE24_ADMIN_ACCESS_TOKEN, 4000),
+    refresh_token: compactText(fileState.refresh_token || CAFE24_ADMIN_REFRESH_TOKEN, 4000),
+    expires_at: compactText(fileState.expires_at || "", 80),
+    refresh_token_expires_at: compactText(fileState.refresh_token_expires_at || "", 80),
+    mall_id: compactText(fileState.mall_id || CAFE24_ADMIN_MALL_ID, 80),
+    shop_no: compactText(fileState.shop_no || "", 20),
+    token_type: compactText(fileState.token_type || "Bearer", 20) || "Bearer",
+  };
+}
+
+function writeCafe24AdminTokenState(tokenState) {
+  if (!tokenState || typeof tokenState !== "object") return;
+  const next = {
+    access_token: String(tokenState.access_token || "").trim(),
+    refresh_token: String(tokenState.refresh_token || "").trim(),
+    expires_at: String(tokenState.expires_at || "").trim(),
+    refresh_token_expires_at: String(tokenState.refresh_token_expires_at || "").trim(),
+    mall_id: String(tokenState.mall_id || CAFE24_ADMIN_MALL_ID || "").trim(),
+    shop_no: String(tokenState.shop_no || "").trim(),
+    token_type: String(tokenState.token_type || "Bearer").trim() || "Bearer",
+    updated_at: nowIso(),
+  };
+  if (!next.access_token && !next.refresh_token) return;
+  writeJsonAtomic(CAFE24_ADMIN_TOKEN_FILE, next);
+}
+
+function cafe24AdminTokenExpiredSoon(expiresAt, graceMs = 5 * 60 * 1000) {
+  const time = Date.parse(String(expiresAt || ""));
+  if (!Number.isFinite(time)) return false;
+  return time <= Date.now() + graceMs;
+}
+
+function cafe24AdminExtractProductNos(value) {
+  const out = new Set();
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Object.prototype.hasOwnProperty.call(node, "product_no")) {
+      const token = cafe24ProductNoToken(`product_no=${node.product_no}`);
+      if (token) out.add(token.replace(/^product_no:/, ""));
+    }
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    for (const key of ["order", "orders", "items", "item", "products", "product"]) {
+      const child = node[key];
+      if (child && typeof child === "object") walk(child);
+    }
+  };
+  walk(value);
+  return [...out];
+}
+
+function withCafe24AdminProductNo(input, productNos, orderId = "") {
+  const productNo = Array.isArray(productNos) ? String(productNos[0] || "").trim() : "";
+  if (!productNo) return input;
+  return {
+    ...(input && typeof input === "object" ? input : {}),
+    cafe24_order_id: orderId || cafe24AdminOrderId(input),
+    product_no: productNo,
+    productNo,
+    product_nos: productNos,
+    cafe24_admin_product_nos: productNos,
+  };
+}
+
+async function refreshCafe24AdminAccessToken() {
+  const current = readCafe24AdminTokenState();
+  const refreshToken = current.refresh_token;
+  if (!CAFE24_ADMIN_MALL_ID || !CAFE24_ADMIN_CLIENT_ID || !CAFE24_ADMIN_CLIENT_SECRET || !refreshToken) {
+    const error = new Error("cafe24_api_credentials_missing");
+    error.code = "cafe24_api_credentials_missing";
+    throw error;
+  }
+  const target = `https://${encodeURIComponent(CAFE24_ADMIN_MALL_ID)}.cafe24api.com/api/v2/oauth/token`;
+  const auth = Buffer.from(`${CAFE24_ADMIN_CLIENT_ID}:${CAFE24_ADMIN_CLIENT_SECRET}`, "utf8").toString("base64");
+  const token = await requestFormUrl(target, {
+    grant_type: "refresh_token",
+    refresh_token: refreshToken,
+  }, {
+    authorization: `Basic ${auth}`,
+  }, CAFE24_ADMIN_TIMEOUT_MS);
+  writeCafe24AdminTokenState(token);
+  return token;
+}
+
+async function cafe24AdminAccessToken(forceRefresh = false) {
+  const current = readCafe24AdminTokenState();
+  if (!forceRefresh && current.access_token && !cafe24AdminTokenExpiredSoon(current.expires_at)) {
+    return current.access_token;
+  }
+  if (current.refresh_token && CAFE24_ADMIN_CLIENT_ID && CAFE24_ADMIN_CLIENT_SECRET) {
+    const refreshed = await refreshCafe24AdminAccessToken();
+    return String(refreshed.access_token || "").trim();
+  }
+  return current.access_token || "";
+}
+
+async function fetchCafe24AdminOrderProductNos(orderId) {
+  const cleanOrderId = compactText(orderId, 80);
+  if (!cleanOrderId) return { ok: false, reason: "order_id_missing", order_id: "" };
+  if (!cafe24AdminConfigured()) return { ok: false, reason: "cafe24_api_not_configured", order_id: cleanOrderId };
+  const path = `/api/v2/admin/orders/${encodeURIComponent(cleanOrderId)}`;
+  const query = new URLSearchParams({ embed: "items" });
+  const target = `https://${encodeURIComponent(CAFE24_ADMIN_MALL_ID)}.cafe24api.com${path}?${query.toString()}`;
+
+  for (const forceRefresh of [false, true]) {
+    const accessToken = await cafe24AdminAccessToken(forceRefresh);
+    if (!accessToken) return { ok: false, reason: "cafe24_access_token_missing", order_id: cleanOrderId };
+    try {
+      const data = await requestJsonUrl(target, {
+        method: "GET",
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+        },
+        timeoutMs: CAFE24_ADMIN_TIMEOUT_MS,
+      });
+      const productNos = cafe24AdminExtractProductNos(data);
+      return {
+        ok: true,
+        reason: productNos.length ? "cafe24_api" : "product_no_missing",
+        order_id: cleanOrderId,
+        product_no: productNos[0] || "",
+        product_nos: productNos,
+      };
+    } catch (error) {
+      if (!forceRefresh && [401, 403].includes(Number(error.statusCode || 0))) continue;
+      return {
+        ok: false,
+        reason: "cafe24_api_order_lookup_failed",
+        order_id: cleanOrderId,
+        error: String(error.code || error.message || "cafe24_api_order_lookup_failed").slice(0, 120),
+      };
+    }
+  }
+  return { ok: false, reason: "cafe24_api_order_lookup_failed", order_id: cleanOrderId };
+}
+
+async function enrichCafe24PartnerInputWithAdminProductNo(input) {
+  if (collectCafe24PartnerCandidates(input).some((candidate) => cafe24ProductNoToken(candidate))) {
+    return { input, lookup: { ok: false, reason: "product_no_already_present", order_id: cafe24AdminOrderId(input) } };
+  }
+  const orderId = cafe24AdminOrderId(input);
+  if (!orderId) return { input, lookup: { ok: false, reason: "order_id_missing", order_id: "" } };
+  const lookup = await fetchCafe24AdminOrderProductNos(orderId);
+  if (!lookup.ok || !lookup.product_no) return { input, lookup };
+  return {
+    input: withCafe24AdminProductNo(input, lookup.product_nos, orderId),
+    lookup,
+  };
+}
+
+
+function notionRichTextPlain(items) {
+  return Array.isArray(items) ? items.map((item) => item?.plain_text || item?.text?.content || "").join("").trim() : "";
+}
+
+function notionPropertyText(prop) {
+  if (!prop || typeof prop !== "object") return "";
+  if (prop.type === "title") return notionRichTextPlain(prop.title);
+  if (prop.type === "rich_text") return notionRichTextPlain(prop.rich_text);
+  if (prop.type === "url") return String(prop.url || "").trim();
+  if (prop.type === "email") return String(prop.email || "").trim();
+  if (prop.type === "phone_number") return String(prop.phone_number || "").trim();
+  if (prop.type === "select") return String(prop.select?.name || "").trim();
+  if (prop.type === "multi_select") return (prop.multi_select || []).map((item) => item?.name || "").filter(Boolean).join(", ");
+  if (prop.type === "formula") {
+    const formula = prop.formula || {};
+    if (formula.type === "string") return String(formula.string || "").trim();
+    if (formula.type === "number") return String(formula.number || "").trim();
+    if (formula.type === "boolean") return formula.boolean ? "true" : "false";
+  }
+  return "";
+}
+
+function partnerRowsFromNotionResults(results) {
+  return (Array.isArray(results) ? results : [])
+    .map((page) => {
+      const props = page?.properties || {};
+      const name = compactText(notionPropertyText(props["성함"]) || notionPropertyText(props["Name"]) || notionPropertyText(props["이름"]), 120);
+      const url = compactText(notionPropertyText(props["URL"]) || notionPropertyText(props["url"]) || notionPropertyText(props["userDefined:URL"]), 1000);
+      const note = compactText(notionPropertyText(props["비고"]) || notionPropertyText(props["메모"]) || notionPropertyText(props["코드"]), 300);
+      const productNo = cafe24ProductNoToken(`${url} ${note}`);
+      return { name, url, note, product_no: productNo.replace(/^product_no:/, "") };
+    })
+    .filter((row) => row.name && (row.url || row.note));
+}
+
+function matchCafe24PartnerRows(input, partnerRows) {
+  const candidates = collectCafe24PartnerCandidates(input);
+  if (!candidates.length) return { matched: false, partner: null, reason: "no_partner_hint" };
+  const candidateTokens = new Set();
+  for (const candidate of candidates) {
+    for (const token of partnerUrlTokens(candidate)) {
+      if (token) candidateTokens.add(token);
+    }
+    const compact = compactPartnerToken(candidate);
+    if (compact.length >= 3) candidateTokens.add(compact);
+  }
+
+  const candidateProductTokens = [...candidateTokens].filter((token) => token.startsWith("product_no:"));
+  if (candidateProductTokens.length) {
+    for (const row of partnerRows || []) {
+      const rowProductNoToken = row.product_no ? `product_no:${row.product_no}` : cafe24ProductNoToken(`${row.url || ""} ${row.note || ""}`);
+      if (rowProductNoToken && candidateProductTokens.includes(rowProductNoToken)) {
+        const productNo = rowProductNoToken.replace(/^product_no:/, "");
+        return { matched: true, partner: { ...row, product_no: row.product_no || productNo }, reason: "product_no" };
+      }
+    }
+    return { matched: false, partner: null, reason: "no_match" };
+  }
+
+  for (const row of partnerRows || []) {
+    const rowTokens = new Set();
+    for (const token of partnerUrlTokens(row.url)) {
+      if (token && !token.startsWith("product_no:")) rowTokens.add(token);
+    }
+    for (const token of String(row.note || "").split(/[\s,;/|]+/)) {
+      const compact = compactPartnerToken(token);
+      if (compact.length >= 3) rowTokens.add(compact);
+    }
+    for (const rowToken of rowTokens) {
+      if (!rowToken || rowToken.length < 3) continue;
+      for (const candidateToken of candidateTokens) {
+        if (
+          candidateToken === rowToken
+          || (rowToken.length >= 8 && candidateToken.includes(rowToken))
+          || (candidateToken.length >= 8 && rowToken.includes(candidateToken))
+        ) {
+          return { matched: true, partner: row, reason: "matched" };
+        }
+      }
+    }
+  }
+  return { matched: false, partner: null, reason: "no_match" };
+}
+
+function cafe24PartnerLine(partner) {
+  const name = compactText(partner?.name || "", 80);
+  if (!name) return "";
+  const productNo = compactText(partner?.product_no || "", 20);
+  return productNo ? `파트너: ${name} (product_no=${productNo})` : `${name} 페이지에서 결제`;
+}
+
+async function fetchCafe24PartnerRowsFromNotion() {
+  if (!CAFE24_PARTNER_NOTION_TOKEN) {
+    return { ok: false, rows: [], reason: "notion_token_missing" };
+  }
+  const now = Date.now();
+  if (
+    CAFE24_PARTNER_NOTION_CACHE_MS > 0
+    && cafe24PartnerNotionCache.rows.length
+    && now - cafe24PartnerNotionCache.fetched_at < CAFE24_PARTNER_NOTION_CACHE_MS
+  ) {
+    return { ok: true, rows: cafe24PartnerNotionCache.rows, reason: "cache" };
+  }
+
+  const headers = {
+    authorization: `Bearer ${CAFE24_PARTNER_NOTION_TOKEN}`,
+    "notion-version": CAFE24_PARTNER_NOTION_VERSION,
+  };
+  const targets = CAFE24_PARTNER_NOTION_DATA_SOURCE_ID
+    ? [`https://api.notion.com/v1/data_sources/${encodeURIComponent(CAFE24_PARTNER_NOTION_DATA_SOURCE_ID)}/query`]
+    : [`https://api.notion.com/v1/databases/${encodeURIComponent(CAFE24_PARTNER_NOTION_DATABASE_ID)}/query`];
+  let lastError = null;
+  for (const target of targets) {
+    try {
+      const results = [];
+      let startCursor = "";
+      for (let page = 0; page < 10; page += 1) {
+        const body = startCursor ? { page_size: 100, start_cursor: startCursor } : { page_size: 100 };
+        const data = await postJsonUrl(target, body, headers, CAFE24_PARTNER_NOTION_TIMEOUT_MS);
+        results.push(...(Array.isArray(data.results) ? data.results : []));
+        if (!data.has_more || !data.next_cursor) break;
+        startCursor = data.next_cursor;
+      }
+      const rows = partnerRowsFromNotionResults(results);
+      cafe24PartnerNotionCache = { fetched_at: now, rows };
+      return { ok: true, rows, reason: "notion" };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  return {
+    ok: false,
+    rows: [],
+    reason: "notion_query_failed",
+    error: String(lastError?.code || lastError?.message || "notion_query_failed").slice(0, 120),
+  };
+}
+
+async function resolveCafe24PartnerAttribution(input) {
+  const enriched = await enrichCafe24PartnerInputWithAdminProductNo(input);
+  const targetInput = enriched.input || input;
+  const adminLookup = enriched.lookup || {};
+  const candidates = collectCafe24PartnerCandidates(targetInput);
+  if (!candidates.length) {
+    return {
+      matched: false,
+      partner: null,
+      partner_line: "",
+      reason: "no_partner_hint",
+      candidates: [],
+      cafe24_admin_lookup: adminLookup,
+    };
+  }
+  const lookup = await fetchCafe24PartnerRowsFromNotion();
+  if (!lookup.ok) {
+    return {
+      matched: false,
+      partner: null,
+      partner_line: "",
+      reason: lookup.reason,
+      error: lookup.error || "",
+      candidates,
+      cafe24_admin_lookup: adminLookup,
+    };
+  }
+  const match = matchCafe24PartnerRows(targetInput, lookup.rows);
+  if (!match.matched) {
+    return { ...match, partner_line: "", candidates, lookup_reason: lookup.reason, cafe24_admin_lookup: adminLookup };
+  }
+  return {
+    ...match,
+    partner_line: cafe24PartnerLine(match.partner),
+    partner_product_no: match.partner?.product_no || "",
+    candidates,
+    lookup_reason: lookup.reason,
+    cafe24_admin_lookup: adminLookup,
+  };
 }
 
 function buildCafe24Order(body, now) {
@@ -10876,6 +11440,97 @@ function postJsonUrl(targetUrl, payload, headers = {}, timeoutMs = 12000) {
   });
 }
 
+function requestUrl(targetUrl, options = {}) {
+  return new Promise((resolve, reject) => {
+    let parsed;
+    try {
+      parsed = new URL(targetUrl);
+    } catch (_error) {
+      reject(Object.assign(new Error("invalid_request_url"), { statusCode: 500, code: "invalid_request_url" }));
+      return;
+    }
+    const client = parsed.protocol === "https:" ? https : parsed.protocol === "http:" ? http : null;
+    if (!client) {
+      reject(Object.assign(new Error("unsupported_request_protocol"), { statusCode: 500, code: "unsupported_request_protocol" }));
+      return;
+    }
+    const body = options.body === undefined || options.body === null ? null : Buffer.from(String(options.body));
+    const headers = {
+      ...(options.headers || {}),
+    };
+    if (body && !Object.prototype.hasOwnProperty.call(headers, "content-length")) {
+      headers["content-length"] = body.length;
+    }
+    const request = client.request(
+      parsed,
+      {
+        method: options.method || "GET",
+        headers,
+      },
+      (response) => {
+        const chunks = [];
+        let total = 0;
+        const maxBytes = options.maxBytes || 1024 * 1024;
+        response.on("data", (chunk) => {
+          total += chunk.length;
+          if (total <= maxBytes) chunks.push(chunk);
+        });
+        response.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            const error = new Error(`http_${response.statusCode || 0}`);
+            error.statusCode = response.statusCode || 502;
+            error.code = `http_${response.statusCode || 0}`;
+            error.body = redactText(text).slice(0, 1000);
+            reject(error);
+            return;
+          }
+          resolve({ statusCode: response.statusCode || 200, headers: response.headers, text });
+        });
+      },
+    );
+    request.setTimeout(options.timeoutMs || 12000, () => {
+      request.destroy(Object.assign(new Error("request_timeout"), { code: "request_timeout" }));
+    });
+    request.on("error", (error) => reject(Object.assign(error, { code: error.code || "request_failed" })));
+    if (body) request.write(body);
+    request.end();
+  });
+}
+
+async function requestJsonUrl(targetUrl, options = {}) {
+  const result = await requestUrl(targetUrl, {
+    ...options,
+    headers: {
+      accept: "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  try {
+    return result.text ? JSON.parse(result.text) : {};
+  } catch (_error) {
+    const error = new Error("invalid_json_response");
+    error.statusCode = 502;
+    error.code = "invalid_json_response";
+    error.body = redactText(result.text).slice(0, 1000);
+    throw error;
+  }
+}
+
+async function requestFormUrl(targetUrl, payload, headers = {}, timeoutMs = 12000) {
+  const body = new URLSearchParams(payload || {}).toString();
+  return requestJsonUrl(targetUrl, {
+    method: "POST",
+    body,
+    timeoutMs,
+    headers: {
+      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+      ...headers,
+    },
+  });
+}
+
+
 function guideHtmlFromText(text) {
   const escaped = String(text || "")
     .replace(/&/g, "&amp;")
@@ -12323,6 +12978,74 @@ async function handleCafe24OrderWebhook(req, res) {
     auto_process_queued: autoProcessQueued,
   });
 }
+
+
+async function handleCafe24PartnerAttribution(req, res) {
+  if (!requireCafe24Webhook(req, res)) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  try {
+    const attribution = await resolveCafe24PartnerAttribution(body);
+    json(req, res, 200, {
+      ok: true,
+      matched: Boolean(attribution.matched),
+      partner_line: attribution.partner_line || "",
+      partner_name: attribution.partner?.name || "",
+      partner_product_no: attribution.partner_product_no || attribution.partner?.product_no || "",
+      reason: attribution.reason || attribution.lookup_reason || "",
+      cafe24_admin_lookup_reason: attribution.cafe24_admin_lookup?.reason || "",
+      cafe24_order_id: attribution.cafe24_admin_lookup?.order_id || "",
+    });
+  } catch (error) {
+    json(req, res, 200, {
+      ok: true,
+      matched: false,
+      partner_line: "",
+      partner_name: "",
+      partner_product_no: "",
+      reason: "partner_attribution_failed",
+      cafe24_admin_lookup_reason: "",
+      cafe24_order_id: "",
+      error: String(error.code || error.message || "partner_attribution_failed").slice(0, 120),
+    });
+  }
+}
+
+function handleCafe24OauthCallback(req, res, url) {
+  const code = String(url.searchParams.get("code") || "").trim();
+  const state = String(url.searchParams.get("state") || "").trim();
+  const error = String(url.searchParams.get("error") || "").trim();
+  const errorDescription = String(url.searchParams.get("error_description") || "").trim();
+  const body = `<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cafe24 OAuth Callback</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; background: #f7f8f5; color: #1c211f; }
+    main { max-width: 720px; margin: 48px auto; padding: 0 20px; }
+    section { background: #fff; border: 1px solid #dde2dc; border-radius: 8px; padding: 24px; }
+    h1 { margin: 0 0 16px; font-size: 22px; }
+    p { line-height: 1.6; }
+    code { display: block; overflow-wrap: anywhere; white-space: pre-wrap; background: #f1f4f1; padding: 12px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>${error ? "Cafe24 인증 실패" : "Cafe24 인증 코드 수신"}</h1>
+      ${error ? `<p>오류가 반환되었습니다.</p><code>${escapeHtml(error)}${errorDescription ? `\n${escapeHtml(errorDescription)}` : ""}</code>` : ""}
+      ${code ? `<p>아래 인증 코드를 Codex에게 전달하면 refresh token으로 교환할 수 있습니다.</p><code>${escapeHtml(code)}</code>` : ""}
+      ${state ? `<p>state</p><code>${escapeHtml(state)}</code>` : ""}
+      ${!code && !error ? "<p>인증 코드가 URL에 포함되지 않았습니다.</p>" : ""}
+    </section>
+  </main>
+</body>
+</html>`;
+  html(req, res, error ? 400 : 200, body);
+}
+
 
 function handleAdminListCafe24Orders(req, res) {
   if (!requireAdmin(req, res)) return;
@@ -16258,6 +16981,14 @@ function route(req, res) {
     handleCafe24OrderWebhook(req, res);
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/integrations/cafe24/partner-attribution") {
+    handleCafe24PartnerAttribution(req, res);
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/integrations/cafe24/oauth/callback") {
+    handleCafe24OauthCallback(req, res, url);
+    return;
+  }
   if (req.method === "POST" && url.pathname === "/api/admin/users/provision") {
     handleAdminProvisionUser(req, res);
     return;
@@ -16509,6 +17240,8 @@ module.exports = {
   __cafe24Test: {
     adminCafe24OrderRow,
     buildCafe24Order,
+    cafe24AdminExtractProductNos,
+    cafe24AdminOrderId,
     cafe24AutoStageLabel,
     cafe24GuideForProvision,
     cafe24ReviewIssueLabel,
