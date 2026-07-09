@@ -532,7 +532,7 @@ const WORKERS = {
         status: "available",
         url: `${PUBLIC_BASE_URL}/downloads/MaxAlert_0.2.0_aarch64.dmg`,
         primary: false,
-        description: "Apple Silicon Mac용 Tauri v0.2.0 DMG입니다. 첫 실행 시 macOS 보안 확인이 뜨면 시스템 설정에서 허용 후 열어주세요.",
+        description: "Apple Silicon Mac용 Tauri v0.2.0 DMG입니다. 첫 실행에서 '열 수 없습니다' 안내가 뜨면 시스템 설정 > 개인정보 보호 및 보안 맨 아래의 '그래도 열기'를 눌러 실행해주세요.",
       },
     ],
   },
