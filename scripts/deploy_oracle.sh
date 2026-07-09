@@ -202,7 +202,7 @@ if [[ "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
 fi
 
 if [[ "$MODE" == "maxalert" || "$MODE" == "all" ]]; then
-  add_file "$ROOT_DIR/dist/upload_installers/MaxAlert-Setup-0.1.3.exe" "$REMOTE_DOWNLOAD_DIR/MaxAlert-Setup-0.1.3.exe" "Max MaxAlert setup"
+  add_file "$ROOT_DIR/dist/upload_installers/MaxAlert-Setup-0.1.9.exe" "$REMOTE_DOWNLOAD_DIR/MaxAlert-Setup-0.1.9.exe" "Max MaxAlert setup"
   add_file "$ROOT_DIR/dist/upload_installers/MaxAlert_0.2.0_aarch64.dmg" "$REMOTE_DOWNLOAD_DIR/MaxAlert_0.2.0_aarch64.dmg" "Max MaxAlert macOS DMG"
   add_file "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_max.jpg" "$REMOTE_APP_DIR/static/assets/avatar_max.jpg" "avatar max"
 fi

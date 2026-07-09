@@ -482,13 +482,13 @@ const WORKERS = {
     avatarImage: "/assets/avatar_max.jpg?v=20260708",
     repoUrl: "https://github.com/aixlife/maxalert",
     releaseUrl: "",
-    setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.3.exe`,
+    setupDownloadUrl: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.9.exe`,
     portableDownloadUrl: "",
     downloadLabel: "설치 파일 다운로드",
     supportedPlatforms: ["windows", "macos"],
     version: "0.2.0",
     shortDescription: "포스트잇 위젯과 마감 3분 전 전화면 사이렌으로 일정을 지키게 하는 데스크톱 직원입니다. 노션 일정과 양방향으로 동기화됩니다.",
-    capabilities: ["포스트잇 위젯", "일정 사이렌", "노션 동기화", "일일 업무 보고", "포인트·뱃지", "Mac 앱"],
+    capabilities: ["포스트잇 위젯", "일정 사이렌", "노션 동기화", "일일 업무 보고", "포인트·뱃지", "레벨 진화 캐릭터", "Mac 앱"],
     resume: {
       employeeNo: "AIMAX-2026-MAX",
       team: "일정관리팀",
@@ -521,9 +521,9 @@ const WORKERS = {
         label: "Windows Setup 다운로드",
         platforms: ["windows"],
         status: "available",
-        url: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.3.exe`,
+        url: `${PUBLIC_BASE_URL}/downloads/MaxAlert-Setup-0.1.9.exe`,
         primary: true,
-        description: "Windows용 맥스 v0.1.3 설치 파일입니다.",
+        description: "Windows용 맥스 v0.1.9 설치 파일입니다. 레벨이 오르면 캐릭터가 알에서 전설의 갓닭까지 진화합니다.",
       },
       {
         kind: "mac_download",
@@ -658,6 +658,7 @@ const PUBLIC_DOWNLOAD_FILES = new Set([
   "Pencil-Setup-1.0.0.exe",
   "Pencil-portable.exe",
   "MaxAlert-Setup-0.1.3.exe",
+  "MaxAlert-Setup-0.1.9.exe",
   "MaxAlert_0.2.0_aarch64.dmg",
 ]);
 const researchPaidLocks = new Map();
