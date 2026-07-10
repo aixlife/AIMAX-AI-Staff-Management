@@ -10343,6 +10343,15 @@ function reportActionChecklist(row) {
   const status = normalizeReportStatus(row?.status || "new");
   if (isFeedbackReport(row)) return [];
   if (status !== "waiting_user") return [];
+  const desktopWorker = waitingUserMailDesktopWorker(row);
+  if (desktopWorker) {
+    return [
+      `AIMAX 웹앱의 직원 채용 화면에서 '${desktopWorker.label}' 카드를 선택합니다.`,
+      "현재 PC 운영체제에 맞는 최신 설치 파일을 다운로드합니다.",
+      `실행 중인 ${desktopWorker.label} 앱을 종료한 뒤 설치하고, 설치된 앱을 직접 다시 실행합니다.`,
+      "문제가 계속되면 아래 '아직 안 돼요'를 눌러 현재 화면과 증상을 알려주세요.",
+    ];
+  }
   const text = [
     row?.product,
     row?.os,
@@ -11647,11 +11656,46 @@ function waitingUserMailKstTimestamp(value) {
   return `${y}-${mo}-${d} ${h}:${mi} (KST)`;
 }
 
+// 독립 데스크톱 앱은 job_kind 가 비어 있어 기존 메일이 모두 "작업/실행기" 문구로
+// 떨어진다. product 를 1순위로 사용하고, bundle 계정은 보고 문맥의 직원명을 보조
+// 신호로 사용해 해당 직원의 설치형 앱 안내로 분기한다.
+function waitingUserMailDesktopWorker(row) {
+  const desktopWorkers = Object.values(WORKERS).filter((worker) => (
+    worker?.type === "desktop_app" || worker?.execution === "external_download"
+  ));
+  const product = String(row?.product || "").trim().toLowerCase();
+  const exact = desktopWorkers.find((worker) => String(worker?.product || "").trim().toLowerCase() === product);
+  if (exact) return exact;
+  const context = [
+    row?.job_kind,
+    row?.job_worker,
+    row?.work_context,
+    row?.visible_error,
+    row?.public_message,
+    row?.next_update_message,
+  ].join(" ").toLowerCase();
+  return desktopWorkers.find((worker) => {
+    const codeTokens = [worker?.product, worker?.staffCode]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter((token) => token.length >= 3);
+    if (codeTokens.some((token) => context.includes(token))) return true;
+    const names = [...new Set([worker?.name, worker?.label]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter((token) => token.length >= 2))];
+    const actionWords = ["직원", "앱", "채용", "설치", "다운로드", "실행", "사용", "피드백"];
+    return names.some((name) => actionWords.some((action) => (
+      context.includes(`${name} ${action}`) || context.includes(`${action} ${name}`)
+    )));
+  }) || null;
+}
+
 // 메일 본문 구성 — 이모지 금지, redactText 적용 필드만 사용, 시크릿/원문 로그 인용 금지.
 function buildWaitingUserReportMail(row) {
   const jobKind = String(row?.job_kind || "").trim();
   const kindLabel = (JOB_KINDS[jobKind] && JOB_KINDS[jobKind].label) || "작업";
-  const subject = `[AIMAX] 오류 보고에 확인이 필요합니다 — ${kindLabel}`;
+  const desktopWorker = waitingUserMailDesktopWorker(row);
+  const contextLabel = desktopWorker?.label || kindLabel;
+  const subject = `[AIMAX] 오류 보고에 확인이 필요합니다 — ${contextLabel}`;
   const storedAtKst = waitingUserMailKstTimestamp(row?.stored_at || row?.status_updated_at || "");
   const publicMessage = redactText(String(row?.public_message || "")).trim();
   const checklist = reportActionChecklist(row);
@@ -11674,8 +11718,14 @@ function buildWaitingUserReportMail(row) {
     });
   }
   lines.push("");
-  lines.push(`앱에 접속해 오류보고 탭에서 자세한 안내를 확인해주세요: ${PUBLIC_BASE_URL}/app`);
-  lines.push("조치 후 상단 배너의 '조치했어요, 다시 시도' 버튼을 누르거나 작업을 다시 시도해주세요.");
+  if (desktopWorker) {
+    lines.push(`AIMAX 웹앱의 직원 목록에서 ${desktopWorker.label}의 최신 설치 파일을 다운로드해 다시 설치해주세요: ${PUBLIC_BASE_URL}/app`);
+    lines.push(`설치 후 ${desktopWorker.label} 앱을 직접 실행해 안내된 동작을 다시 확인해주세요.`);
+    lines.push("그래도 문제가 계속되면 오류보고 탭에서 이 접수의 '아직 안 돼요'를 눌러 현재 상태를 알려주세요.");
+  } else {
+    lines.push(`앱에 접속해 오류보고 탭에서 자세한 안내를 확인해주세요: ${PUBLIC_BASE_URL}/app`);
+    lines.push("조치 후 상단 배너의 '조치했어요, 다시 시도' 버튼을 누르거나 작업을 다시 시도해주세요.");
+  }
   lines.push("");
   lines.push(`문의는 이 메일에 회신해주세요 (${MAIL_REPLY_TO}).`);
   return { subject, text: lines.join("\n") };
@@ -17272,6 +17322,11 @@ module.exports = {
     latestAutomationTickets,
     loadAutomationTickets,
     telegramReportAlertText,
+  },
+  __reportMailTest: {
+    buildWaitingUserReportMail,
+    reportActionChecklist,
+    waitingUserMailDesktopWorker,
   },
   __yeriHybridTest: {
     ARTIFACTS_DIR,
