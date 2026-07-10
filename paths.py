@@ -46,6 +46,7 @@ DEBUG_DIR: Path = APP_DATA_DIR / "debug"
 LOGS_DIR: Path = APP_DATA_DIR / "logs"
 # AI가 생성한(과금된) 원고를 네이버 입력 전에 따로 보관 — 발행 실패 시에도 재사용 가능
 GENERATED_DIR: Path = APP_DATA_DIR / "generated"
+STYLE_PROFILES_DIR: Path = APP_DATA_DIR / "style_profiles"
 BROWSER_PROFILES_DIR: Path = APP_DATA_DIR / "browser_profiles"
 REPORTS_DIR: Path = APP_DATA_DIR / "reports"
 PENDING_REPORTS_DIR: Path = REPORTS_DIR / "pending"
@@ -65,6 +66,7 @@ def _safe_dir(path: Path) -> Path:
 SESSIONS_DIR = _safe_dir(SESSIONS_DIR)
 DEBUG_DIR = _safe_dir(DEBUG_DIR)
 LOGS_DIR = _safe_dir(LOGS_DIR)
+STYLE_PROFILES_DIR = _safe_dir(STYLE_PROFILES_DIR)
 BROWSER_PROFILES_DIR = _safe_dir(BROWSER_PROFILES_DIR)
 REPORTS_DIR = _safe_dir(REPORTS_DIR)
 PENDING_REPORTS_DIR = _safe_dir(PENDING_REPORTS_DIR)
@@ -81,6 +83,7 @@ def ensure_dirs() -> None:
         "DEBUG_DIR",
         "LOGS_DIR",
         "GENERATED_DIR",
+        "STYLE_PROFILES_DIR",
         "BROWSER_PROFILES_DIR",
         "REPORTS_DIR",
         "PENDING_REPORTS_DIR",

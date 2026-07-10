@@ -319,6 +319,12 @@ else:
 # 설정 파일 경로 (플랫폼별 사용자 데이터 디렉토리 사용)
 # ──────────────────────────────────────────────
 from paths import SETTINGS_PATH as _SETTINGS_PATH, APP_DATA_DIR as _APP_DATA_DIR, GENERATED_DIR as _GENERATED_DIR
+from content.style_profile import (
+    load_style_profile,
+    normalize_style_learning_settings,
+    resolve_style_reference_text,
+)
+from scraper.blog_style_collector import canonical_blog_url
 
 SETTINGS_PATH = str(_SETTINGS_PATH)
 SECRET_FALLBACK_PATH = str(_APP_DATA_DIR / ".settings_secrets.json")
@@ -1003,6 +1009,19 @@ def _save_settings_data(data):
         json.dump(clean_data, f, ensure_ascii=False, indent=2)
 
 
+def load_style_learning_settings():
+    """Load style-learning preferences with defaults for legacy settings files."""
+    return normalize_style_learning_settings(_load_settings_data())
+
+
+def save_style_learning_settings(blog_url, profile_enabled, humanize_review_enabled):
+    data = _load_settings_data()
+    data["style_blog_url"] = str(blog_url or "").strip()
+    data["style_profile_enabled"] = bool(profile_enabled)
+    data["humanize_review_enabled"] = bool(humanize_review_enabled)
+    _save_settings_data(data)
+
+
 def _load_secret_fallback_data():
     if not os.path.exists(SECRET_FALLBACK_PATH):
         return {}
@@ -1643,6 +1662,10 @@ class NaverBlogApp:
         self.claude_key_var = ttk.StringVar()
         self.openai_key_var = ttk.StringVar()
         self.apify_key_var = ttk.StringVar()
+        self.style_blog_url_var = ttk.StringVar()
+        self.style_profile_enabled_var = ttk.BooleanVar(value=False)
+        self.humanize_review_enabled_var = ttk.BooleanVar(value=False)
+        self.style_profile_status_var = ttk.StringVar(value="미학습")
         self.web_email_var = ttk.StringVar()
         self.web_password_var = ttk.StringVar()
         self.web_status_var = ttk.StringVar(value="웹앱 연결 안 됨")
@@ -1662,6 +1685,7 @@ class NaverBlogApp:
         # 웹앱 명령 재진입/중복 처리 방지: open_settings 가 done 처리되기 전 폴링마다
         # 재전달되어 설정창이 중첩되며 무한 로딩되는 문제를 막는다.
         self._local_settings_dialog_open = False
+        self._style_training_active = False
         self._handled_command_ids = set()
 
         # 패널 관리
@@ -1984,6 +2008,29 @@ class NaverBlogApp:
         self.claude_key_var.set(claude_key)
         self.openai_key_var.set(openai_key)
         self.apify_key_var.set(apify_key)
+        style_settings = load_style_learning_settings()
+        self.style_blog_url_var.set(style_settings["style_blog_url"])
+        profile = load_style_profile(style_settings["style_blog_url"])
+        profile_enabled = bool(style_settings["style_profile_enabled"] and profile)
+        self.style_profile_enabled_var.set(profile_enabled)
+        self.humanize_review_enabled_var.set(bool(style_settings["humanize_review_enabled"]))
+        self.style_profile_status_var.set(self._format_style_profile_status(profile))
+
+    @staticmethod
+    def _format_style_profile_status(profile):
+        if not isinstance(profile, dict):
+            return "미학습"
+        created_at = str(profile.get("created_at") or "").strip()
+        try:
+            parsed = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            learned_at = parsed.astimezone().strftime("%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            learned_at = created_at[:16] or "학습일 미상"
+        try:
+            post_count = int(profile.get("source_post_count") or 0)
+        except (TypeError, ValueError):
+            post_count = 0
+        return f"마지막 학습: {learned_at} · 공개 글 {post_count}개"
 
     def _recover_missing_settings_for_gui(self):
         if getattr(self, "_settings_recovery_started", False):
@@ -4931,12 +4978,73 @@ class NaverBlogApp:
         )
         self.web_disconnect_btn.pack(side=LEFT)
 
+        # ── 내 블로그 문체 학습 카드 ──
+        style_card = self._make_card(content)
+        style_card.columnconfigure(1, weight=1)
+
+        tk.Label(
+            style_card, text="내 블로그 문체 학습",
+            font=(FONT_UI, 10, "bold"),
+            bg=COLORS["card_bg"], fg=COLORS["text_primary"], anchor="w",
+        ).grid(row=0, column=0, columnspan=2, sticky=W, pady=(0, 4))
+        tk.Label(
+            style_card,
+            text=(
+                "본인 네이버 블로그의 공개 글을 이 PC에서만 수집해 예리의 글쓰기 문체 참고자료로 만듭니다. "
+                "수집 원문과 문체 프로필은 서버로 전송하지 않습니다."
+            ),
+            font=(FONT_UI, 9),
+            bg=COLORS["card_bg"], fg=COLORS["text_secondary"],
+            anchor="w", wraplength=720, justify="left",
+        ).grid(row=1, column=0, columnspan=2, sticky=EW, pady=(0, 10))
+
+        self._make_field(style_card, "내 블로그 주소", self.style_blog_url_var, 2, font=font)
+        tk.Label(
+            style_card,
+            text="공개 글을 최대 30개 수집한 뒤 선택한 글 생성 AI로 문체 분석을 1회 실행합니다.",
+            font=(FONT_UI, 8),
+            bg=COLORS["card_bg"], fg=COLORS["text_muted"],
+            anchor="w", wraplength=720, justify="left",
+        ).grid(row=3, column=0, columnspan=2, sticky=EW, pady=(0, 8))
+
+        self.style_training_btn = ttk.Button(
+            style_card,
+            text="문체 학습 시작",
+            bootstyle="primary",
+            command=self._start_style_learning,
+            width=16,
+        )
+        self.style_training_btn.grid(row=4, column=0, sticky=W, padx=(0, 15), pady=(0, 8))
+        tk.Label(
+            style_card,
+            textvariable=self.style_profile_status_var,
+            font=(FONT_UI, 9),
+            bg=COLORS["card_bg"], fg=COLORS["text_secondary"],
+            anchor="w", wraplength=560, justify="left",
+        ).grid(row=4, column=1, sticky=EW, pady=(0, 8))
+
+        style_options = tk.Frame(style_card, bg=COLORS["card_bg"])
+        style_options.grid(row=5, column=0, columnspan=2, sticky=W)
+        ttk.Checkbutton(
+            style_options,
+            text="글 쓸 때 내 문체 반영",
+            variable=self.style_profile_enabled_var,
+            command=self._on_style_profile_toggle,
+            bootstyle="primary",
+        ).pack(side=LEFT, padx=(0, 18))
+        ttk.Checkbutton(
+            style_options,
+            text="생성 후 AI 문체 검수 1회 추가 (API 비용 추가)",
+            variable=self.humanize_review_enabled_var,
+            bootstyle="primary",
+        ).pack(side=LEFT)
+
         # ── 내 블로그 프로필 카드 (예리가 멘트 생성할 때 참고) ──
         profile_card = self._make_card(content)
         profile_card.columnconfigure(0, weight=1)
 
         tk.Label(
-            profile_card, text="✨ 내 블로그 프로필",
+            profile_card, text="내 블로그 프로필",
             font=(FONT_UI, 10, "bold"),
             bg=COLORS["card_bg"], fg=COLORS["text_primary"], anchor="w",
         ).grid(row=0, column=0, sticky=W, pady=(0, 4))
@@ -4951,30 +5059,13 @@ class NaverBlogApp:
             anchor="w", wraplength=720, justify="left",
         ).grid(row=1, column=0, sticky=W, pady=(0, 8))
 
-        # 학습 중 안내 배지 (Phase 2 자동 분석 예고)
-        learn_badge = tk.Frame(
-            profile_card, bg="#E8F4FD",
-            highlightbackground="#B3DDF7", highlightthickness=1,
-        )
-        learn_badge.grid(row=2, column=0, sticky=EW, pady=(0, 10))
-        tk.Label(
-            learn_badge,
-            text=(
-                "🎓  예리가 블로그를 스스로 분석하는 기능은 다음 업데이트에 만나요!  "
-                "지금은 대표님이 직접 적어주시면 그대로 배울게요."
-            ),
-            font=(FONT_UI, 8),
-            bg="#E8F4FD", fg="#1E5E8C",
-            anchor="w", padx=10, pady=7, justify="left",
-        ).pack(fill=X)
-
         self.blog_profile_text = tk.Text(
             profile_card, height=7, font=font, wrap="word",
             bg="white", fg=COLORS["text_primary"],
             highlightbackground=COLORS["card_border"], highlightthickness=1,
             relief="flat", padx=10, pady=8,
         )
-        self.blog_profile_text.grid(row=3, column=0, sticky=EW)
+        self.blog_profile_text.grid(row=2, column=0, sticky=EW)
 
         _PROFILE_PLACEHOLDER = (
             "예시) 저는 경제적 자유를 주제로 쓰는 블로거입니다. "
@@ -5852,6 +5943,127 @@ class NaverBlogApp:
         if path:
             var.set(path)
 
+    def _selected_text_api_key(self, model=None):
+        selected_model = _normalize_ai_model(model or self.ai_model_var.get())
+        if selected_model == "claude":
+            return _runtime_secret(self.claude_key_var.get())
+        if _is_openai_model(selected_model):
+            return _runtime_secret(self.openai_key_var.get())
+        return _runtime_secret(self.api_key_var.get())
+
+    def _on_style_profile_toggle(self):
+        if not self.style_profile_enabled_var.get():
+            return
+        profile = load_style_profile(self.style_blog_url_var.get())
+        if profile:
+            self.style_profile_status_var.set(self._format_style_profile_status(profile))
+            return
+        self.style_profile_enabled_var.set(False)
+        self.style_profile_status_var.set("문체 학습을 먼저 완료해 주세요.")
+        self._log("[문체 학습] 저장된 문체 프로필이 없어 문체 반영 설정을 켜지 않았습니다.")
+        try:
+            from tkinter import messagebox
+
+            messagebox.showinfo(
+                "문체 프로필 필요",
+                "문체 학습을 먼저 완료한 뒤 다시 켜 주세요.",
+            )
+        except Exception:
+            pass
+
+    def _set_style_training_state(self, active, status):
+        self._style_training_active = bool(active)
+        self.style_profile_status_var.set(str(status or ""))
+        if hasattr(self, "style_training_btn"):
+            self.style_training_btn.configure(state=DISABLED if active else NORMAL)
+
+    def _start_style_learning(self):
+        if self._style_training_active:
+            return
+        raw_blog_url = self.style_blog_url_var.get().strip()
+        try:
+            blog_url = canonical_blog_url(raw_blog_url)
+        except ValueError as error:
+            self.style_profile_status_var.set(str(error))
+            self._log(f"[문체 학습] 시작할 수 없습니다: {error}")
+            return
+
+        ai_model = _normalize_ai_model(self.ai_model_var.get())
+        api_key = self._selected_text_api_key(ai_model)
+        if not _is_real_secret(api_key):
+            self.style_profile_status_var.set("선택한 AI 모델의 API 키를 먼저 저장해 주세요.")
+            self._log("[문체 학습] 선택한 AI 모델의 API 키가 없습니다.")
+            return
+
+        try:
+            from tkinter import messagebox
+
+            confirmed = messagebox.askyesno(
+                "문체 학습 비용 확인",
+                "공개 글을 최대 30개 수집한 뒤 선택한 AI 모델을 1회 호출합니다. "
+                "API 비용이 발생할 수 있습니다. 계속할까요?",
+            )
+        except Exception:
+            confirmed = False
+        if not confirmed:
+            self.style_profile_status_var.set("문체 학습을 시작하지 않았습니다.")
+            return
+
+        self.style_blog_url_var.set(blog_url)
+        save_style_learning_settings(
+            blog_url,
+            self.style_profile_enabled_var.get(),
+            self.humanize_review_enabled_var.get(),
+        )
+        self._set_style_training_state(True, "공개 글을 수집하는 중입니다...")
+        self._log(f"[문체 학습] 공개 글 수집을 시작합니다: {blog_url}")
+
+        def _worker():
+            try:
+                from scraper.blog_style_collector import collect_blog_posts
+                from content.style_profile import create_style_profile
+
+                collected = collect_blog_posts(blog_url)
+                if not collected.get("ok"):
+                    message = collected.get("message") or "공개 글 수집에 실패했습니다."
+                    self.root.after(0, lambda msg=message: self._finish_style_learning(False, msg))
+                    return
+
+                post_count = int(collected.get("post_count") or 0)
+                self.root.after(
+                    0,
+                    lambda count=post_count: self.style_profile_status_var.set(
+                        f"공개 글 {count}개의 문체를 분석하는 중입니다..."
+                    ),
+                )
+                profile_result = create_style_profile(
+                    blog_url,
+                    collected.get("posts") or [],
+                    api_key,
+                    ai_model,
+                )
+                if not profile_result.get("ok"):
+                    message = profile_result.get("message") or "문체 프로필 생성에 실패했습니다."
+                    self.root.after(0, lambda msg=message: self._finish_style_learning(False, msg))
+                    return
+                self.root.after(0, lambda: self._finish_style_learning(True, ""))
+            except Exception as error:
+                message = f"문체 학습 중 오류가 발생했습니다: {str(error)[:200]}"
+                self.root.after(0, lambda msg=message: self._finish_style_learning(False, msg))
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _finish_style_learning(self, ok, message):
+        if ok:
+            profile = load_style_profile(self.style_blog_url_var.get())
+            self._set_style_training_state(False, self._format_style_profile_status(profile))
+            self._log("[문체 학습] 문체 프로필 생성이 완료되었습니다.")
+            return
+        profile = load_style_profile(self.style_blog_url_var.get())
+        suffix = " 기존 문체 프로필은 유지됩니다." if profile else ""
+        self._set_style_training_state(False, f"학습 실패: {message}{suffix}")
+        self._log(f"[문체 학습] 실패: {message}")
+
     # ── 설정 저장 ──
     def _save_credentials(self):
         save_settings(
@@ -5861,6 +6073,17 @@ class NaverBlogApp:
         # 블로그 프로필도 키체인에 저장 (네이버 계정별)
         profile = self._get_blog_profile_text()
         save_blog_profile(self.naver_id_var.get(), profile)
+        style_profile = load_style_profile(self.style_blog_url_var.get())
+        style_enabled = bool(self.style_profile_enabled_var.get() and style_profile)
+        if self.style_profile_enabled_var.get() and not style_profile:
+            self.style_profile_enabled_var.set(False)
+            self.style_profile_status_var.set("문체 학습을 먼저 완료해 주세요.")
+            self._log("[문체 학습] 저장된 프로필이 없어 문체 반영 설정은 저장하지 않았습니다.")
+        save_style_learning_settings(
+            self.style_blog_url_var.get(),
+            style_enabled,
+            self.humanize_review_enabled_var.get(),
+        )
         self._log("설정이 저장되었습니다.")
         if profile:
             self._log(f"내 블로그 프로필 저장됨 (네이버 ID: {self.naver_id_var.get()})")
@@ -6233,7 +6456,7 @@ class NaverBlogApp:
             from datetime import datetime, timedelta
             from browser.stealth_driver import create_stealth_driver
             from auth.naver_login import login
-            from content.ai_text import generate_blog_content, measure_visible_char_count
+            from content.ai_text import generate_blog_content, humanize_blog_content, measure_visible_char_count
             from content.markdown_parser import parse_markdown, parse_markdown_file, rebalance_image_blocks
             from content.seo_research import build_auto_seo_brief
             from posting.editor import navigate_to_editor, input_title, input_content, set_font, editor_visible_text_count
@@ -6255,6 +6478,18 @@ class NaverBlogApp:
                 text_api_key = openai_key
             else:
                 text_api_key = gemini_key
+            style_settings = load_style_learning_settings()
+            existing_style_reference = str(style_reference_text or "").strip()
+            style_reference_text = resolve_style_reference_text(
+                existing_style_reference,
+                enabled=bool(style_settings.get("style_profile_enabled")),
+                blog_url_or_id=str(style_settings.get("style_blog_url") or ""),
+            )
+            if style_reference_text and not existing_style_reference:
+                self._log("[문체 학습] 저장된 내 블로그 문체 프로필을 글 생성에 반영합니다.")
+            elif style_settings.get("style_profile_enabled") and not existing_style_reference:
+                self._log("[문체 학습] 활성화된 문체 프로필을 찾지 못해 기존 글 생성 방식으로 진행합니다.")
+            humanize_review_enabled = bool(style_settings.get("humanize_review_enabled"))
             image_provider = _image_provider_for_model(image_model)
             image_api_key = openai_key if image_provider == "openai" else gemini_key
             fallback_image_api_key = gemini_key if image_provider == "openai" else openai_key
@@ -6282,6 +6517,24 @@ class NaverBlogApp:
             post_results = []
             failed_posts = []
             force_save_due_to_image_skip = False
+
+            def _apply_humanize_review(raw_content, raw_usage):
+                if not humanize_review_enabled:
+                    return raw_content, raw_usage
+                self._log(f"[문체 검수] {ai_model} 모델로 AI 상투 표현과 번역체를 검수합니다.")
+                reviewed, review_usage, applied = humanize_blog_content(
+                    raw_content,
+                    text_api_key,
+                    ai_model,
+                )
+                if not applied:
+                    self._log("[문체 검수] 추가 검수에 실패해 최초 생성 원고를 그대로 사용합니다.")
+                    return raw_content, raw_usage
+                merged_usage = dict(raw_usage or {})
+                _merge_usage_totals(merged_usage, review_usage)
+                self._log("[문체 검수] 추가 검수를 완료했습니다.")
+                return reviewed, merged_usage
+
             if image_count > 0 and not (_is_real_secret(image_api_key) or _is_real_secret(fallback_image_api_key)):
                 self._log(
                     "[이미지] 이미지 생성을 위한 로컬 Gemini/OpenAI 키가 없어 이미지 없이 본문만 진행합니다. "
@@ -6424,6 +6677,7 @@ class NaverBlogApp:
                         if not content:
                             raise RuntimeError("서버 생성 글 artifact가 비어 있습니다.")
                         post_usage = post_artifact.get("usage") if isinstance(post_artifact.get("usage"), dict) else {}
+                        content, post_usage = _apply_humanize_review(content, post_usage)
                         _merge_usage_totals(usage_totals, post_usage)
                         visible_char_count = measure_visible_char_count(content)
                         parsed_title, content_list = parse_markdown(content)
@@ -6460,7 +6714,6 @@ class NaverBlogApp:
                             content, post_usage = generated
                         else:
                             content, post_usage = generated, {}
-                        _merge_usage_totals(usage_totals, post_usage)
                         if not content:
                             last_error = f"글 생성 실패: {keyword}"
                             stage = post_stage
@@ -6468,6 +6721,8 @@ class NaverBlogApp:
                             self._log(f"[오류] {last_error}")
                             _record_failed(post, post_stage, last_error)
                             continue
+                        content, post_usage = _apply_humanize_review(content, post_usage)
+                        _merge_usage_totals(usage_totals, post_usage)
                         visible_char_count = measure_visible_char_count(content)
                         self._log(f"생성 글자 수 확인: {visible_char_count}자 (요청 {word_count}자)")
                         title, content_list = parse_markdown(content)

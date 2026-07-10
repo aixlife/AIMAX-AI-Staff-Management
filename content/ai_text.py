@@ -254,6 +254,29 @@ def _generate_once(prompt, api_key, model):
     return _generate_with_gemini(prompt, api_key, gemini_model_id)
 
 
+def humanize_blog_content(content, api_key, model):
+    """Run one optional style cleanup pass while preserving the original on failure."""
+    original = str(content or "")
+    if not original.strip() or not str(api_key or "").strip():
+        return original, {}, False
+
+    prompt = f"""아래 네이버 블로그 원고에서 AI 상투 표현과 번역체만 제거해 자연스러운 한국어로 다듬으세요.
+
+검수 기준:
+- 원문의 의미, 사실, 주장, 순서, 제목을 보존하세요.
+- 마크다운 제목 구조와 [이미지] 줄의 개수, 위치, 내용을 보존하세요.
+- URL과 CTA 문장은 삭제하거나 바꾸지 마세요.
+- 새 정보나 설명을 추가하지 마세요.
+- 결과 원고만 출력하세요.
+
+원고:
+{original}"""
+    reviewed, usage = _safe_generate_once(prompt, api_key, model)
+    if not reviewed or not str(reviewed).strip():
+        return original, {}, False
+    return str(reviewed).strip(), usage, True
+
+
 def _keyword_emphasis_instruction(enabled):
     if not enabled:
         return ""
