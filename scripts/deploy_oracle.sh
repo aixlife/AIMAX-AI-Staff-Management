@@ -70,6 +70,13 @@ require_file() {
   fi
 }
 
+require_dir() {
+  if [[ ! -d "$1" ]]; then
+    echo "[ERROR] missing directory: $1" >&2
+    exit 1
+  fi
+}
+
 add_file() {
   local source_path="$1"
   local remote_path="$2"
@@ -78,6 +85,18 @@ add_file() {
   SOURCES+=("$source_path")
   TARGETS+=("$remote_path")
   LABELS+=("$label")
+}
+
+add_tree() {
+  local source_root="$1"
+  local remote_root="$2"
+  local label_prefix="$3"
+  require_dir "$source_root"
+  local source_path relative_path
+  while IFS= read -r source_path; do
+    relative_path="${source_path#"$source_root"/}"
+    add_file "$source_path" "$remote_root/$relative_path" "$label_prefix/$relative_path"
+  done < <(find "$source_root" -type f | sort)
 }
 
 preflight_web_guard() {
@@ -91,6 +110,7 @@ preflight_web_guard() {
   local missing=()
   grep -q "jieun_office_support" "$server_js" || missing+=("jieun_office_support 직원")
   grep -q "sangsu_quote" "$server_js" || missing+=("sangsu_quote 상수견적 잡")
+  grep -q "semu_tax_accountant" "$server_js" || missing+=("semu_tax_accountant 세무 직원")
   grep -q "normalizeYeriGeminiModel" "$server_js" || missing+=("flash 모델 정규화 함수")
   if [[ ${#missing[@]} -gt 0 ]]; then
     echo "[DEPLOY][ABORT] server.js 에 라이브 마커 누락 — 옛/분기 브랜치를 배포 중일 수 있습니다:" >&2
@@ -115,6 +135,14 @@ if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
     "$ROOT_DIR/oracle/aimax-reports-api/server.js" \
     "$REMOTE_APP_DIR/server.js" \
     "api server"
+  add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/popbill-bridge.js" \
+    "$REMOTE_APP_DIR/popbill-bridge.js" \
+    "popbill bridge"
+  add_tree \
+    "$ROOT_DIR/oracle/aimax-reports-api/vendor/popbill-sdk" \
+    "$REMOTE_APP_DIR/vendor/popbill-sdk" \
+    "popbill sdk"
   add_file \
     "$ROOT_DIR/oracle/aimax-reports-api/static/app.html" \
     "$REMOTE_APP_DIR/static/app.html" \
@@ -282,12 +310,13 @@ for index in "${!SOURCES[@]}"; do
   source_path="${SOURCES[$index]}"
   remote_path="${TARGETS[$index]}"
   remote_name="$(basename "$remote_path")"
+  remote_tmp_name="${index}-${remote_name}"
   echo "[UPLOAD] $source_path"
-  scp "$source_path" "$REMOTE_HOST:$REMOTE_TMP/$remote_name" >/dev/null
+  scp "$source_path" "$REMOTE_HOST:$REMOTE_TMP/$remote_tmp_name" >/dev/null
   echo "[BACKUP] $remote_path"
-  ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; if [ -f '$remote_path' ]; then cp '$remote_path' '$REMOTE_BACKUP_DIR/$remote_name'; fi"
+  ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; if [ -f '$remote_path' ]; then cp '$remote_path' '$REMOTE_BACKUP_DIR/$remote_tmp_name'; fi"
   echo "[INSTALL] $remote_path"
-  ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; mkdir -p '$(dirname "$remote_path")'; install -m 0644 '$REMOTE_TMP/$remote_name' '$remote_path'"
+  ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; mkdir -p '$(dirname "$remote_path")'; install -m 0644 '$REMOTE_TMP/$remote_tmp_name' '$remote_path'"
 done
 
 echo "[SERVICE] restarting $REMOTE_SERVICE"

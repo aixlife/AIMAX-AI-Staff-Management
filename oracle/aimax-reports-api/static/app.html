@@ -1035,6 +1035,60 @@
       align-items: end;
     }
 
+    .tax-settings-card,
+    .tax-history-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbfa;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .tax-items {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tax-item-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1.5fr) minmax(70px, .55fr) minmax(100px, .8fr) minmax(110px, .85fr) minmax(90px, .7fr) 40px;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .tax-item-row .field {
+      min-width: 0;
+    }
+
+    .tax-item-row input[readonly] {
+      background: #eef2f1;
+      color: #44524b;
+    }
+
+    .tax-history-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .tax-history-row {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .tax-history-row.active {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(15, 118, 110, .08);
+    }
+
+    .tax-history-row .row {
+      align-items: flex-start;
+    }
+
     .sangsu-preview-wrap {
       min-width: 0;
       max-width: 100%;
@@ -3134,6 +3188,7 @@
       .songi-discovery-metrics,
       .songi-insight-grid,
       .songi-output-grid,
+      .tax-item-row,
       .yunmi-script-grid,
       .yunmi-guide-grid,
       .yunmi-cta-grid,
@@ -4178,6 +4233,119 @@
                   </section>
                 </div>
               </form>
+
+              <form id="taxJobForm" class="job-form hidden" data-job-kind="semu_tax_invoice">
+                <div>
+                  <h3>세무 직원 전자세금계산서</h3>
+                  <div id="taxJobHint" class="small muted" style="margin-top:4px;">사업자 정보를 연결하고 전자세금계산서 초안을 만든 뒤 비용을 확인해 테스트베드에서 발행합니다.</div>
+                </div>
+                <div id="taxJobBlocker" class="notice warn job-blocker hidden"></div>
+                <div class="notice warn small">테스트베드 전용 기능입니다. 실제 국세청 전송이나 실운영 발행을 수행하지 않습니다.</div>
+                <div class="job-workspace">
+                  <section class="job-input-panel">
+                    <div class="tax-settings-card">
+                      <div class="row">
+                        <strong>사업자 연결 설정</strong>
+                        <span id="taxSettingsStatus" class="pill">확인 중</span>
+                      </div>
+                      <div class="form-grid">
+                        <div class="field">
+                          <label for="taxSupplierCorpNum">사업자번호</label>
+                          <input id="taxSupplierCorpNum" inputmode="numeric" maxlength="10" placeholder="숫자 10자리">
+                        </div>
+                        <div class="field">
+                          <label for="taxSupplierCorpName">상호</label>
+                          <input id="taxSupplierCorpName" maxlength="200" placeholder="공급자 상호">
+                        </div>
+                        <div class="field wide">
+                          <label for="taxSupplierCeoName">대표자명</label>
+                          <input id="taxSupplierCeoName" maxlength="100" placeholder="공급자 대표자명">
+                        </div>
+                      </div>
+                      <div class="actions">
+                        <button id="taxSettingsSaveBtn" class="btn" type="button">사업자 정보 등록</button>
+                        <span id="taxSettingsMessage" class="small muted">등록한 사업자번호만 공급자로 사용할 수 있습니다.</span>
+                      </div>
+                    </div>
+
+                    <div class="form-grid">
+                      <div class="field">
+                        <label for="taxInvoiceeCorpNum">거래처 사업자번호</label>
+                        <input id="taxInvoiceeCorpNum" inputmode="numeric" maxlength="10" placeholder="숫자 10자리" required>
+                      </div>
+                      <div class="field">
+                        <label for="taxInvoiceeCorpName">거래처 상호</label>
+                        <input id="taxInvoiceeCorpName" maxlength="200" placeholder="공급받는자 상호" required>
+                      </div>
+                      <div class="field">
+                        <label for="taxInvoiceeCeoName">거래처 대표자</label>
+                        <input id="taxInvoiceeCeoName" maxlength="100" placeholder="공급받는자 대표자" required>
+                      </div>
+                      <div class="field">
+                        <label for="taxInvoiceeEmail">거래처 이메일</label>
+                        <input id="taxInvoiceeEmail" type="email" maxlength="100" placeholder="선택 입력">
+                      </div>
+                      <div class="field">
+                        <label for="taxWriteDate">작성일자</label>
+                        <input id="taxWriteDate" type="date" required>
+                      </div>
+                      <div class="field">
+                        <label for="taxPurposeType">구분</label>
+                        <select id="taxPurposeType">
+                          <option value="청구" selected>청구</option>
+                          <option value="영수">영수</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="field">
+                      <div class="row">
+                        <label>품목</label>
+                        <button id="taxAddItemBtn" class="btn small-btn" type="button">품목 추가</button>
+                      </div>
+                      <div id="taxItems" class="tax-items"></div>
+                    </div>
+
+                    <div class="form-grid">
+                      <div class="field">
+                        <label for="taxSupplyTotal">공급가액계</label>
+                        <input id="taxSupplyTotal" readonly value="0">
+                      </div>
+                      <div class="field">
+                        <label for="taxTaxTotal">세액계</label>
+                        <input id="taxTaxTotal" readonly value="0">
+                      </div>
+                      <div class="field wide">
+                        <label for="taxGrandTotal">합계금액</label>
+                        <input id="taxGrandTotal" readonly value="0">
+                      </div>
+                    </div>
+                    <div class="actions">
+                      <button id="taxDraftSaveBtn" class="btn primary" type="submit">초안 저장</button>
+                      <button id="taxDraftResetBtn" class="btn" type="button">입력 초기화</button>
+                    </div>
+                  </section>
+
+                  <section class="job-output-panel">
+                    <div class="small muted job-panel-label">초안 미리보기</div>
+                    <div id="taxInvoicePreview" class="job-live-panel"></div>
+                    <div id="taxPreflightResult" class="notice small hidden"></div>
+                    <div class="notice warn small">테스트베드 — 실제 국세청 전송 아님</div>
+                    <label class="check-option"><input id="taxIssueConfirm" type="checkbox"> 표시된 발행 단가와 잔여 포인트를 확인했습니다.</label>
+                    <div class="actions">
+                      <button id="taxPreflightBtn" class="btn" type="button" disabled>발행 준비</button>
+                      <button id="taxIssueBtn" class="btn primary" type="button" disabled>발행</button>
+                    </div>
+                  </section>
+                </div>
+                <div class="tax-history-card">
+                  <div class="row">
+                    <strong>발행 이력</strong>
+                    <button id="taxHistoryRefreshBtn" class="btn" type="button">이력 새로고침</button>
+                  </div>
+                  <div id="taxInvoiceHistory" class="tax-history-list"></div>
+                </div>
+              </form>
             </div>
           </div>
         </section>
@@ -4933,6 +5101,11 @@
       researchDiscoveryRuns: [],
       researchDiscoveryCandidates: [],
       researchDiscoverySubscriptions: [],
+      taxSettings: null,
+      taxInvoices: [],
+      taxServerConfigured: null,
+      selectedTaxInvoiceId: "",
+      taxPreflight: null,
       userSecrets: null,
       selectedResearchProjectId: "",
       selectedResearchItemId: "",
@@ -4977,6 +5150,7 @@
       songi: "송이",
       yunmi: "윤미",
       jieun: "지은",
+      semu: "세무 직원",
       nakyung: "나경",
       hyojin: "효진",
       sangsu: "상수",
@@ -5011,6 +5185,11 @@
         label: "상수 경리",
         required: "sangsu",
         worker: "상수",
+      },
+      semu_tax_invoice: {
+        label: "세무 직원 전자세금계산서",
+        required: "semu",
+        worker: "세무 직원",
       },
     };
 
@@ -5271,6 +5450,23 @@
           ],
         },
       },
+      semu: {
+        code: "semu",
+        // TODO(CEO): 정식 직원 이름과 프로필 이미지를 결정하면 placeholder를 교체한다.
+        name: "세무 직원",
+        role: "전자세금계산서 발행 직원",
+        avatar: "/assets/avatar_placeholder.svg",
+        photo: "/assets/avatar_placeholder.svg",
+        product: "semu",
+        jobKind: "semu_tax_invoice",
+        status: "available",
+        execution: "web_module",
+        type: "web_module",
+        requiredSettings: ["business_registration"],
+        moduleKey: "tax",
+        description: "사업자 정보와 거래 내역을 받아 전자세금계산서 초안을 만들고, 비용 확인과 명시 승인 뒤 테스트베드에서 발행합니다.",
+        meta: ["전자세금계산서 초안", "발행 비용 확인", "명시 승인 발행", "상태 복구"],
+      },
       jieun: {
         code: "jieun",
         name: "지은",
@@ -5483,6 +5679,12 @@
         hintId: "sangsuJobHint",
         blockerId: "sangsuJobBlocker",
         defaultHint: "입력한 항목으로 견적서를 만들고 PDF 저장용 인쇄 화면을 엽니다.",
+      },
+      semu_tax_invoice: {
+        formId: "taxJobForm",
+        hintId: "taxJobHint",
+        blockerId: "taxJobBlocker",
+        defaultHint: "사업자 정보를 연결하고 전자세금계산서 초안을 만든 뒤 비용을 확인해 테스트베드에서 발행합니다.",
       },
     };
 
@@ -7786,6 +7988,9 @@
         return { status: "available", label: "다운로드 가능", className: "ok", reason: "Windows Setup exe를 직접 내려받아 설치합니다." };
       }
       if (isWebModuleEmployee(employee)) {
+        if (employee.moduleKey === "tax" && state.taxServerConfigured === false) {
+          return { status: "needs_setup", label: "준비 중", className: "warn", reason: "팝빌 테스트베드 연결을 준비 중입니다." };
+        }
         return { status: "available", label: "사용 가능", className: "ok", reason: "" };
       }
       const kind = employeeJobKind(key);
@@ -7894,6 +8099,9 @@
       }
       if (!hasJobEntitlement(kind)) {
         return "현재 계정 권한으로는 이 직원을 사용할 수 없습니다.";
+      }
+      if (kind === "semu_tax_invoice" && state.taxServerConfigured === false) {
+        return "팝빌 테스트베드 연결을 준비 중입니다.";
       }
       if (isWebModuleJobKind(kind)) {
         return "";
@@ -8072,6 +8280,9 @@
         return { label: externalEmployeeDownloadLabel(employee), action: "employee-download", disabled: !externalEmployeeDownloadUrl(employee) };
       }
       if (isWebModuleEmployee(employee)) {
+        if (employee.moduleKey === "tax" && state.taxServerConfigured === false) {
+          return { label: "준비 중", action: "", disabled: true };
+        }
         return { label: "직원 업무지시", action: "quick-actions", disabled: !state.me?.can_execute };
       }
       if (isMultiChannelEmployee(employee)) {
@@ -9288,6 +9499,386 @@
       };
     }
 
+    function taxWon(value) {
+      const number = Number(value || 0);
+      return `${Number.isFinite(number) ? number.toLocaleString("ko-KR") : "0"}원`;
+    }
+
+    function taxStatusInfo(status) {
+      const map = {
+        draft: { label: "초안", className: "" },
+        submitting: { label: "발행중", className: "warn" },
+        issued: { label: "발행됨", className: "ok" },
+        unknown: { label: "불명", className: "warn" },
+        failed: { label: "실패", className: "bad" },
+      };
+      return map[status] || { label: status || "확인 중", className: "warn" };
+    }
+
+    function taxSelectedInvoice() {
+      return state.taxInvoices.find((invoice) => invoice.id === state.selectedTaxInvoiceId) || null;
+    }
+
+    function taxDateInputValue(value = new Date()) {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, "0");
+      const day = String(value.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function taxItemRows() {
+      return $$("#taxItems .tax-item-row");
+    }
+
+    function addTaxItemRow(values = {}) {
+      const container = $("#taxItems");
+      if (!container) return;
+      const row = document.createElement("div");
+      row.className = "tax-item-row";
+      row.innerHTML = `
+        <div class="field"><label>품명</label><input data-tax-item="name" maxlength="200" value="${escapeHtml(values.item_name || "")}" placeholder="예: 컨설팅"></div>
+        <div class="field"><label>수량</label><input data-tax-item="quantity" type="number" min="1" step="1" value="${escapeHtml(values.quantity || 1)}"></div>
+        <div class="field"><label>단가</label><input data-tax-item="unit_price" type="number" min="0" step="1" value="${escapeHtml(values.unit_price || 0)}"></div>
+        <div class="field"><label>공급가액</label><input data-tax-item="supply_cost" readonly value="${escapeHtml(values.supply_cost || 0)}"></div>
+        <div class="field"><label>세액</label><input data-tax-item="tax" type="number" min="0" step="1" value="${escapeHtml(values.tax || 0)}"></div>
+        <button class="btn" type="button" data-tax-remove-item aria-label="품목 삭제">삭제</button>
+      `;
+      container.appendChild(row);
+      const recalculateLine = () => {
+        const quantity = Math.max(0, Number(row.querySelector('[data-tax-item="quantity"]')?.value || 0));
+        const unitPrice = Math.max(0, Number(row.querySelector('[data-tax-item="unit_price"]')?.value || 0));
+        const supply = Number.isSafeInteger(quantity * unitPrice) ? quantity * unitPrice : 0;
+        row.querySelector('[data-tax-item="supply_cost"]').value = String(supply);
+        row.querySelector('[data-tax-item="tax"]').value = String(Math.round(supply * 0.1));
+        updateTaxDraftSummary();
+      };
+      row.querySelector('[data-tax-item="quantity"]')?.addEventListener("input", recalculateLine);
+      row.querySelector('[data-tax-item="unit_price"]')?.addEventListener("input", recalculateLine);
+      row.querySelector('[data-tax-item="tax"]')?.addEventListener("input", updateTaxDraftSummary);
+      row.querySelector('[data-tax-item="name"]')?.addEventListener("input", renderTaxInvoicePreview);
+      row.querySelector("[data-tax-remove-item]")?.addEventListener("click", () => {
+        if (taxItemRows().length <= 1) {
+          showToast("품목은 1개 이상 필요합니다.");
+          return;
+        }
+        row.remove();
+        updateTaxDraftSummary();
+      });
+      updateTaxDraftSummary();
+    }
+
+    function readTaxItems() {
+      return taxItemRows().map((row) => ({
+        item_name: String(row.querySelector('[data-tax-item="name"]')?.value || "").trim(),
+        quantity: Number(row.querySelector('[data-tax-item="quantity"]')?.value || 0),
+        unit_price: Number(row.querySelector('[data-tax-item="unit_price"]')?.value || 0),
+        supply_cost: Number(row.querySelector('[data-tax-item="supply_cost"]')?.value || 0),
+        tax: Number(row.querySelector('[data-tax-item="tax"]')?.value || 0),
+      }));
+    }
+
+    function taxDraftTotals() {
+      const items = readTaxItems();
+      const supplyCostTotal = items.reduce((sum, item) => sum + Number(item.supply_cost || 0), 0);
+      const taxTotal = items.reduce((sum, item) => sum + Number(item.tax || 0), 0);
+      return {
+        supply_cost_total: supplyCostTotal,
+        tax_total: taxTotal,
+        total_amount: supplyCostTotal + taxTotal,
+      };
+    }
+
+    function readTaxDraftPayload() {
+      const totals = taxDraftTotals();
+      return {
+        invoicee: {
+          corp_num: String($("#taxInvoiceeCorpNum")?.value || "").trim(),
+          corp_name: String($("#taxInvoiceeCorpName")?.value || "").trim(),
+          ceo_name: String($("#taxInvoiceeCeoName")?.value || "").trim(),
+          email: String($("#taxInvoiceeEmail")?.value || "").trim(),
+        },
+        items: readTaxItems(),
+        write_date: String($("#taxWriteDate")?.value || "").replace(/-/g, ""),
+        purpose_type: $("#taxPurposeType")?.value || "청구",
+        totals,
+      };
+    }
+
+    function updateTaxDraftSummary() {
+      const totals = taxDraftTotals();
+      if ($("#taxSupplyTotal")) $("#taxSupplyTotal").value = String(totals.supply_cost_total);
+      if ($("#taxTaxTotal")) $("#taxTaxTotal").value = String(totals.tax_total);
+      if ($("#taxGrandTotal")) $("#taxGrandTotal").value = String(totals.total_amount);
+      renderTaxInvoicePreview();
+    }
+
+    function renderTaxInvoicePreview() {
+      const target = $("#taxInvoicePreview");
+      if (!target) return;
+      const selected = taxSelectedInvoice();
+      const payload = selected || readTaxDraftPayload();
+      const invoicee = payload.invoicee || {};
+      const totals = payload.totals || {};
+      const status = selected ? taxStatusInfo(selected.status) : null;
+      target.innerHTML = `
+        <div class="row">
+          <h4>${selected ? "저장된 전자세금계산서 초안" : "전자세금계산서 입력 미리보기"}</h4>
+          ${status ? `<span class="pill ${status.className}">${escapeHtml(status.label)}</span>` : ""}
+        </div>
+        ${jobSummaryRowsHtml([
+          ["문서번호", selected?.mgt_key || "초안 저장 시 생성"],
+          ["공급자", selected?.supplier?.corp_name || state.taxSettings?.corp_name || "사업자 정보 등록 필요"],
+          ["공급받는자", invoicee.corp_name || "입력 대기"],
+          ["작성일자", payload.write_date || "입력 대기"],
+          ["청구/영수", payload.purpose_type || "청구"],
+          ["품목", `${(payload.items || []).length}개`],
+          ["공급가액계", taxWon(totals.supply_cost_total)],
+          ["세액계", taxWon(totals.tax_total)],
+          ["합계금액", taxWon(totals.total_amount)],
+        ])}
+      `;
+    }
+
+    function renderTaxSettings() {
+      const setting = state.taxSettings;
+      const status = $("#taxSettingsStatus");
+      const message = $("#taxSettingsMessage");
+      if (status) {
+        if (state.taxServerConfigured === false) {
+          status.textContent = "준비 중";
+          status.className = "pill warn";
+        } else if (setting?.member_connected) {
+          status.textContent = "연동 완료";
+          status.className = "pill ok";
+        } else {
+          status.textContent = "등록 필요";
+          status.className = "pill warn";
+        }
+      }
+      if (message && !message.dataset.error) {
+        message.textContent = setting?.member_connected
+          ? "등록한 사업자번호만 공급자로 사용됩니다."
+          : "사업자번호·상호·대표자명을 등록해주세요.";
+      }
+      const fields = [
+        ["#taxSupplierCorpNum", setting?.corp_num || ""],
+        ["#taxSupplierCorpName", setting?.corp_name || ""],
+        ["#taxSupplierCeoName", setting?.ceo_name || ""],
+      ];
+      for (const [selector, value] of fields) {
+        const field = $(selector);
+        if (field && document.activeElement !== field && !field.value) field.value = value;
+      }
+    }
+
+    function renderTaxHistory() {
+      const target = $("#taxInvoiceHistory");
+      if (!target) return;
+      const invoices = state.taxInvoices || [];
+      target.innerHTML = invoices.length ? invoices.map((invoice) => {
+        const status = taxStatusInfo(invoice.status);
+        const failure = invoice.failure || {};
+        const canSync = ["unknown", "submitting"].includes(invoice.status);
+        return `
+          <div class="tax-history-row ${invoice.id === state.selectedTaxInvoiceId ? "active" : ""}">
+            <div class="row">
+              <span><strong>${escapeHtml(invoice.invoicee?.corp_name || "거래처")}</strong><br><span class="small muted">${escapeHtml(invoice.mgt_key || invoice.id)}</span></span>
+              <span class="pill ${status.className}">${escapeHtml(status.label)}</span>
+            </div>
+            <div class="small muted">${escapeHtml(invoice.write_date || "-")} · ${escapeHtml(invoice.purpose_type || "-")} · ${escapeHtml(taxWon(invoice.totals?.total_amount))}</div>
+            ${failure.code ? `<div class="notice ${invoice.status === "failed" ? "bad" : "warn"} small"><strong>${escapeHtml(failure.code)}</strong><br>${escapeHtml(failure.message || invoice.recovery_guidance || "상태 확인이 필요합니다.")}</div>` : ""}
+            <div class="actions">
+              <button class="btn" type="button" data-tax-select-invoice="${escapeHtml(invoice.id)}">상세 보기</button>
+              ${invoice.status === "draft" ? `<button class="btn" type="button" data-tax-preflight-invoice="${escapeHtml(invoice.id)}">발행 준비</button>` : ""}
+              ${canSync ? `<button class="btn" type="button" data-tax-sync-invoice="${escapeHtml(invoice.id)}">상태 확인</button>` : ""}
+              ${failure.code ? `<button class="btn" type="button" data-tax-report-invoice="${escapeHtml(invoice.id)}">오류 보고</button>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("") : `<div class="empty">아직 저장된 전자세금계산서 초안이 없습니다.</div>`;
+    }
+
+    function renderTaxControls() {
+      const invoice = taxSelectedInvoice();
+      const allowed = canUseJob("semu_tax_invoice");
+      const isDraft = invoice?.status === "draft";
+      const preflight = state.taxPreflight?.invoice_id === invoice?.id ? state.taxPreflight : null;
+      const confirm = $("#taxIssueConfirm");
+      const preflightButton = $("#taxPreflightBtn");
+      const issueButton = $("#taxIssueBtn");
+      if (preflightButton) preflightButton.disabled = !allowed || !isDraft;
+      if (confirm) confirm.disabled = !allowed || !isDraft || !preflight?.can_issue;
+      if (issueButton) issueButton.disabled = !allowed || !isDraft || !preflight?.can_issue || !confirm?.checked;
+      const result = $("#taxPreflightResult");
+      if (!result) return;
+      if (!preflight) {
+        result.classList.add("hidden");
+        result.textContent = "";
+        return;
+      }
+      result.className = `notice ${preflight.can_issue ? "ok" : "warn"} small`;
+      result.textContent = `발행 단가 ${taxWon(preflight.unit_cost)} · 잔여 포인트 ${Number(preflight.balance || 0).toLocaleString("ko-KR")}P · ${preflight.can_issue ? "발행 가능" : "포인트 확인 필요"}`;
+    }
+
+    function renderTaxJobForm() {
+      if (!$("#taxJobForm")) return;
+      if (!$("#taxWriteDate").value) $("#taxWriteDate").value = taxDateInputValue();
+      if (!taxItemRows().length) addTaxItemRow();
+      renderTaxSettings();
+      updateTaxDraftSummary();
+      renderTaxHistory();
+      renderTaxControls();
+    }
+
+    function resetTaxDraftForm() {
+      for (const selector of ["#taxInvoiceeCorpNum", "#taxInvoiceeCorpName", "#taxInvoiceeCeoName", "#taxInvoiceeEmail"]) {
+        if ($(selector)) $(selector).value = "";
+      }
+      $("#taxWriteDate").value = taxDateInputValue();
+      $("#taxPurposeType").value = "청구";
+      $("#taxItems").innerHTML = "";
+      addTaxItemRow();
+      state.selectedTaxInvoiceId = "";
+      state.taxPreflight = null;
+      if ($("#taxIssueConfirm")) $("#taxIssueConfirm").checked = false;
+      renderTaxJobForm();
+    }
+
+    async function loadTaxData() {
+      try {
+        const settings = await api("/api/tax/settings");
+        state.taxServerConfigured = settings.server_configured !== false;
+        state.taxSettings = settings.settings?.business_registered ? settings.settings : null;
+      } catch (error) {
+        if (error.status === 503 && error.body?.error === "tax_not_configured") {
+          state.taxServerConfigured = false;
+          state.taxSettings = null;
+          state.taxInvoices = [];
+          return;
+        }
+        if (error.status === 403) {
+          state.taxServerConfigured = true;
+          state.taxSettings = null;
+          state.taxInvoices = [];
+          return;
+        }
+        throw error;
+      }
+      const response = await api("/api/tax/invoices");
+      state.taxInvoices = response.invoices || [];
+      if (state.selectedTaxInvoiceId && !state.taxInvoices.some((invoice) => invoice.id === state.selectedTaxInvoiceId)) {
+        state.selectedTaxInvoiceId = "";
+        state.taxPreflight = null;
+      }
+    }
+
+    async function refreshTaxData() {
+      await loadTaxData();
+      renderAll();
+    }
+
+    async function saveTaxSettings() {
+      const message = $("#taxSettingsMessage");
+      if (message) delete message.dataset.error;
+      try {
+        const response = await api("/api/tax/settings", {
+          method: "PUT",
+          body: JSON.stringify({
+            corp_num: $("#taxSupplierCorpNum").value.trim(),
+            corp_name: $("#taxSupplierCorpName").value.trim(),
+            ceo_name: $("#taxSupplierCeoName").value.trim(),
+          }),
+        });
+        state.taxServerConfigured = true;
+        state.taxSettings = response.settings;
+        showToast("사업자 정보가 등록되었습니다.");
+        await refreshTaxData();
+      } catch (error) {
+        const code = error.body?.error || error.message || "tax_settings_failed";
+        if (message) {
+          message.dataset.error = "1";
+          message.textContent = code === "member_join_fields_required"
+            ? "미가입 사업자는 추가 회원정보가 필요해 현재 자동가입을 보류했습니다. 운영자에게 문의해주세요."
+            : `등록 실패: ${code}`;
+        }
+        renderTaxSettings();
+        throw error;
+      }
+    }
+
+    async function createTaxDraft() {
+      const response = await api("/api/tax/invoices", {
+        method: "POST",
+        body: JSON.stringify(readTaxDraftPayload()),
+      });
+      state.selectedTaxInvoiceId = response.invoice.id;
+      state.taxPreflight = null;
+      if ($("#taxIssueConfirm")) $("#taxIssueConfirm").checked = false;
+      await refreshTaxData();
+      showToast("전자세금계산서 초안을 저장했습니다.");
+    }
+
+    async function runTaxPreflight(invoiceId = state.selectedTaxInvoiceId) {
+      if (!invoiceId) {
+        showToast("먼저 초안을 저장하거나 이력에서 선택해주세요.");
+        return;
+      }
+      state.selectedTaxInvoiceId = invoiceId;
+      const response = await api(`/api/tax/invoices/${encodeURIComponent(invoiceId)}/preflight`, {
+        method: "POST",
+        body: "{}",
+      });
+      state.taxPreflight = {
+        invoice_id: invoiceId,
+        unit_cost: response.unit_cost,
+        balance: response.balance,
+        can_issue: Boolean(response.can_issue),
+        checked_at: response.checked_at,
+      };
+      if ($("#taxIssueConfirm")) $("#taxIssueConfirm").checked = false;
+      await refreshTaxData();
+      showToast("발행 단가와 잔여 포인트를 확인했습니다.");
+    }
+
+    async function issueTaxInvoice() {
+      const invoice = taxSelectedInvoice();
+      if (!invoice || invoice.status !== "draft") {
+        showToast("발행할 초안을 선택해주세요.");
+        return;
+      }
+      if (!state.taxPreflight?.can_issue || state.taxPreflight.invoice_id !== invoice.id || !$("#taxIssueConfirm").checked) {
+        showToast("발행 준비 결과와 확인 체크를 먼저 확인해주세요.");
+        return;
+      }
+      await api(`/api/tax/invoices/${encodeURIComponent(invoice.id)}/issue`, {
+        method: "POST",
+        body: JSON.stringify({ confirm_paid: true }),
+      });
+      state.taxPreflight = null;
+      $("#taxIssueConfirm").checked = false;
+      await refreshTaxData();
+      showToast("테스트베드 전자세금계산서 발행을 완료했습니다.");
+    }
+
+    async function syncTaxInvoice(invoiceId) {
+      state.selectedTaxInvoiceId = invoiceId;
+      await api(`/api/tax/invoices/${encodeURIComponent(invoiceId)}/sync`, { method: "POST", body: "{}" });
+      await refreshTaxData();
+      showToast("팝빌에서 실제 문서 상태를 다시 확인했습니다.");
+    }
+
+    async function reportTaxInvoiceError(invoiceId) {
+      const invoice = state.taxInvoices.find((item) => item.id === invoiceId);
+      if (!invoice) return;
+      const failure = invoice.failure || {};
+      const result = await submitWebErrorReport({
+        workContext: `세무 직원 / 전자세금계산서 / ${invoice.mgt_key || invoice.id}`,
+        visibleError: `${failure.code || "tax_invoice_error"}: ${failure.message || invoice.recovery_guidance || "상태 확인 필요"}`,
+        userNote: `상태=${invoice.status}, 실패단계=${failure.stage || "unknown"}, 작성일자=${invoice.write_date}, 테스트베드=true`,
+      });
+      showToast(`오류 보고가 전송되었습니다. ${result.report_id}`);
+    }
+
     function renderQuickActions() {
       ensureSelectedJobKind();
       renderJobEmployeeSwitch();
@@ -9300,6 +9891,7 @@
       renderJobPreviews();
       renderSongiJobForm();
       renderYunmiJobForm();
+      renderTaxJobForm();
       const key = employeeKeyForJobKind(state.selectedJobKind);
       const status = key ? employeeStatusInfo(key) : null;
       $("#jobComposerStatus").textContent = status?.label || "직원 선택";
@@ -12094,6 +12686,12 @@
         state.workers = [];
         state.jobKindCatalog = [];
       }
+      try {
+        await loadTaxData();
+      } catch (_error) {
+        state.taxSettings = null;
+        state.taxInvoices = [];
+      }
       renderAll();
     }
 
@@ -12981,6 +13579,113 @@
 
     $("#sangsuPrintBtn").addEventListener("click", () => openSangsuPrintWindow());
     $("#sangsuResetBtn").addEventListener("click", () => resetSangsuQuote());
+
+    $("#taxJobForm").addEventListener("input", (event) => {
+      if (event.target?.id === "taxIssueConfirm") {
+        renderTaxControls();
+        return;
+      }
+      if (event.target?.closest?.("#taxItems")) return;
+      renderTaxInvoicePreview();
+    });
+
+    $("#taxAddItemBtn").addEventListener("click", () => addTaxItemRow());
+    $("#taxDraftResetBtn").addEventListener("click", () => resetTaxDraftForm());
+    $("#taxIssueConfirm").addEventListener("change", () => renderTaxControls());
+    $("#taxHistoryRefreshBtn").addEventListener("click", async () => {
+      try {
+        await refreshTaxData();
+        showToast("전자세금계산서 이력을 새로고침했습니다.");
+      } catch (error) {
+        showToast(errorMessage(error, "이력을 불러오지 못했습니다."));
+      }
+    });
+
+    $("#taxSettingsSaveBtn").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await saveTaxSettings();
+      } catch (error) {
+        showToast(errorMessage(error, "사업자 정보를 등록하지 못했습니다."));
+      } finally {
+        button.disabled = !canUseJob("semu_tax_invoice");
+      }
+    });
+
+    $("#taxJobForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = $("#taxDraftSaveBtn");
+      button.disabled = true;
+      try {
+        await createTaxDraft();
+      } catch (error) {
+        showToast(errorMessage(error, "전자세금계산서 초안을 저장하지 못했습니다."));
+      } finally {
+        button.disabled = !canUseJob("semu_tax_invoice");
+      }
+    });
+
+    $("#taxPreflightBtn").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await runTaxPreflight();
+      } catch (error) {
+        state.taxPreflight = null;
+        showToast(errorMessage(error, "발행 단가와 잔여 포인트를 확인하지 못했습니다."));
+        renderTaxControls();
+      } finally {
+        renderTaxControls();
+      }
+    });
+
+    $("#taxIssueBtn").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await issueTaxInvoice();
+      } catch (error) {
+        try {
+          await refreshTaxData();
+        } catch (_refreshError) {}
+        showToast(errorMessage(error, "전자세금계산서 발행 결과를 확인하지 못했습니다. 상태 확인을 눌러주세요."));
+      } finally {
+        renderTaxControls();
+      }
+    });
+
+    $("#taxInvoiceHistory").addEventListener("click", async (event) => {
+      const selectButton = event.target.closest("[data-tax-select-invoice]");
+      const preflightButton = event.target.closest("[data-tax-preflight-invoice]");
+      const syncButton = event.target.closest("[data-tax-sync-invoice]");
+      const reportButton = event.target.closest("[data-tax-report-invoice]");
+      const invoiceId = selectButton?.dataset.taxSelectInvoice
+        || preflightButton?.dataset.taxPreflightInvoice
+        || syncButton?.dataset.taxSyncInvoice
+        || reportButton?.dataset.taxReportInvoice
+        || "";
+      if (!invoiceId) return;
+      state.selectedTaxInvoiceId = invoiceId;
+      if (selectButton) {
+        state.taxPreflight = null;
+        $("#taxIssueConfirm").checked = false;
+        renderTaxJobForm();
+        return;
+      }
+      const button = preflightButton || syncButton || reportButton;
+      button.disabled = true;
+      try {
+        if (preflightButton) await runTaxPreflight(invoiceId);
+        if (syncButton) await syncTaxInvoice(invoiceId);
+        if (reportButton) await reportTaxInvoiceError(invoiceId);
+      } catch (error) {
+        showToast(errorMessage(error, "세무 직원 요청을 처리하지 못했습니다."));
+      } finally {
+        button.disabled = false;
+        renderTaxJobForm();
+      }
+    });
 
     $("#yeriJobForm").addEventListener("submit", async (event) => {
       event.preventDefault();

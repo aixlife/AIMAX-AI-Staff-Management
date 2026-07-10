@@ -82,6 +82,8 @@ const CAFE24_ADMIN_ACCESS_TOKEN = String(process.env.AIMAX_CAFE24_ADMIN_ACCESS_T
 const CAFE24_ADMIN_REFRESH_TOKEN = String(process.env.AIMAX_CAFE24_ADMIN_REFRESH_TOKEN || process.env.CAFE24_REFRESH_TOKEN || "").trim();
 const CAFE24_ADMIN_TOKEN_FILE = expandHomePath(process.env.AIMAX_CAFE24_ADMIN_TOKEN_FILE || path.join(DATA_DIR, "cafe24-admin-token.json"));
 const CAFE24_ADMIN_TIMEOUT_MS = Math.max(1000, Number(process.env.AIMAX_CAFE24_ADMIN_TIMEOUT_MS || 7000));
+const POPBILL_BRIDGE_PATH = String(process.env.POPBILL_BRIDGE_PATH || path.join(__dirname, "popbill-bridge.js")).trim();
+const POPBILL_BRIDGE_TIMEOUT_MS = 50 * 1000;
 const KEYCHAIN_ACCOUNT = String(process.env.AIMAX_KEYCHAIN_ACCOUNT || "minsu-api").trim();
 const LOCAL_KEYRING_SERVICE = String(process.env.AIMAX_KEYRING_SERVICE || "AIMAX").trim();
 const LEGACY_KEYRING_SERVICE = String(process.env.AIMAX_LEGACY_KEYRING_SERVICE || "NaverBlogAuto").trim();
@@ -186,6 +188,8 @@ const ARTIFACTS_DIR = path.join(DATA_DIR, "artifacts");
 const AGENTS_PATH = path.join(DATA_DIR, "agents.json");
 const COMMANDS_PATH = path.join(DATA_DIR, "agent-commands.json");
 const CAFE24_ORDERS_PATH = path.join(DATA_DIR, "cafe24-orders.json");
+const TAX_SETTINGS_PATH = path.join(DATA_DIR, "tax-settings.json");
+const TAX_INVOICES_PATH = path.join(DATA_DIR, "tax-invoices.json");
 const RESEARCH_STORAGE_CONFIG_PATH = path.join(DATA_DIR, "research-storage.json");
 let RESEARCH_DATA_DIR = configuredResearchDataDir();
 let RESEARCH_PATH = path.join(RESEARCH_DATA_DIR, "research.json");
@@ -196,7 +200,7 @@ const SETUP_HTML_PATH = path.join(STATIC_DIR, "setup.html");
 const ADMIN_COOKIE_NAME = "aimax_admin_session";
 const EUNSEO_ACCESS_COOKIE_NAME = "aimax_eunseo_access";
 const EUNSEO_ACCESS_TTL_MS = Number(process.env.AIMAX_EUNSEO_ACCESS_TTL_MS || 6 * 60 * 60 * 1000);
-const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "maxalert", "nakyung", "hyojin", "sangsu", "eunseo", "blog_team", "bundle"];
+const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "semu", "maxalert", "nakyung", "hyojin", "sangsu", "eunseo", "blog_team", "bundle"];
 const PRODUCTS = new Set(PRODUCT_ORDER);
 const MEMBER_ONLY_PRODUCTS = new Set(["eunseo"]);
 const BUNDLE_PRODUCTS = PRODUCT_ORDER.filter((product) => !MEMBER_ONLY_PRODUCTS.has(product));
@@ -464,6 +468,26 @@ const WORKERS = {
       },
     ],
   },
+  semu_tax_accountant: {
+    code: "semu_tax_accountant",
+    staffCode: "semu",
+    // TODO(CEO): 정식 직원 이름과 프로필 이미지를 결정하면 placeholder를 교체한다.
+    name: "세무 직원",
+    label: "세무 직원",
+    role: "전자세금계산서 발행 직원",
+    category: "finance",
+    product: "semu",
+    jobKind: "semu_tax_invoice",
+    execution: "web_module",
+    type: "web_module",
+    status: "available",
+    requiredSettings: ["business_registration"],
+    moduleKey: "tax",
+    profileImage: "/assets/avatar_placeholder.svg",
+    avatarImage: "/assets/avatar_placeholder.svg",
+    shortDescription: "사업자 정보와 거래 내역을 받아 전자세금계산서 초안을 만들고, 비용 확인과 명시 승인 뒤 테스트베드에서 발행합니다.",
+    capabilities: ["전자세금계산서 초안", "발행 비용 확인", "명시 승인 발행", "상태 복구"],
+  },
   max_alert: {
     code: "max_alert",
     staffCode: "max",
@@ -626,6 +650,13 @@ const JOB_KINDS = {
     requiredProduct: "songi",
     workerCode: "songi_data_research",
     apiMode: "research_api",
+    queue: false,
+  },
+  semu_tax_invoice: {
+    label: "세무 직원 전자세금계산서",
+    requiredProduct: "semu",
+    workerCode: "semu_tax_accountant",
+    apiMode: "tax_api",
     queue: false,
   },
   sangsu_quote: {
@@ -3466,6 +3497,36 @@ function saveCafe24Orders(data) {
   writeJsonAtomic(CAFE24_ORDERS_PATH, { version: 1, orders: arrayFieldOrThrow(CAFE24_ORDERS_PATH, data, "orders") });
 }
 
+function loadTaxSettings() {
+  const data = readJsonFile(TAX_SETTINGS_PATH, { version: 1, settings: [] });
+  return {
+    version: 1,
+    settings: arrayFieldOrThrow(TAX_SETTINGS_PATH, data, "settings"),
+  };
+}
+
+function saveTaxSettings(data) {
+  writeJsonAtomic(TAX_SETTINGS_PATH, {
+    version: 1,
+    settings: arrayFieldOrThrow(TAX_SETTINGS_PATH, data, "settings"),
+  });
+}
+
+function loadTaxInvoices() {
+  const data = readJsonFile(TAX_INVOICES_PATH, { version: 1, invoices: [] });
+  return {
+    version: 1,
+    invoices: arrayFieldOrThrow(TAX_INVOICES_PATH, data, "invoices"),
+  };
+}
+
+function saveTaxInvoices(data) {
+  writeJsonAtomic(TAX_INVOICES_PATH, {
+    version: 1,
+    invoices: arrayFieldOrThrow(TAX_INVOICES_PATH, data, "invoices"),
+  });
+}
+
 function loadResearch() {
   const data = readJsonFile(RESEARCH_PATH, { version: 1, projects: [], items: [] });
   return {
@@ -3565,6 +3626,13 @@ function adminProductCatalog() {
       price_won: 5500,
       products: productList("jieun"),
       job_kinds: [],
+      download_product: "",
+    },
+    {
+      product: "semu",
+      label: "세무 직원",
+      products: productList("semu"),
+      job_kinds: ["semu_tax_invoice"],
       download_product: "",
     },
     {
@@ -13809,6 +13877,694 @@ function handleDeleteUserSecret(req, res, provider) {
   });
 }
 
+function taxServerConfigured() {
+  return Boolean(String(process.env.POPBILL_LINK_ID || "").trim() && String(process.env.POPBILL_SECRET_KEY || "").trim());
+}
+
+function requireTaxAccess(req, res) {
+  if (!taxServerConfigured()) {
+    json(req, res, 503, { ok: false, error: "tax_not_configured" });
+    return null;
+  }
+  const auth = requireSession(req, res);
+  if (!auth) return null;
+  if (!canAccessWorker(WORKERS.semu_tax_accountant, auth.user)) {
+    json(req, res, 403, { ok: false, error: "tax_not_allowed" });
+    return null;
+  }
+  return auth;
+}
+
+function taxSettingForUser(data, userId) {
+  return data.settings.find((item) => item.user_id === userId) || null;
+}
+
+function publicTaxSetting(setting) {
+  return setting ? {
+    business_registered: true,
+    corp_num: setting.corp_num,
+    corp_name: setting.corp_name,
+    ceo_name: setting.ceo_name,
+    member_connected: Boolean(setting.member_connected),
+    is_test: true,
+    created_at: setting.created_at,
+    updated_at: setting.updated_at,
+  } : {
+    business_registered: false,
+    corp_num: "",
+    corp_name: "",
+    ceo_name: "",
+    member_connected: false,
+    is_test: true,
+    created_at: "",
+    updated_at: "",
+  };
+}
+
+function redactPopbillText(value) {
+  let text = String(value ?? "");
+  for (const secret of [process.env.POPBILL_LINK_ID, process.env.POPBILL_SECRET_KEY]) {
+    const raw = String(secret || "");
+    if (raw) text = text.split(raw).join("[redacted]");
+  }
+  return text.slice(0, 500);
+}
+
+function sanitizePopbillBridgePayload(value, depth = 0) {
+  if (depth > 6) return null;
+  if (typeof value === "string") return redactPopbillText(value);
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (Array.isArray(value)) return value.slice(0, 100).map((item) => sanitizePopbillBridgePayload(item, depth + 1));
+  if (!value || typeof value !== "object") return null;
+  const result = {};
+  for (const [key, item] of Object.entries(value).slice(0, 100)) {
+    if (/secret|password|authorization|token/i.test(key)) continue;
+    result[key] = sanitizePopbillBridgePayload(item, depth + 1);
+  }
+  return result;
+}
+
+function runPopbillBridge(request) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let stdout = "";
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(sanitizePopbillBridgePayload(result));
+    };
+    let child = null;
+    try {
+      child = childProcess.spawn(process.execPath, [POPBILL_BRIDGE_PATH], {
+        cwd: __dirname,
+        env: process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (_error) {
+      resolve({ ok: false, error: "bridge_unavailable", outcome: "unknown" });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch (_error) {}
+      finish({ ok: false, error: "bridge_timeout", outcome: "unknown" });
+    }, POPBILL_BRIDGE_TIMEOUT_MS);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+      if (Buffer.byteLength(stdout) > 1024 * 1024) {
+        try {
+          child.kill("SIGKILL");
+        } catch (_error) {}
+        finish({ ok: false, error: "bridge_invalid_response", outcome: "unknown" });
+      }
+    });
+    child.stderr.on("data", () => {});
+    child.on("error", () => finish({ ok: false, error: "bridge_unavailable", outcome: "unknown" }));
+    child.on("close", () => {
+      if (settled) return;
+      try {
+        const parsed = JSON.parse(stdout.trim() || "{}");
+        if (!parsed || typeof parsed !== "object" || typeof parsed.ok !== "boolean") {
+          finish({ ok: false, error: "bridge_invalid_response", outcome: "unknown" });
+          return;
+        }
+        finish(parsed);
+      } catch (_error) {
+        finish({ ok: false, error: "bridge_invalid_response", outcome: "unknown" });
+      }
+    });
+    child.stdin.on("error", () => {});
+    try {
+      child.stdin.end(JSON.stringify(request));
+    } catch (_error) {
+      try {
+        child.kill("SIGKILL");
+      } catch (_killError) {}
+      finish({ ok: false, error: "bridge_write_failed", outcome: "unknown" });
+    }
+  });
+}
+
+function popbillMemberConnected(result) {
+  if (result === true) return true;
+  const code = Number(result?.code ?? result?.Code ?? 0);
+  return code === 1;
+}
+
+function popbillResultSummary(result) {
+  if (!result || typeof result !== "object") return {};
+  const summary = {};
+  for (const key of ["code", "message", "itemKey", "stateCode", "stateMemo", "stateDT", "regDT", "issueDT", "ntsconfirmNum", "ntsresult", "ntssendErrCode"]) {
+    const value = result[key];
+    if (value !== undefined && value !== null && value !== "") summary[key] = sanitizePopbillBridgePayload(value);
+  }
+  return summary;
+}
+
+function bridgeErrorCode(result, fallback) {
+  const code = String(result?.error || "").trim();
+  return code || fallback;
+}
+
+function validTaxDate(value) {
+  const text = String(value || "").trim();
+  if (!/^\d{8}$/.test(text)) return false;
+  const year = Number(text.slice(0, 4));
+  const month = Number(text.slice(4, 6));
+  const day = Number(text.slice(6, 8));
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function taxInteger(value, { min = 0, max = 999999999999999 } = {}) {
+  if (value === "" || value === null || value === undefined) return null;
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < min || number > max) return null;
+  return number;
+}
+
+function validateTaxInvoiceBody(body) {
+  const invoicee = body?.invoicee && typeof body.invoicee === "object" ? body.invoicee : {};
+  const corpNum = String(invoicee.corp_num || "").trim();
+  const corpName = compactText(invoicee.corp_name, 200);
+  const ceoName = compactText(invoicee.ceo_name, 100);
+  const email = String(invoicee.email || "").trim();
+  const writeDate = String(body?.write_date || "").trim();
+  const purposeType = String(body?.purpose_type || "").trim();
+  const rawItems = Array.isArray(body?.items) ? body.items : [];
+  if (!/^\d{10}$/.test(corpNum) || !corpName || !ceoName) {
+    return { error: "invoice_validation_failed", field: "invoicee" };
+  }
+  if (email && (email.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+    return { error: "invoice_validation_failed", field: "invoicee_email" };
+  }
+  if (!validTaxDate(writeDate)) return { error: "invoice_validation_failed", field: "write_date" };
+  if (!["청구", "영수"].includes(purposeType)) return { error: "invoice_validation_failed", field: "purpose_type" };
+  if (!rawItems.length || rawItems.length > 50) return { error: "invoice_validation_failed", field: "items" };
+
+  const items = [];
+  let supplyCostTotal = 0;
+  let taxTotal = 0;
+  for (let index = 0; index < rawItems.length; index += 1) {
+    const raw = rawItems[index] || {};
+    const itemName = compactText(raw.item_name, 200);
+    const quantity = taxInteger(raw.quantity, { min: 1, max: 1000000 });
+    const unitPrice = taxInteger(raw.unit_price, { min: 0 });
+    const supplyCost = taxInteger(raw.supply_cost, { min: 0 });
+    const tax = taxInteger(raw.tax, { min: 0 });
+    if (!itemName || quantity === null || unitPrice === null || supplyCost === null || tax === null) {
+      return { error: "invoice_validation_failed", field: `items.${index}` };
+    }
+    const calculatedSupplyCost = quantity * unitPrice;
+    if (!Number.isSafeInteger(calculatedSupplyCost) || calculatedSupplyCost !== supplyCost) {
+      return { error: "invoice_validation_failed", field: `items.${index}.supply_cost` };
+    }
+    supplyCostTotal += supplyCost;
+    taxTotal += tax;
+    if (!Number.isSafeInteger(supplyCostTotal) || !Number.isSafeInteger(taxTotal)) {
+      return { error: "invoice_validation_failed", field: "totals" };
+    }
+    items.push({
+      serial_num: index + 1,
+      item_name: itemName,
+      quantity,
+      unit_price: unitPrice,
+      supply_cost: supplyCost,
+      tax,
+    });
+  }
+  const totalAmount = supplyCostTotal + taxTotal;
+  if (!Number.isSafeInteger(totalAmount) || totalAmount <= 0) {
+    return { error: "invoice_validation_failed", field: "totals" };
+  }
+  const suppliedTotals = body?.totals && typeof body.totals === "object" ? body.totals : {};
+  const inputSupply = taxInteger(suppliedTotals.supply_cost_total, { min: 0 });
+  const inputTax = taxInteger(suppliedTotals.tax_total, { min: 0 });
+  const inputTotal = taxInteger(suppliedTotals.total_amount, { min: 0 });
+  if (inputSupply !== supplyCostTotal || inputTax !== taxTotal || inputTotal !== totalAmount) {
+    return { error: "invoice_validation_failed", field: "totals_mismatch" };
+  }
+  return {
+    invoicee: { corp_num: corpNum, corp_name: corpName, ceo_name: ceoName, email },
+    items,
+    write_date: writeDate,
+    purpose_type: purposeType,
+    totals: {
+      supply_cost_total: supplyCostTotal,
+      tax_total: taxTotal,
+      total_amount: totalAmount,
+    },
+  };
+}
+
+function nextTaxManagementKey(data, userId, writeDate) {
+  const userKey = crypto.createHash("sha256").update(String(userId)).digest("hex").slice(0, 6).toUpperCase();
+  const prefix = `AX${userKey}${writeDate}`;
+  const maxSequence = data.invoices
+    .filter((item) => item.user_id === userId && item.write_date === writeDate)
+    .reduce((max, item) => Math.max(max, Number(item.sequence || 0)), 0);
+  const sequence = maxSequence + 1;
+  if (sequence > 999999) throw Object.assign(new Error("invoice_sequence_exhausted"), { code: "invoice_sequence_exhausted" });
+  const mgtKey = `${prefix}${String(sequence).padStart(6, "0")}`;
+  if (!/^[A-Z0-9]+$/.test(mgtKey) || mgtKey.length > 24) {
+    throw Object.assign(new Error("invoice_management_key_invalid"), { code: "invoice_management_key_invalid" });
+  }
+  return { mgtKey, sequence };
+}
+
+function publicTaxInvoice(invoice) {
+  return {
+    id: invoice.id,
+    mgt_key: invoice.mgt_key,
+    status: invoice.status,
+    supplier: invoice.supplier,
+    invoicee: invoice.invoicee,
+    items: invoice.items,
+    write_date: invoice.write_date,
+    purpose_type: invoice.purpose_type,
+    totals: invoice.totals,
+    preflight: invoice.preflight || null,
+    provider: invoice.provider || null,
+    failure: invoice.failure || null,
+    recovery_guidance: invoice.recovery_guidance || "",
+    created_at: invoice.created_at,
+    updated_at: invoice.updated_at,
+    submitted_at: invoice.submitted_at || "",
+    issued_at: invoice.issued_at || "",
+    synced_at: invoice.synced_at || "",
+  };
+}
+
+function taxProviderInvoice(invoice) {
+  return {
+    issueType: "정발행",
+    chargeDirection: "정과금",
+    purposeType: invoice.purpose_type,
+    taxType: "과세",
+    writeDate: invoice.write_date,
+    invoicerMgtKey: invoice.mgt_key,
+    invoicerCorpNum: invoice.supplier.corp_num,
+    invoicerCorpName: invoice.supplier.corp_name,
+    invoicerCEOName: invoice.supplier.ceo_name,
+    invoiceeType: "사업자",
+    invoiceeCorpNum: invoice.invoicee.corp_num,
+    invoiceeCorpName: invoice.invoicee.corp_name,
+    invoiceeCEOName: invoice.invoicee.ceo_name,
+    ...(invoice.invoicee.email ? { invoiceeEmail1: invoice.invoicee.email } : {}),
+    supplyCostTotal: String(invoice.totals.supply_cost_total),
+    taxTotal: String(invoice.totals.tax_total),
+    totalAmount: String(invoice.totals.total_amount),
+    detailList: invoice.items.map((item) => ({
+      serialNum: item.serial_num,
+      purchaseDT: invoice.write_date,
+      itemName: item.item_name,
+      qty: String(item.quantity),
+      unitCost: String(item.unit_price),
+      supplyCost: String(item.supply_cost),
+      tax: String(item.tax),
+    })),
+  };
+}
+
+function taxInvoiceForUser(data, invoiceId, userId) {
+  return data.invoices.find((item) => item.id === invoiceId && item.user_id === userId) || null;
+}
+
+function updateTaxInvoice(invoiceId, userId, mutate) {
+  const data = loadTaxInvoices();
+  const invoice = taxInvoiceForUser(data, invoiceId, userId);
+  if (!invoice) return null;
+  mutate(invoice);
+  invoice.updated_at = nowIso();
+  saveTaxInvoices(data);
+  return invoice;
+}
+
+function unknownTaxIssue(invoice, code, message) {
+  invoice.status = "unknown";
+  invoice.failure = {
+    code: code || "issue_unknown",
+    message: redactPopbillText(message || "발행 결과를 확인할 수 없습니다."),
+    at: nowIso(),
+  };
+  invoice.recovery_guidance = "자동 재시도하지 마세요. 상태 확인 버튼으로 같은 문서번호의 실제 상태를 조회해주세요.";
+}
+
+async function handleGetTaxSettings(req, res) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const data = loadTaxSettings();
+  json(req, res, 200, {
+    ok: true,
+    server_configured: true,
+    is_test: true,
+    settings: publicTaxSetting(taxSettingForUser(data, auth.user.id)),
+  });
+}
+
+async function handlePutTaxSettings(req, res) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const corpNum = String(body.corp_num || "").trim();
+  const corpName = compactText(body.corp_name, 200);
+  const ceoName = compactText(body.ceo_name, 100);
+  if (!/^\d{10}$/.test(corpNum) || !corpName || !ceoName) {
+    json(req, res, 400, { ok: false, error: "tax_settings_validation_failed" });
+    return;
+  }
+  const member = await runPopbillBridge({ method: "checkIsMember", corpNum, args: {}, isTest: true });
+  if (!member?.ok) {
+    json(req, res, 502, {
+      ok: false,
+      error: "member_check_failed",
+      provider_error: bridgeErrorCode(member, "member_check_failed"),
+    });
+    return;
+  }
+  if (!popbillMemberConnected(member.result)) {
+    // 구현 스펙은 3개 필드만 허용하지만 Popbill JoinForm은 주소·업태·종목·연락처·ID/PW도 필수다.
+    // 임의 정보 생성은 금지하고 CEO가 가입 입력 계약을 보완할 때까지 자동가입 분기만 보류한다.
+    json(req, res, 409, {
+      ok: false,
+      error: "member_join_fields_required",
+      member_connected: false,
+      required_fields: ["address", "business_type", "business_class", "contact_name", "contact_email", "contact_tel", "member_id", "member_password"],
+    });
+    return;
+  }
+  const data = loadTaxSettings();
+  const now = nowIso();
+  let setting = taxSettingForUser(data, auth.user.id);
+  if (setting) {
+    setting.corp_num = corpNum;
+    setting.corp_name = corpName;
+    setting.ceo_name = ceoName;
+    setting.member_connected = true;
+    setting.updated_at = now;
+  } else {
+    setting = {
+      user_id: auth.user.id,
+      corp_num: corpNum,
+      corp_name: corpName,
+      ceo_name: ceoName,
+      member_connected: true,
+      is_test: true,
+      created_at: now,
+      updated_at: now,
+    };
+    data.settings.push(setting);
+  }
+  saveTaxSettings(data);
+  json(req, res, 200, { ok: true, server_configured: true, is_test: true, settings: publicTaxSetting(setting) });
+}
+
+async function handleCreateTaxInvoice(req, res) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const settingsData = loadTaxSettings();
+  const setting = taxSettingForUser(settingsData, auth.user.id);
+  if (!setting?.member_connected) {
+    json(req, res, 409, { ok: false, error: "tax_settings_required" });
+    return;
+  }
+  const validated = validateTaxInvoiceBody(body);
+  if (validated.error) {
+    json(req, res, 400, { ok: false, error: validated.error, field: validated.field });
+    return;
+  }
+  const data = loadTaxInvoices();
+  const { mgtKey, sequence } = nextTaxManagementKey(data, auth.user.id, validated.write_date);
+  const now = nowIso();
+  const invoice = {
+    id: crypto.randomUUID(),
+    user_id: auth.user.id,
+    sequence,
+    mgt_key: mgtKey,
+    status: "draft",
+    supplier: {
+      corp_num: setting.corp_num,
+      corp_name: setting.corp_name,
+      ceo_name: setting.ceo_name,
+    },
+    invoicee: validated.invoicee,
+    items: validated.items,
+    write_date: validated.write_date,
+    purpose_type: validated.purpose_type,
+    totals: validated.totals,
+    created_at: now,
+    updated_at: now,
+  };
+  data.invoices.push(invoice);
+  saveTaxInvoices(data);
+  json(req, res, 201, { ok: true, invoice: publicTaxInvoice(invoice) });
+}
+
+function handleListTaxInvoices(req, res) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const data = loadTaxInvoices();
+  const invoices = data.invoices
+    .filter((item) => item.user_id === auth.user.id)
+    .sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+    .map(publicTaxInvoice);
+  json(req, res, 200, { ok: true, invoices });
+}
+
+function handleGetTaxInvoice(req, res, invoiceId) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const invoice = taxInvoiceForUser(loadTaxInvoices(), invoiceId, auth.user.id);
+  if (!invoice) {
+    json(req, res, 404, { ok: false, error: "invoice_not_found" });
+    return;
+  }
+  json(req, res, 200, { ok: true, invoice: publicTaxInvoice(invoice) });
+}
+
+async function handleTaxInvoicePreflight(req, res, invoiceId) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const invoice = taxInvoiceForUser(loadTaxInvoices(), invoiceId, auth.user.id);
+  if (!invoice) {
+    json(req, res, 404, { ok: false, error: "invoice_not_found" });
+    return;
+  }
+  if (invoice.status !== "draft") {
+    json(req, res, 409, { ok: false, error: "invoice_not_draft", invoice: publicTaxInvoice(invoice) });
+    return;
+  }
+  const corpNum = invoice.supplier.corp_num;
+  const [unitCost, balance, member] = await Promise.all([
+    runPopbillBridge({ method: "getUnitCost", corpNum, args: {}, isTest: true }),
+    runPopbillBridge({ method: "getBalance", corpNum, args: {}, isTest: true }),
+    runPopbillBridge({ method: "checkIsMember", corpNum, args: {}, isTest: true }),
+  ]);
+  if (!unitCost?.ok || !balance?.ok || !member?.ok) {
+    json(req, res, 502, {
+      ok: false,
+      error: "preflight_unavailable",
+      can_issue: false,
+      failures: {
+        unit_cost: unitCost?.ok ? "" : bridgeErrorCode(unitCost, "unit_cost_failed"),
+        balance: balance?.ok ? "" : bridgeErrorCode(balance, "balance_failed"),
+        membership: member?.ok ? "" : bridgeErrorCode(member, "member_check_failed"),
+      },
+    });
+    return;
+  }
+  if (!popbillMemberConnected(member.result)) {
+    json(req, res, 409, { ok: false, error: "tax_member_not_connected", can_issue: false });
+    return;
+  }
+  const unitCostValue = Number(unitCost.result);
+  const balanceValue = Number(balance.result);
+  if (!Number.isFinite(unitCostValue) || unitCostValue < 0 || !Number.isFinite(balanceValue) || balanceValue < 0) {
+    json(req, res, 502, { ok: false, error: "preflight_unavailable", can_issue: false });
+    return;
+  }
+  const preflight = {
+    unit_cost: unitCostValue,
+    balance: balanceValue,
+    member_connected: true,
+    can_issue: balanceValue >= unitCostValue,
+    checked_at: nowIso(),
+  };
+  const updated = updateTaxInvoice(invoice.id, auth.user.id, (current) => {
+    current.preflight = preflight;
+  });
+  json(req, res, 200, { ok: true, ...preflight, invoice: publicTaxInvoice(updated) });
+}
+
+function taxIssueFailureResponse(req, res, invoice, result, stage) {
+  const unknown = result?.outcome === "unknown" || ["bridge_timeout", "bridge_invalid_response", "bridge_unavailable", "bridge_write_failed"].includes(result?.error);
+  const code = bridgeErrorCode(result, unknown ? "issue_unknown" : `${stage}_failed`);
+  const updated = updateTaxInvoice(invoice.id, invoice.user_id, (current) => {
+    if (unknown) {
+      unknownTaxIssue(current, "issue_unknown", code);
+    } else {
+      current.status = "failed";
+      current.failure = { code, message: redactPopbillText(result?.message || result?.detail || code), stage, at: nowIso() };
+      current.recovery_guidance = "자동 재시도하지 마세요. 오류 보고에 문서번호와 실패 단계를 함께 전달해주세요.";
+    }
+  });
+  json(req, res, unknown ? 502 : 422, {
+    ok: false,
+    error: unknown ? "issue_unknown" : code,
+    invoice: publicTaxInvoice(updated),
+  });
+}
+
+async function handleIssueTaxInvoice(req, res, invoiceId) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  if (body.confirm_paid !== true) {
+    json(req, res, 402, { ok: false, error: "tax_paid_confirmation_required" });
+    return;
+  }
+  const settings = loadTaxSettings();
+  const setting = taxSettingForUser(settings, auth.user.id);
+  const data = loadTaxInvoices();
+  const invoice = taxInvoiceForUser(data, invoiceId, auth.user.id);
+  if (!invoice) {
+    json(req, res, 404, { ok: false, error: "invoice_not_found" });
+    return;
+  }
+  if (invoice.status !== "draft") {
+    json(req, res, 409, { ok: false, error: "invoice_not_draft", invoice: publicTaxInvoice(invoice) });
+    return;
+  }
+  if (!invoice.preflight?.can_issue || !invoice.preflight?.checked_at) {
+    json(req, res, 409, { ok: false, error: "invoice_preflight_required", invoice: publicTaxInvoice(invoice) });
+    return;
+  }
+  if (!setting?.member_connected || setting.corp_num !== invoice.supplier.corp_num) {
+    json(req, res, 409, { ok: false, error: "invoice_supplier_setting_mismatch" });
+    return;
+  }
+  const corpBusy = data.invoices.some((item) => item.id !== invoice.id
+    && item.supplier?.corp_num === invoice.supplier.corp_num
+    && item.status === "submitting");
+  if (corpBusy) {
+    json(req, res, 409, { ok: false, error: "corp_invoice_submission_in_progress" });
+    return;
+  }
+  invoice.status = "submitting";
+  invoice.submitted_at = nowIso();
+  invoice.updated_at = invoice.submitted_at;
+  invoice.failure = null;
+  invoice.recovery_guidance = "";
+  saveTaxInvoices(data);
+
+  const registered = await runPopbillBridge({
+    method: "registInvoice",
+    corpNum: invoice.supplier.corp_num,
+    args: { invoice: taxProviderInvoice(invoice) },
+    isTest: true,
+  });
+  if (!registered?.ok) {
+    taxIssueFailureResponse(req, res, invoice, registered, "register");
+    return;
+  }
+  updateTaxInvoice(invoice.id, auth.user.id, (current) => {
+    current.provider = {
+      ...(current.provider || {}),
+      registration: popbillResultSummary(registered.result),
+    };
+  });
+  const issued = await runPopbillBridge({
+    method: "issueInvoice",
+    corpNum: invoice.supplier.corp_num,
+    args: { mgtKey: invoice.mgt_key, memo: "AIMAX 세무 직원 테스트베드 발행" },
+    isTest: true,
+  });
+  if (!issued?.ok) {
+    taxIssueFailureResponse(req, res, invoice, issued, "issue");
+    return;
+  }
+  const updated = updateTaxInvoice(invoice.id, auth.user.id, (current) => {
+    current.status = "issued";
+    current.issued_at = nowIso();
+    current.provider = {
+      registration: popbillResultSummary(registered.result),
+      issue: popbillResultSummary(issued.result),
+    };
+    current.failure = null;
+    current.recovery_guidance = "";
+  });
+  json(req, res, 200, { ok: true, invoice: publicTaxInvoice(updated) });
+}
+
+async function handleSyncTaxInvoice(req, res, invoiceId) {
+  const auth = requireTaxAccess(req, res);
+  if (!auth) return;
+  const invoice = taxInvoiceForUser(loadTaxInvoices(), invoiceId, auth.user.id);
+  if (!invoice) {
+    json(req, res, 404, { ok: false, error: "invoice_not_found" });
+    return;
+  }
+  if (!["submitting", "unknown"].includes(invoice.status)) {
+    json(req, res, 409, { ok: false, error: "invoice_sync_not_allowed", invoice: publicTaxInvoice(invoice) });
+    return;
+  }
+  const info = await runPopbillBridge({
+    method: "getInfo",
+    corpNum: invoice.supplier.corp_num,
+    args: { mgtKey: invoice.mgt_key },
+    isTest: true,
+  });
+  if (!info?.ok) {
+    const updated = updateTaxInvoice(invoice.id, auth.user.id, (current) => {
+      unknownTaxIssue(current, "issue_unknown", bridgeErrorCode(info, "sync_failed"));
+      current.synced_at = nowIso();
+    });
+    json(req, res, 502, { ok: false, error: "sync_failed", invoice: publicTaxInvoice(updated) });
+    return;
+  }
+  const stateCode = Number(info.result?.stateCode || 0);
+  const updated = updateTaxInvoice(invoice.id, auth.user.id, (current) => {
+    current.synced_at = nowIso();
+    current.provider = { ...(current.provider || {}), info: popbillResultSummary(info.result) };
+    if (stateCode >= 300 && stateCode <= 305) {
+      current.status = "issued";
+      current.issued_at = current.issued_at || nowIso();
+      current.failure = null;
+      current.recovery_guidance = "";
+    } else if (stateCode === 100) {
+      current.status = "failed";
+      current.failure = {
+        code: "invoice_registered_not_issued",
+        message: "팝빌에는 임시저장 상태로 확인되며 발행 완료 상태가 아닙니다.",
+        stage: "sync",
+        at: nowIso(),
+      };
+      current.recovery_guidance = "자동 재발행하지 마세요. 오류 보고로 문서번호를 전달해 운영자 확인을 요청해주세요.";
+    } else {
+      unknownTaxIssue(current, "issue_unknown", `provider_state_${stateCode || "unknown"}`);
+    }
+  });
+  json(req, res, 200, { ok: true, invoice: publicTaxInvoice(updated) });
+}
+
+function runTaxEndpoint(req, res, handler) {
+  Promise.resolve().then(handler).catch((error) => {
+    if (res.headersSent) return;
+    if (isJsonStorageError(error)) {
+      json(req, res, 503, { ok: false, error: "storage_unavailable", code: error.code || "json_storage_error" });
+      return;
+    }
+    console.error("tax_request_error", String(error?.code || error?.message || "internal_error").slice(0, 120));
+    json(req, res, 500, { ok: false, error: String(error?.code || "tax_internal_error") });
+  });
+}
+
 function findValidSetupToken(token) {
   const tokenHash = hashToken(token);
   const setupTokens = loadSetupTokens();
@@ -16906,6 +17662,47 @@ function route(req, res) {
     handleDeleteUserSecret(req, res, decodeURIComponent(url.pathname.slice("/api/user/secrets/".length)));
     return;
   }
+  if (url.pathname.startsWith("/api/tax/") && !taxServerConfigured()) {
+    json(req, res, 503, { ok: false, error: "tax_not_configured" });
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/tax/settings") {
+    runTaxEndpoint(req, res, () => handleGetTaxSettings(req, res));
+    return;
+  }
+  if (req.method === "PUT" && url.pathname === "/api/tax/settings") {
+    runTaxEndpoint(req, res, () => handlePutTaxSettings(req, res));
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/tax/invoices") {
+    runTaxEndpoint(req, res, () => handleListTaxInvoices(req, res));
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/tax/invoices") {
+    runTaxEndpoint(req, res, () => handleCreateTaxInvoice(req, res));
+    return;
+  }
+  const taxInvoiceRoute = /^\/api\/tax\/invoices\/([^/]+)(?:\/(preflight|issue|sync))?$/.exec(url.pathname);
+  if (taxInvoiceRoute) {
+    const invoiceId = decodeURIComponent(taxInvoiceRoute[1]);
+    const action = taxInvoiceRoute[2] || "";
+    if (req.method === "GET" && !action) {
+      runTaxEndpoint(req, res, () => handleGetTaxInvoice(req, res, invoiceId));
+      return;
+    }
+    if (req.method === "POST" && action === "preflight") {
+      runTaxEndpoint(req, res, () => handleTaxInvoicePreflight(req, res, invoiceId));
+      return;
+    }
+    if (req.method === "POST" && action === "issue") {
+      runTaxEndpoint(req, res, () => handleIssueTaxInvoice(req, res, invoiceId));
+      return;
+    }
+    if (req.method === "POST" && action === "sync") {
+      runTaxEndpoint(req, res, () => handleSyncTaxInvoice(req, res, invoiceId));
+      return;
+    }
+  }
   if (req.method === "GET" && url.pathname === "/api/research/projects") {
     handleListResearchProjects(req, res);
     return;
@@ -17287,6 +18084,10 @@ module.exports = {
     publicJobKind,
     publicWorker,
     workerCatalogContractIssues,
+  },
+  __taxTest: {
+    ensureDirs,
+    route,
   },
   __cafe24Test: {
     adminCafe24OrderRow,
