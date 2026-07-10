@@ -79,3 +79,11 @@
 - Mark durable decisions with `#decision` and reusable insights with `#insight`; keep one-off logs in the session file and only promote stable decisions/insights to project memory.
 - On the next broad AIMAX project session, read the project memory file and the latest 1-2 relevant session logs before making assumptions.
 - Never save secrets, tokens, passwords, `.env` contents, browser profiles, signed URLs, paid-provider credentials, cookies, or raw private auth traces in session memory or shared summaries.
+
+## Backlog: 예리(블로그 직원) 블로그 리서치 통합 (2026-07-10)
+- 예리에게 사용자 본인 블로그 원문 수집·문체 반영 기능을 넣는 작업이 대기 중이다. 스펙: `claudedocs/yeri-naver-blog-research-integration-2026-07-10.md`.
+- 이 프로젝트에서 블로그 직원/예리 작업이 시작되면 이 스펙을 먼저 제안하고, Employee Launch Checklist(web-first 판단 포함)를 함께 적용한다.
+
+## Backlog: 세무 직원(세금계산서 발행) 추가 (2026-07-10)
+- 팝빌 기반 세금계산서 발행 AI 직원 추가가 대기 중이다. 스펙: `claudedocs/tax-employee-popbill-integration-2026-07-10.md`. 첫 사용자는 윤대표.
+- "세무 직원", "세금계산서 직원" 언급 시 이 스펙을 먼저 제안한다.
