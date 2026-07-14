@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026-07-15 심야 라운드 — 팝빌 · 맥스 진단 · 잔여 종결</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f26; --panel2: #22262e;
+    --text: #d8dce3; --dim: #8b93a1; --line: #2e333d;
+    --accent: #7aa2f7; --ok: #9ece6a; --warn: #e0af68; --bad: #f7768e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px 80px; background: var(--bg); color: var(--text);
+    font-family: "Apple SD Gothic Neo", Pretendard, -apple-system, sans-serif;
+    font-size: 15px; line-height: 1.75; word-break: keep-all;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 22px; line-height: 1.4; margin: 0 0 6px; color: #fff; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 28px; }
+  h2 { font-size: 17px; color: var(--accent); margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h3 { font-size: 15px; color: #fff; margin: 20px 0 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin: 14px 0; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin: 18px 0 6px; }
+  .meta { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .meta .k { font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+  .meta .v { font-size: 14px; font-weight: 700; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  ul { margin: 8px 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 600; font-size: 12.5px; }
+  code { background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: 12.5px; font-family: "SF Mono", Menlo, monospace; }
+  .flow { background: var(--panel2); border-left: 3px solid var(--warn); border-radius: 6px; padding: 12px 16px; margin: 10px 0; font-size: 14px; }
+  .tag { display: inline-block; font-size: 11.5px; font-weight: 700; border-radius: 20px; padding: 1px 10px; margin-right: 6px; vertical-align: 1px; }
+  .tag.done { background: rgba(158,206,106,.15); color: var(--ok); }
+  .tag.wait { background: rgba(224,175,104,.15); color: var(--warn); }
+  .tag.alert { background: rgba(247,118,142,.15); color: var(--bad); }
+  .overflow { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>심야 라운드 결과 — 팝빌 키 · 맥스 폭주 진단 · 잔여 종결</h1>
+  <div class="sub">2026-07-15 01시경 · AIMAX AI Staff Management</div>
+
+  <div class="meta-grid">
+    <div class="meta"><div class="k">팝빌 API 키</div><div class="v warn">미도착 — 발급 대기</div></div>
+    <div class="meta"><div class="k">맥스 폭주 원인</div><div class="v ok">확정 (브리지+사이렌 설계)</div></div>
+    <div class="meta"><div class="k">잔여 작업 4건</div><div class="v ok">전부 종결</div></div>
+    <div class="meta"><div class="k">결정 대기</div><div class="v warn">맥스 수정 A+B 승인</div></div>
+  </div>
+
+  <h2>1. 팝빌 API 키 — 메일은 다 확인했고, 키가 아직 안 왔습니다</h2>
+  <div class="card">
+    <table>
+      <tr><th>날짜</th><th>메일</th><th>내용</th></tr>
+      <tr><td>7/11 (금)</td><td>팝빌 연동신청 완료</td><td>"API Key는 신청 메일로 전달 예정"</td></tr>
+      <tr><td>7/13 (월)</td><td>이혜윤 매니저 답변</td><td>견적서 PDF 첨부 (아래 요약)</td></tr>
+      <tr><td>7/14 (화) 14:13</td><td>연동신청 완료 (재신청)</td><td>동일 안내</td></tr>
+      <tr><td>—</td><td class="bad">API Key 발급 메일</td><td class="bad">미도착 (스팸 포함 전체 검색 확인)</td></tr>
+    </table>
+    <h3>견적서 요약 (부가세 별도)</h3>
+    <ul>
+      <li>연동비용 무료 · <b>전자세금계산서 발행 100원/건</b> (월 1천건 이상 시 할인) — 세무 직원 MVP 원가 부담 미미</li>
+      <li>사업자등록상태조회 10원/건 · 예금주 성명/실명조회 50/60원/건</li>
+      <li>정액제(현금영수증 5만/월, 홈택스수집 15만/월, 계좌조회 10만/월)는 안 쓰면 과금 없음</li>
+    </ul>
+    <h3>제안</h3>
+    <ul>
+      <li>첫 신청(7/11) 후 4일째 미도착 — <b>오늘 오전까지 안 오면</b> 이혜윤 매니저(hyeyoon@linkhubcorp.com · 010-4334-1503) 또는 고객센터 1600-8536 확인</li>
+      <li>키 도착 시: "키 전달" 프로토콜로 서버 env 등록 → 테스트베드 e2e → 배포 게이트</li>
+    </ul>
+  </div>
+
+  <h2>2. 맥스 알림 폭주 — 원인 확정</h2>
+  <div class="card">
+    <div class="flow">
+      매일 08:00 노션 브리지가 <b>미완료 태스크 최대 12건</b>을 오늘 날짜 + 30분 간격 인공 기한(09:00~14:30)으로 주입
+      → 낮에 앱을 켜면 기한 지난 항목들이 <b>연쇄 전면 사이렌</b>(700ms마다 전 모니터 포커스 강탈, 하나 끄면 다음이 즉시 발화)
+      → 노션에서 완료 안 된 태스크는 <b>다음날 또 주입</b> = "이전 게 안 지워지고 계속 울린다"
+    </div>
+    <h3>실데이터 시뮬레이션 (7/14, 13건 전부 미확인 상태였음)</h3>
+    <table>
+      <tr><th>실행 시각</th><th>즉시 연쇄 발화 대기</th></tr>
+      <tr><td>09:30</td><td>2건</td></tr>
+      <tr><td>11:00</td><td>5건</td></tr>
+      <tr><td>14:00</td><td class="bad">11건 + 이후 30분마다 추가</td></tr>
+    </table>
+    <ul>
+      <li>7/13은 24건이 주입된 최악의 날. 누적 75건 중 미완료 59건</li>
+      <li>데이터 파일이 그날 브리지 기록(08:04) 이후 한 번도 저장 안 됨 = <b>완료/미루기 클릭이 하나도 반영 안 됐음</b> — 포커스 강탈이 클릭을 씹었을 가능성, 결국 강제 종료</li>
+      <li>사이렌엔 "전체 끄기"가 없음 (설계상 완료/미루기만 허용)</li>
+    </ul>
+    <h3>수정 제안 — A+B만으로 "켜면 난리" 해소</h3>
+    <table>
+      <tr><th></th><th>내용</th><th>상태</th></tr>
+      <tr><td><b>A. 데이터</b></td><td>과거 미완료 46건 알람 마킹 해제(ackDue), 백업+멱등 스크립트</td><td><span class="tag wait">준비 완료 — 승인 시 실행</span></td></tr>
+      <tr><td><b>B. 브리지</b></td><td>[태스크]는 기한 없이 포스트잇 표시만(사이렌 제외), 사이렌은 실제 시간 있는 [일정]만 + 과거 미완료 자동 정리</td><td><span class="tag wait">승인 시 sync.mjs 패치</span></td></tr>
+      <tr><td><b>C. 앱</b></td><td>"오늘 그만 울리기" 버튼 · 연쇄 상한 · 포커스 강탈 완화(클릭 씹힘)</td><td><span class="tag wait">별도 라운드 (리빌드 필요)</span></td></tr>
+    </table>
+  </div>
+
+  <h2>3. 잔여 작업 — 전부 종결</h2>
+  <div class="card">
+    <ul>
+      <li><span class="tag done">종결</span><b>예리 v1.0.59</b> — 어젯밤 배포 완료 확인 + AIXLIFE 러너 원격 재기동(대화형 스케줄드 태스크), 하트비트 v1.0.59 실수신 검증</li>
+      <li><span class="tag done">종결</span><b>628 보고 교정</b> — 스크립트 실행, 교정 메일 실발송 확인(00:38, email)</li>
+      <li><span class="tag done">종결</span><b>은서 zip</b> — aimax-backups/eunseo-retired-20260715/ 이동, 공개 URL 404 확인</li>
+      <li><span class="tag done">종결</span><b>리포 정리</b> — 문서·스크립트 21파일 커밋 + 대용량/시크릿 로컬 디렉토리 gitignore, origin/main push, 워킹트리 클린</li>
+    </ul>
+  </div>
+
+  <h2>결정 필요 (Yes/No)</h2>
+  <div class="card">
+    <ul>
+      <li><b>맥스 A+B 적용</b> — 데이터 정리 스크립트 실행 + 브리지 패치 (둘 다 백업·복구 가능)</li>
+      <li><b>팝빌</b> — 오전까지 키 미도착 시 문의 회신 초안 작성해둘까요?</li>
+    </ul>
+  </div>
+</main>
+</body>
+</html>
