@@ -55,3 +55,16 @@ node_modules/
 docs/deployments/
 docs/testing/evidence/**/*.png
 handoff*/**/*.zip
+
+# Local-only working artifacts (secrets, large binaries, session dumps) — 2026-07-15 정리
+.lazyweb/
+council-runs/
+songi-local-runs/
+sites/
+tools/
+handoff/
+handoffs/
+docs/windows_handoffs/
+docs/handoffs/**/*.zip
+docs/handoffs/**/source-bundle/
+AIMAX 오류.txt
