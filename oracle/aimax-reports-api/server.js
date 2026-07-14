@@ -578,7 +578,7 @@ const WORKERS = {
     profileImage: "/assets/avatar_eunseo.jpg",
     avatarImage: "/assets/avatar_eunseo.jpg",
     shortDescription: "모바일에서는 카메라 근처 대본을 띄우고, PC에서는 화면녹화용 프롬프터로 출근하는 다중 실행형 직원입니다.",
-    capabilities: ["웹 프롬프터", "Mac 앱", "모바일 촬영", "Toss 미니앱 준비"],
+    capabilities: ["웹 프롬프터", "모바일 촬영", "Toss 미니앱 준비"],
     executionOptions: [
       {
         kind: "web_app",
@@ -588,24 +588,6 @@ const WORKERS = {
         url: "/eunseo",
         primary: true,
         description: "브라우저에서 바로 여는 모바일/PC 공용 프롬프터입니다.",
-      },
-      {
-        kind: "mac_download",
-        label: "Mac 앱 다운로드",
-        platforms: ["macos"],
-        status: "available",
-        url: "/api/downloads/agent?platform=macos&product=eunseo",
-        primary: false,
-        description: "Mac 화면녹화용 로컬 앱입니다. 숨김 여부는 녹화 프로그램별로 실측 확인이 필요합니다.",
-      },
-      {
-        kind: "windows_download",
-        label: "Windows 앱",
-        platforms: ["windows"],
-        status: "coming_soon",
-        url: "",
-        primary: false,
-        description: "Windows 화면녹화용 앱은 준비 중입니다.",
       },
       {
         kind: "android_apk",
@@ -672,7 +654,6 @@ const DOWNLOAD_CATALOG = {
     bundle: { filename: "aimax-bundle-macos.dmg", label: "AIMAX 통합 macOS 설치 파일" },
     yeri: { filename: "aimax-yeri-macos.dmg", label: "AIMAX 예리 macOS 설치 파일" },
     hyunju: { filename: "aimax-hyunju-macos.dmg", label: "AIMAX 현주 macOS 설치 파일" },
-    eunseo: { filename: "EunseoPrompter-mac-0.1.0.zip", label: "은서 Mac 프롬프터 앱" },
   },
   windows: {
     bundle: { filename: "aimax-bundle-windows.exe", label: "AIMAX 통합 Windows 설치 파일" },
@@ -3672,7 +3653,7 @@ function adminProductCatalog() {
       price_won: 0,
       products: productList("eunseo"),
       job_kinds: [],
-      download_product: "eunseo",
+      download_product: "",
       access_policy: "makefamily_member",
       member_only: true,
     },
@@ -8391,12 +8372,26 @@ function isYunmiJobKind(kind) {
   return kind === "yunmi_script";
 }
 
+// 세무 직원 게이트: bundle 확장(userProducts)이 아니라 직접 부여된 semu 엔타이틀먼트만 인정.
+// 배포 게이트(이름·프로필 확정 + 팝빌 키) 통과 전까지 테스트 계정 외 노출 금지.
+function hasDirectSemuEntitlement(user) {
+  if (!user) return false;
+  const products = user.entitlements?.products || [];
+  return products.includes("semu") || user.entitlements?.product === "semu";
+}
+
 function workerVisibleToUser(worker, user) {
   if (worker?.accessPolicy === "public") return true;
+  if (worker?.staffCode === "semu") {
+    return hasDirectSemuEntitlement(user);
+  }
   return true;
 }
 
 function jobKindVisibleToUser(kind, user) {
+  if (kind === "semu_tax_invoice") {
+    return hasDirectSemuEntitlement(user);
+  }
   return true;
 }
 
@@ -13888,7 +13883,8 @@ function requireTaxAccess(req, res) {
   }
   const auth = requireSession(req, res);
   if (!auth) return null;
-  if (!canAccessWorker(WORKERS.semu_tax_accountant, auth.user)) {
+  // bundle 확장이 아닌 직접 semu 엔타이틀먼트 필수 — 배포 게이트 전 테스트베드 온리
+  if (!hasDirectSemuEntitlement(auth.user) || !canAccessWorker(WORKERS.semu_tax_accountant, auth.user)) {
     json(req, res, 403, { ok: false, error: "tax_not_allowed" });
     return null;
   }

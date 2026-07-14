@@ -14,11 +14,10 @@ DRY_RUN=0
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/deploy_oracle.sh [web|eunseo-mac|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all] [--dry-run]
+  scripts/deploy_oracle.sh [web|external-staff|macos-bundle|windows-bundle|bundle-installers|installers|all] [--dry-run]
 
 Modes:
   web                Deploy server.js and static web/admin HTML
-  eunseo-mac         Deploy Eunseo Mac prompter zip only
   external-staff     Deploy external staff download files only
   macos-bundle       Deploy the unified macOS bundle installer only
   windows-bundle     Deploy the unified Windows bundle installer only
@@ -37,7 +36,7 @@ USAGE
 
 for arg in "$@"; do
   case "$arg" in
-    web|eunseo-mac|external-staff|maxalert|macos-bundle|windows-bundle|bundle-installers|installers|all)
+    web|external-staff|maxalert|macos-bundle|windows-bundle|bundle-installers|installers|all)
       MODE="$arg"
       ;;
     --dry-run)
@@ -215,10 +214,6 @@ fi
 
 if [[ "$MODE" == "windows-bundle" || "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
   add_file "$ROOT_DIR/dist/upload_installers/aimax-bundle-windows.exe" "$REMOTE_DOWNLOAD_DIR/aimax-bundle-windows.exe" "Windows bundle"
-fi
-
-if [[ "$MODE" == "eunseo-mac" || "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
-  add_file "$ROOT_DIR/dist/upload_installers/EunseoPrompter-mac-0.1.0.zip" "$REMOTE_DOWNLOAD_DIR/EunseoPrompter-mac-0.1.0.zip" "Eunseo Mac zip"
 fi
 
 if [[ "$MODE" == "external-staff" || "$MODE" == "all" ]]; then
