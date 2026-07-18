@@ -50,9 +50,18 @@
 
 참고: SSH 세션에서는 GUI 재실행이 안 돼(RunAsUser가 데스크톱 세션 필요) 콘솔 세션 스케줄드 태스크로 검증 — 실플릿에서는 사용자 데스크톱 세션에서 설치되므로 해당 없음.
 
-## 산출물
-- 윈도우: `~/Projects/maxalert/dist/v0.2.2/MaxAlert-Setup-0.2.2.exe` (sha256 af6528c1…) + latest.yml + SHA256SUMS
-- 맥: `~/Projects/maxalert/dist/v0.2.2/MaxAlert_0.2.2_aarch64.dmg` (sha256 8273b185…) — DMG 꾸밈 AppleScript가 TCC 거부돼 hdiutil 직접 생성(기능 동일, 창 배경 꾸밈만 없음, KB 등재)
+## 실기 버그 라운드 (같은 날 저녁 — 민수 보고 2건 → 원인 규명·수정·회귀 완료)
+민수 실기 보고: (1) "캐릭터가 안 보인다, 프로필에도" (2) "새 할 일 추가 버튼 무반응".
+
+- **진단 방법**: 실기기(AIXLIFE)를 WebView2 원격 디버깅(CDP)으로 직접 열어 실픽셀·invoke 생존 프로브 — 캐릭터 에셋·렌더는 정상인데 **invoke 파이프라인 전체가 사망**한 상태를 발견, 100% 재현 확보.
+- **근본 원인**: Tauri v2 동기 커맨드는 WebView2 IPC 콜백 안에서 메인스레드 인라인 실행 → 그 안에서 창을 만들거나 부수면(할일 완료→**보상 캐릭터 팝업**, 사이렌 완료 버튼, 위젯→대시보드 열기, 보상 닫기) WebView2 재진입 제한으로 메인스레드 데드락. 이후 모든 invoke 무반응 → 프로필·캐릭터 미표시, 추가 버튼 무시로 관측된 것. 민수는 할일 완료(보상 팝업 트리거)를 눌렀던 것이 확인됨(대시보드 완료 기록). 맥(WKWebView)은 재진입 허용이라 미발현.
+- **수정**: `defer_main()` — 창 생성/파괴 디스패치 7개 지점을 전부 이벤트 루프 큐 강제 경유로 교체 (커밋 e852bdb). 실사이렌(틱 스레드)·맥 동작 불변, 경합은 기존 generation 가드가 처리.
+- **회귀 (실기기, 수정 빌드)**: invoke 프로브 생존 → 진짜 todo 추가(추가 버튼 경로) → 틱 자연 발화 사이렌 1창(sound=1, stage=chick) → **chick.webm 재생 확인(readyState 4, 재생 중, 에러 0) + 실픽셀 스크린샷으로 병아리 경찰 캐릭터 확인** → 발화 중·삭제 후에도 invoke 생존 → 사이렌 정상 종료. 전 항목 PASS.
+- KB 등재: `maxalert/webview2-ipc-reentrancy-deadlock.md` (CDP 프로브 진단법 포함).
+
+## 산출물 (수정 빌드 e852bdb 기준으로 갱신)
+- 윈도우: `~/Projects/maxalert/dist/v0.2.2/MaxAlert-Setup-0.2.2.exe` (sha256 216f251f…) + latest.yml + SHA256SUMS
+- 맥: `~/Projects/maxalert/dist/v0.2.2/MaxAlert_0.2.2_aarch64.dmg` — 동일 커밋(e852bdb) 리빌드, DMG 꾸밈 AppleScript가 TCC 거부돼 hdiutil 직접 생성(기능 동일, 창 배경 꾸밈만 없음, KB 등재)
 - 파트너 안내문 초안: `claudedocs/maxalert-partner-tauri-transition-notice-20260718.html` (복사 버튼 포함, 발송은 릴리스 직전 권장)
 
 ## CEO 게이트 (전부 비가역 — 승인 필요)
