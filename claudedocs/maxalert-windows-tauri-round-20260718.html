@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>맥스 윈도우 Tauri 전환 라운드 — 2026-07-18</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0f1115; color: #e6e8ec;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+    line-height: 1.75; word-break: keep-all; padding: 48px 24px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 800; color: #f5f6f8; letter-spacing: -0.3px; }
+  .date { font-size: 13px; color: #8b93a1; margin: 6px 0 26px; }
+  .hero {
+    background: linear-gradient(135deg, #1c2433, #161b26);
+    border: 1px solid #2c3a52; border-radius: 14px; padding: 24px 28px; margin-bottom: 36px;
+    font-size: 15.5px;
+  }
+  .hero strong { color: #7ee787; }
+  h2 {
+    font-size: 16px; font-weight: 700; color: #ffd866; margin: 40px 0 14px;
+    padding-bottom: 8px; border-bottom: 1px solid #262b36;
+  }
+  h3 { font-size: 14.5px; font-weight: 700; color: #d7dbe2; margin: 20px 0 8px; }
+  p, li { font-size: 14.5px; color: #c3c9d4; }
+  ul { padding-left: 20px; margin: 8px 0 16px; }
+  li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13.5px; }
+  th { text-align: left; color: #8b93a1; font-weight: 600; padding: 8px 10px; border-bottom: 1px solid #2a3040; }
+  td { padding: 8px 10px; border-bottom: 1px solid #1d222e; color: #c3c9d4; }
+  .pass { color: #7ee787; font-weight: 700; }
+  code {
+    background: #1a1f2a; border: 1px solid #262b36; border-radius: 5px;
+    padding: 1px 6px; font-size: 12.5px; color: #9ecbff;
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 16px 0; }
+  .card { background: #171a21; border: 1px solid #262b36; border-radius: 12px; padding: 18px 20px; }
+  .card .k { font-size: 12.5px; color: #8b93a1; margin-bottom: 6px; }
+  .card .v { font-size: 15px; font-weight: 700; color: #f0f2f5; }
+  .warn { background: #241b12; border: 1px solid #4a3418; border-radius: 12px; padding: 16px 20px; margin: 14px 0; }
+  .warn p { color: #e8c98a; font-size: 13.5px; }
+  .gate { background: #131a2a; border: 1px solid #24406e; border-radius: 12px; padding: 18px 22px; margin: 14px 0; }
+  .gate li { color: #b9cdf0; }
+  .muted { color: #8b93a1; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>맥스 윈도우 Tauri 전환 라운드</h1>
+  <div class="date">2026-07-18 · mac/tauri 71f0e7e · 소스: makefriendscoltd-design/maxalert</div>
+
+  <div class="hero">
+    윈도우 Electron→Tauri 전환을 <strong>전부 구현</strong>하고, 실제 플릿과 동일한 조건(Electron 0.1.17 + 포인트·스트릭 데이터 + 자동시작)을 재현한 AIXLIFE에서 <strong>전환 설치 체인·데이터 마이그레이션·사일런트 자동업데이트까지 전 항목 실측 PASS</strong>. 설치기는 96MB → 16.5MB. 남은 것은 민수 시각 실기와 릴리스 게시(CEO 게이트).
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="k">설치기 크기</div><div class="v">96MB → 16.5MB</div></div>
+    <div class="card"><div class="k">AIXLIFE 실측</div><div class="v">10항목 전부 PASS</div></div>
+    <div class="card"><div class="k">빌드</div><div class="v">GH Actions 7분 20초</div></div>
+    <div class="card"><div class="k">cargo test</div><div class="v">18/18 PASS</div></div>
+  </div>
+
+  <h2>선결 확인 3건 — 전부 실측으로 답</h2>
+  <h3>1. Tauri NSIS의 Electron 대체 — 된다</h3>
+  <ul>
+    <li>배포된 v0.1.17의 electron-updater는 latest.yml sha512 검증 후 새 설치기를 <code>--updated /S --force-run</code>으로 실행 (소스 실독). 배포본 <code>app-update.yml</code>에 publisherName 없음 → 무서명 Tauri NSIS 수용 (AIXLIFE 실물 확인).</li>
+    <li>신규 <code>installer-hooks.nsh</code>: PREINSTALL은 앱 종료만, Electron 제거·잔재 정리·바로가기 복원·재실행은 새 파일 설치 성공 후(POSTINSTALL) — 설치 중간 실패 시 구버전 생존.</li>
+  </ul>
+  <h3>2. 데이터 마이그레이션 — 기존 구현 + 원자화 보강</h3>
+  <ul>
+    <li>Store::load가 첫 실행에 <code>%APPDATA%\maxalert</code> → <code>com.makefriends.maxalert</code> 복사 (v0.2.1 때 구현). 이번에 파싱 검증 + tmp→rename 원자화, 저장도 원자화.</li>
+  </ul>
+  <h3>3. 빌드 경로 — GH Actions 채택</h3>
+  <ul>
+    <li>리포 PUBLIC(무료)+WRITE, AIXLIFE엔 Rust 없음. push마다 NSIS+latest.yml+SHA256 아티팩트, 릴리스 게시는 수동(사람 결정). 파트너도 Rust 설치 없이 기존 릴리스 흐름 유지.</li>
+  </ul>
+
+  <h2>Codex Sol 반박 리뷰 13건 판정</h2>
+  <ul>
+    <li><strong>실측 기각 1</strong>: 서명 검증 차단설 — publisherName 부재 실확인.</li>
+    <li><strong>수용 9</strong>: 설치 순서 재설계(제거를 설치 성공 뒤로)·spawn 후 자진 종료 제거·사이렌 발화 중 연기·저장/마이그레이션 원자화·native roots+시스템 프록시·RunAsUser 재실행 등 전부 반영.</li>
+    <li><strong>부분 수용 2</strong>: URL https/루프백 제한, 랜덤 임시파일+create_new.</li>
+    <li><strong>기각 2</strong>: WebView2 offlineInstaller(설치기 150MB 비대), legacy 파일 rename(전환 실패 시 롤백 데이터 보존 우선).</li>
+  </ul>
+
+  <h2>AIXLIFE 실측 결과</h2>
+  <table>
+    <tr><th>항목</th><th>결과</th></tr>
+    <tr><td>전환 설치 (electron-updater 동일 인자)</td><td class="pass">PASS (exit 0)</td></tr>
+    <tr><td>Electron 제거 (GUID 키·설치 디렉토리)</td><td class="pass">PASS — 완전 삭제</td></tr>
+    <tr><td>Tauri 0.2.2 설치 + 레지스트리</td><td class="pass">PASS</td></tr>
+    <tr><td>Electron 자동시작 Run 값 삭제</td><td class="pass">PASS</td></tr>
+    <tr><td>데이터 마이그레이션 (777포인트·스트릭7)</td><td class="pass">PASS — 전부 보존</td></tr>
+    <tr><td>Tauri 자동시작 재적용 (openAtLogin 승계)</td><td class="pass">PASS</td></tr>
+    <tr><td>바로가기 복원 (바탕화면·시작메뉴)</td><td class="pass">PASS</td></tr>
+    <tr><td>앱 기동 (콘솔 세션)</td><td class="pass">PASS</td></tr>
+    <tr><td>사일런트 자동업데이트 e2e (가짜 0.2.3)</td><td class="pass">PASS — 다운로드·해시검증·설치·재실행 실관측</td></tr>
+    <tr><td>최종 클린 상태 (테스트 잔재 제거·앱 상주)</td><td class="pass">PASS</td></tr>
+  </table>
+  <p class="muted">SSH 세션은 GUI 실행 불가라 콘솔 세션 스케줄드 태스크로 검증 — 실플릿은 사용자 데스크톱 세션이라 해당 없음.</p>
+
+  <h2>산출물</h2>
+  <ul>
+    <li>윈도우: <code>~/Projects/maxalert/dist/v0.2.2/MaxAlert-Setup-0.2.2.exe</code> + latest.yml + SHA256SUMS</li>
+    <li>맥: <code>MaxAlert_0.2.2_aarch64.dmg</code> — DMG 꾸밈 AppleScript가 TCC 거부돼 hdiutil 직접 생성 (기능 동일·꾸밈만 없음, KB 등재)</li>
+    <li>파트너 안내문 초안 (복사 버튼): <code>claudedocs/maxalert-partner-tauri-transition-notice-20260718.html</code></li>
+  </ul>
+
+  <h2>CEO 게이트 — 전부 승인 필요 (비가역)</h2>
+  <div class="gate">
+    <ul>
+      <li>1. 민수 실기(AIXLIFE): 위젯·대시보드·사이렌 시각 확인 (+ 맥 잔여: P1 hover·P2 미니·사이렌 듀얼)</li>
+      <li>2. 전환 릴리스 게시: maxalert-releases v0.2.2 (exe+latest.yml) — <strong>게시 순간 전 플릿이 1시간 내 전환 시작</strong></li>
+      <li>3. 카탈로그 갱신: exe 0.1.9→0.2.2, dmg 0.2.0→0.2.2, version 0.2.2</li>
+      <li>4. 파트너 안내문 발송 + master 피처 프리즈 협의</li>
+    </ul>
+  </div>
+
+  <h2>남은 리스크 (정직 고지)</h2>
+  <div class="warn">
+    <p>· 실기기 GUI(위젯 표시·사이렌 발화·트레이)는 아직 사람 눈으로 안 봄 — 민수 실기가 마지막 관문<br>
+    · 전환 릴리스 게시 후 롤백은 "다음 버전 픽스"만 가능(구 Electron 복원 불가). 자동업데이트 채널 생존은 이번에 실증돼 픽스 배포 경로는 확보됨<br>
+    · 비표준 경로 Electron 설치본(사실상 없음 — oneClick은 경로 고정)은 자동 제거 대상 아님</p>
+  </div>
+</div>
+</body>
+</html>
