@@ -64,7 +64,13 @@
 - 맥: `~/Projects/maxalert/dist/v0.2.2/MaxAlert_0.2.2_aarch64.dmg` — 동일 커밋(e852bdb) 리빌드, DMG 꾸밈 AppleScript가 TCC 거부돼 hdiutil 직접 생성(기능 동일, 창 배경 꾸밈만 없음, KB 등재)
 - 파트너 안내문 초안: `claudedocs/maxalert-partner-tauri-transition-notice-20260718.html` (복사 버튼 포함, 발송은 릴리스 직전 권장)
 
-## CEO 게이트 (전부 비가역 — 승인 필요)
+## 배포 종결 (실기 PASS 후 — 2026-07-18 밤)
+- maxalert-releases **v0.2.2 게시 완료** (exe+latest.yml) — 공개 latest.yml 0.2.2 서빙·exe sha256 216f251f 일치. 기존 Electron 플릿은 1시간 폴링으로 순차 자동 전환.
+- 카탈로그 **라이브 배포 완료** — version 0.2.2, exe/dmg URL·허용목록 갱신, oracle 서비스 active, 공개 다운로드 sha256 exe 216f251f·dmg c9a52d52 일치.
+- 함정 기록: 다운로드 실디렉토리는 `/home/ubuntu/aimax-downloads/` (aimax-reports-api/downloads 아님 — 404 download_file_not_uploaded), gh release는 `env -u GITHUB_TOKEN` 필요.
+- 잔여: 파트너 안내문 발송(민수·복사 버튼)+피처 프리즈·master 브랜치 정리 협의, 플릿 전환 관찰, 구버전 다운로드 파일 정리(유예 후).
+
+## (기록용) 배포 전 CEO 게이트였던 항목
 1. **민수 실기 (AIXLIFE)**: 위젯·대시보드·사이렌 시각 확인 (+ 맥 잔여 실기: P1 hover·P2 미니 조작·사이렌 듀얼)
 2. **전환 릴리스 게시**: `maxalert-releases`에 v0.2.2(exe+latest.yml) — 게시 순간 전 플릿(1시간 폴링)이 전환 시작. draft 생성 후 publish 권장
 3. **카탈로그 갱신**: exe 0.1.9→0.2.2, dmg 0.2.0→0.2.2, version 0.2.2
