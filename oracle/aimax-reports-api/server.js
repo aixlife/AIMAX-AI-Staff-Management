@@ -11792,8 +11792,29 @@ function waitingUserMailDesktopWorker(row) {
   }) || null;
 }
 
+// 2026-07-21: AIMAX 쪽 조치가 필요한 오류(제공자가 모델을 내린 경우 등)는 사용자가 할 일이
+// 없어서 status 를 waiting_user 가 아닌 reviewing 으로 둔다. 그런데 메일 스윕이 waiting_user
+// 만 보고 있어서, 그대로 두면 "접수됐다"는 연락조차 못 받는 구멍이 생긴다. 이 카테고리만
+// 예외로 통과시킨다. 피드백 리포트(staff_feedback_reviewing)까지 새어나가면 안 되므로
+// 카테고리를 명시 화이트리스트로 좁힌다.
+const AIMAX_OWNED_GUIDANCE_CATEGORIES = new Set(["model_not_found"]);
+
+function isAimaxOwnedReviewingReport(row) {
+  if (normalizeReportStatus(row?.status || "") !== "reviewing") return false;
+  const category = String(row?.auto_guidance_category || "").trim();
+  return AIMAX_OWNED_GUIDANCE_CATEGORIES.has(category);
+}
+
+function shouldNotifyReportByMail(row) {
+  if (normalizeReportStatus(row?.status || "") === "waiting_user") return true;
+  return isAimaxOwnedReviewingReport(row);
+}
+
 // 메일 본문 구성 — 이모지 금지, redactText 적용 필드만 사용, 시크릿/원문 로그 인용 금지.
 function buildWaitingUserReportMail(row) {
+  // AIMAX 조치 건은 "확인이 필요합니다"로 보내면 안 된다. 사용자가 설정을 뒤지게 만들 뿐이고,
+  // 이번 사고(기본 모델이 내려간 건)에서 실제로 그 안내가 막다른 길이었다.
+  if (isAimaxOwnedReviewingReport(row)) return buildAimaxOwnedReportMail(row);
   const jobKind = String(row?.job_kind || "").trim();
   const kindLabel = (JOB_KINDS[jobKind] && JOB_KINDS[jobKind].label) || "작업";
   const desktopWorker = waitingUserMailDesktopWorker(row);
@@ -11829,6 +11850,37 @@ function buildWaitingUserReportMail(row) {
     lines.push(`앱에 접속해 오류보고 탭에서 자세한 안내를 확인해주세요: ${PUBLIC_BASE_URL}/app`);
     lines.push("조치 후 상단 배너의 '조치했어요, 다시 시도' 버튼을 누르거나 작업을 다시 시도해주세요.");
   }
+  lines.push("");
+  lines.push(`문의는 이 메일에 회신해주세요 (${MAIL_REPLY_TO}).`);
+  return { subject, text: lines.join("\n") };
+}
+
+// AIMAX 쪽 조치 건 메일 — 사용자에게 시키는 문장이 하나도 없어야 한다.
+function buildAimaxOwnedReportMail(row) {
+  const jobKind = String(row?.job_kind || "").trim();
+  const kindLabel = (JOB_KINDS[jobKind] && JOB_KINDS[jobKind].label) || "작업";
+  const subject = `[AIMAX] 접수된 오류를 AIMAX에서 조치 중입니다 — ${kindLabel}`;
+  const storedAtKst = waitingUserMailKstTimestamp(row?.stored_at || row?.status_updated_at || "");
+  const publicMessage = redactText(String(row?.public_message || "")).trim();
+  const nextUpdate = redactText(String(row?.next_update_message || "")).trim();
+  const lines = [];
+  lines.push("안녕하세요, AIMAX입니다.");
+  lines.push("");
+  if (storedAtKst) lines.push(`접수 시각: ${storedAtKst}`);
+  lines.push(`작업: ${kindLabel}`);
+  lines.push("");
+  lines.push("보내주신 오류를 확인했습니다. 설정이나 사용 방법의 문제가 아니라 AIMAX에서 처리해야 하는 건으로 확인되어, 저희가 조치 중입니다.");
+  if (publicMessage) {
+    lines.push("");
+    lines.push(publicMessage);
+  }
+  if (nextUpdate) {
+    lines.push("");
+    lines.push(nextUpdate);
+  }
+  lines.push("");
+  lines.push(`진행 상황은 앱의 오류보고 탭에서 확인하실 수 있습니다: ${PUBLIC_BASE_URL}/app`);
+  lines.push("따로 하실 조치는 없습니다. 같은 증상으로 여러 번 보내지 않으셔도 됩니다.");
   lines.push("");
   lines.push(`문의는 이 메일에 회신해주세요 (${MAIL_REPLY_TO}).`);
   return { subject, text: lines.join("\n") };
@@ -11913,7 +11965,7 @@ async function sweepWaitingUserReportMail() {
     let skipped = 0;
     for (const row of rows) {
       if (sent >= WAITING_USER_MAIL_PER_SWEEP) break;
-      if (normalizeReportStatus(row?.status || "") !== "waiting_user") continue;
+      if (!shouldNotifyReportByMail(row)) continue;
       if (isFeedbackReport(row)) continue; // 오류보고만 (피드백 리포트 제외)
       // 발송 완료(user_notified_at)/실패 확정(user_notify_failed_at) 행은 영구 스킵한다.
       // user_notify_skipped 만 있는 행은 매 스윕 재평가한다: 이제 검증을 통과하면 이 스윕에서 발송하며
