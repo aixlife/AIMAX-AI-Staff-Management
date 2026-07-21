@@ -346,7 +346,9 @@ _SECRET_ENV_KEYS = {
     "openai_api_key": ("AIMAX_OPENAI_API_KEY", "OPENAI_API_KEY", "openai_api_key"),
     "apify_api_token": ("AIMAX_APIFY_API_TOKEN", "APIFY_API_TOKEN", "apify_api_token"),
 }
-_DEFAULT_AI_MODEL = "gemini-2.5-flash"
+# 2026-07-21: 구글이 gemini-2.5-flash 를 신규 API 키에 대해 404(no longer available to new
+# users) 처리해 2.x 계열을 기본값/선택지에서 내렸다. 서버(server.js)와 값을 맞춘다.
+_DEFAULT_AI_MODEL = "gemini-3.5-flash"
 API_KEY_GUIDE_URL = os.environ.get(
     "AIMAX_API_KEY_GUIDE_URL",
     "https://www.notion.so/367b31f1da5581ed9b11f23757476cd2",
@@ -367,6 +369,7 @@ _OPENAI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gpt-image-1"]["per_image"]
 _AI_TEXT_PRICE_USD_PER_1M = {
     # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
     "gemini-3.5-flash": {"input": 1.50, "output": 9.00, "label": "Gemini 3.5 Flash"},
+    "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.50, "label": "Gemini 3.1 Flash Lite"},
     "gemini-3.1-pro-preview": {"input": 1.25, "output": 10.00, "label": "Gemini 3.1 Pro Preview"},
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 2.5 Pro"},
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50, "label": "Gemini 2.5 Flash"},
@@ -384,6 +387,9 @@ _LEGACY_AI_MODEL_MAP = {
     # (무료 키 사용자가 기본값/레거시값으로 대량 실패하던 문제 방지)
     "gemini-2.5-pro": _DEFAULT_AI_MODEL,
     "gemini-3.1-pro": _DEFAULT_AI_MODEL,
+    # 2026-07-21: 2.x Flash 계열은 구글이 신규 키에 대해 내렸다. 저장값이 남아 있어도 기본값으로.
+    "gemini-2.5-flash": _DEFAULT_AI_MODEL,
+    "gemini-2.5-flash-lite": _DEFAULT_AI_MODEL,
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -408,7 +414,7 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-flash", "gpt-5.4-mini", "gpt-5-mini"):
+    if value in ("claude", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview", "gpt-5.4-mini", "gpt-5-mini"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 
@@ -425,7 +431,9 @@ def _normalize_image_model(value, ai_model=None):
         "openai": "gpt-image-1",
         "gpt-image": "gpt-image-1",
         "gemini": "gemini-3.1-flash-image",
-        "nano-banana": "gemini-2.5-flash-image",
+        # Nano Banana 1(2.5 계열)은 동반 은퇴 위험이 있어 후속 모델로 넘긴다.
+        "nano-banana": "gemini-3.1-flash-image",
+        "gemini-2.5-flash-image": "gemini-3.1-flash-image",
         "nano-banana-pro": "gemini-3-pro-image",
     }
     value = aliases.get(value, value)
@@ -4854,8 +4862,8 @@ class NaverBlogApp:
             bg=COLORS["card_bg"], fg=COLORS["text_secondary"], anchor="w",
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
-            ("gemini-2.5-flash",       "Gemini 2.5 Flash  (무료 티어 가능)  ★ 기본"),
-            ("gemini-3.5-flash",       "Gemini 3.5 Flash  (고품질/유료)"),
+            ("gemini-3.5-flash",       "Gemini 3.5 Flash  (긴 글에 유리)  ★ 기본"),
+            ("gemini-3.1-flash-lite",  "Gemini 3.1 Flash Lite  (가장 빠르고 저렴/글이 짧음)"),
             ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (~44원/글, 유료/고급)"),
             ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
             ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),

@@ -37,7 +37,10 @@ const YERI_PROGRESS_STALL_MS = Math.max(5, safeInt(process.env.AIMAX_JOB_PROGRES
 const YERI_RETRY_LIMIT = Number(process.env.AIMAX_YERI_RETRY_LIMIT || 3);
 const YERI_SERVER_GENERATION_ENABLED = envFlag("AIMAX_YERI_SERVER_GENERATION_ENABLED");
 const YERI_SERVER_GENERATION_MOCK = envFlag("AIMAX_YERI_SERVER_GENERATION_MOCK");
-const YERI_SERVER_GENERATION_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash").trim();
+// 2026-07-21: 구글이 gemini-2.5-flash 를 신규 API 키에 대해 404(no longer available to new
+// users) 처리해, 최근 키를 만든 사용자는 글이 한 편도 생성되지 않았다(7/10~7/21, 2명 15건).
+// 기존 키는 아직 유예 중이지만 종료 시점이 공지되지 않아 2.x 를 기본값에서 전부 내린다.
+const YERI_SERVER_GENERATION_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_MODEL || "gemini-3.5-flash").trim();
 const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-4-6").trim();
 const YERI_SERVER_GENERATION_TIMEOUT_MS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_TIMEOUT_MS || 60000);
 const YERI_SERVER_GENERATION_MAX_ATTEMPTS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
@@ -87,11 +90,13 @@ const POPBILL_BRIDGE_TIMEOUT_MS = 50 * 1000;
 const KEYCHAIN_ACCOUNT = String(process.env.AIMAX_KEYCHAIN_ACCOUNT || "minsu-api").trim();
 const LOCAL_KEYRING_SERVICE = String(process.env.AIMAX_KEYRING_SERVICE || "AIMAX").trim();
 const LEGACY_KEYRING_SERVICE = String(process.env.AIMAX_LEGACY_KEYRING_SERVICE || "NaverBlogAuto").trim();
-const SONGI_GEMINI_MODEL = String(process.env.AIMAX_SONGI_GEMINI_MODEL || "gemini-2.5-flash").trim();
+// 송이는 수집 자료 분석/요약이라 출력이 짧다. 예리(긴 글)와 달리 3.5-flash 를 쓸 이유가 없어
+// 같은 2.x 탈출을 최저가 3.x 인 flash-lite 로 한다(출력 1M 당 $9.00 -> $1.50).
+const SONGI_GEMINI_MODEL = String(process.env.AIMAX_SONGI_GEMINI_MODEL || "gemini-3.1-flash-lite").trim();
 // 기본 fallback 은 무료 등급에서 동작하는 flash. 명시적 "Gemini 2.5 Pro" 선택은
 // normalizeYunmiAiModel 가 가격표 passthrough 로 그대로 honor 하므로 유료 옵션은 보존된다.
 // (모델 없는/레거시 API payload 가 유료 기본값으로 떨어져 무료키 사용자가 실패하던 문제 방지)
-const YUNMI_DEFAULT_AI_MODEL = String(process.env.AIMAX_YUNMI_DEFAULT_AI_MODEL || "gemini-2.5-flash").trim();
+const YUNMI_DEFAULT_AI_MODEL = String(process.env.AIMAX_YUNMI_DEFAULT_AI_MODEL || "gemini-3.5-flash").trim();
 const YUNMI_AI_MOCK_ENABLED = envFlag("AIMAX_YUNMI_AI_MOCK");
 const YUNMI_PUBLIC_ENABLED = envFlag("AIMAX_YUNMI_PUBLIC_ENABLED");
 const YUNMI_DEFAULT_ALLOWED_USERS = [
@@ -252,8 +257,11 @@ const USER_SECRET_PROVIDERS = {
   apify: { provider: "apify", secretName: "APIFY_API_TOKEN", label: "Apify API Token" },
   youtube: { provider: "youtube", secretName: "YOUTUBE_API_KEY", label: "YouTube Data API Key" },
 };
+// 2.x 항목은 선택지에서는 내렸지만 표에는 남긴다. 과거 잡의 비용 표시가 기본값 단가로
+// 뒤바뀌지 않게 하기 위한 것이다(조회 실패 시 YUNMI_DEFAULT_AI_MODEL 단가로 대체되는 구조).
 const YUNMI_AI_MODEL_PRICES = {
   "gemini-3.5-flash": { provider: "gemini", inputUsdPer1m: 1.50, outputUsdPer1m: 9.00, label: "Gemini 3.5 Flash" },
+  "gemini-3.1-flash-lite": { provider: "gemini", inputUsdPer1m: 0.25, outputUsdPer1m: 1.50, label: "Gemini 3.1 Flash Lite" },
   "gemini-3.1-pro-preview": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
   "gemini-2.5-pro": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
   "gemini-2.5-flash": { provider: "gemini", inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
@@ -1704,17 +1712,24 @@ function yeriSelectedModel(payload = {}) {
 
 function normalizeYeriGeminiModel(model) {
   const value = String(model || "").trim();
-  // 기본/제네릭/접미사 없는 레거시값(2.5 Pro, 3.1 Pro)은 검증된 무료 등급 2.5 Flash 로 통일.
+  const fallback = YERI_SERVER_GENERATION_MODEL || "gemini-3.5-flash";
+  // 기본/제네릭/접미사 없는 레거시값(2.5 Pro, 3.1 Pro)은 현재 기본 모델로 통일.
   // UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)라, 접미사 없는 "gemini-3.1-pro"는
-  // 명시 선택이 아니라 자동/레거시값 → flash 안전 (runner app.py/_LEGACY_AI_MODEL_MAP 과 일치).
+  // 명시 선택이 아니라 자동/레거시값 → 기본값 안전 (runner app.py/_LEGACY_AI_MODEL_MAP 과 일치).
+  //
+  // 2026-07-21: 2.x 계열(구글이 신규 키에 대해 내린 모델)을 여기서 바로 기본값으로 넘긴다.
+  // 이게 없으면 저장값이 gemini-2.5-flash 인 기존 사용자는 매 잡마다 404 를 한 번 맞고
+  // 폴백으로 재시도하게 된다. 결과는 같지만 왕복 한 번과 대기 시간이 그냥 버려진다.
   const aliases = {
-    gemini: YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
+    gemini: fallback,
     "gemini-pro": "gemini-3.1-pro-preview",
-    "gemini-flash": YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
-    "gemini-2.5-pro": YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
-    "gemini-3.1-pro": YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash",
+    "gemini-flash": fallback,
+    "gemini-2.5-flash": fallback,
+    "gemini-2.5-flash-lite": fallback,
+    "gemini-2.5-pro": fallback,
+    "gemini-3.1-pro": fallback,
   };
-  return aliases[value] || (value.startsWith("gemini-") ? value : (YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash"));
+  return aliases[value] || (value.startsWith("gemini-") ? value : fallback);
 }
 
 function yeriServerGenerationProviderIssue(payload = {}, mode = yeriServerGenerationMode()) {
@@ -1738,7 +1753,7 @@ function yeriServerGenerationTextModel(payload = {}) {
 
 function yeriGeminiFallbackModel(model) {
   const primary = String(model || "").trim();
-  const fallback = String(YERI_SERVER_GENERATION_MODEL || "gemini-2.5-flash").trim() || "gemini-2.5-flash";
+  const fallback = String(YERI_SERVER_GENERATION_MODEL || "gemini-3.5-flash").trim() || "gemini-3.5-flash";
   return primary && primary !== fallback ? fallback : "";
 }
 
@@ -2153,7 +2168,7 @@ function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
   const title = compactText(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle, 180);
-  const markdown = cleanMultilineText(source.content_markdown || source.markdown || source.content || "", 100000);
+  const markdown = cleanMultilineText(restoreEscapedNewlines(source.content_markdown || source.markdown || source.content || ""), 100000);
   const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(markdown)));
   return {
     title: normalized.title,
@@ -2366,7 +2381,7 @@ function classifyYeriProviderError(provider, error) {
   const low = detail.toLowerCase();
 
   if (status === 404 || /(model.*not found|not found.*model|model_not_found|not supported|unsupported model|permission.*model|모델.*없|모델.*사용할 수 없)/i.test(detail)) {
-    return yeriProviderError(provider, "server_generation_model_not_found", `${label} 모델을 찾을 수 없거나 이 계정에서 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.`, {
+    return yeriProviderError(provider, "server_generation_model_not_found", `${label}에서 이 모델이 더 이상 제공되지 않습니다. AIMAX가 모델 목록을 갱신해야 하는 문제로 접수되었습니다.`, {
       status,
       detail,
       transient: false,
@@ -2677,7 +2692,7 @@ function yeriGenerationFailureMessage(error) {
   if (code === "server_generation_auth_failed") return "API 키 인증 실패입니다. 웹 설정의 AI/API 연결에서 키를 확인하거나 갱신해주세요.";
   if (code === "server_generation_quota_exceeded") return "결제/요금제 한도 초과입니다. 결제/크레딧 상태를 확인해주세요.";
   if (code === "server_generation_rate_limited") return "AI 무료 사용량 한도에 도달했습니다. 분당 한도면 잠시 후, 일일 한도면 내일 다시 시도하거나 본인 유료 API 키를 등록해주세요. 여러 글을 한 번에 몰아 보내면 한도에 빨리 도달합니다.";
-  if (code === "server_generation_model_not_found") return "선택한 AI 모델을 찾을 수 없거나 이 계정에서 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.";
+  if (code === "server_generation_model_not_found") return "선택한 AI 모델을 제공자가 더 이상 지원하지 않습니다. AIMAX가 모델 목록을 갱신해야 하는 문제로 접수되었습니다.";
   if (code === "server_generation_provider_transient") return "AI 제공자 일시적 오류입니다. 잠시 뒤 다시 시도해주세요.";
   if (code === "server_generation_timeout") return "AI 글 생성 시간이 초과되었습니다. 글 분량을 줄이거나 잠시 뒤 다시 시도해주세요.";
   if (code === "server_generation_invalid_response") return "AI 응답을 글 형식으로 해석하지 못했습니다. 모델을 바꾸거나 다시 시도해주세요.";
@@ -2801,12 +2816,14 @@ function buildFailureDiagnostic(input = {}) {
       ["결제 상태 확인", "AI/API 연결 열기", "오류 보고 보내기"],
     );
   }
+  // 2026-07-21: user() 였으나 사용자가 풀 수 없는 케이스가 실제로 발생했다(선택 모델이
+  // AIMAX 기본값 그대로인데 제공자가 신규 키에 대해 내려버린 상황). admin() 으로 올린다.
   if (/server_generation_model_not_found|model_not_found|model.*not found|not found.*model|unsupported model|모델.*없|모델.*사용할 수 없/.test(text)) {
-    return user(
+    return admin(
       "model_not_found",
       "AI 모델 사용 불가",
-      "모델명이 잘못되었거나 이 계정에서 선택한 모델을 사용할 수 없습니다.",
-      ["AIMAX 기본 모델로 전환", "AI/API 연결 열기", "오류 보고 보내기"],
+      "선택한 모델을 제공자가 더 이상 지원하지 않습니다. AIMAX가 모델 목록을 갱신해야 하는 문제라 접수되었습니다.",
+      ["AIMAX 기본 모델로 전환", "오류 보고 보내기"],
     );
   }
   if (/image_paid_required|gemini.*image|이미지.*무료|이미지.*유료|nano banana|flash-image/.test(text)) {
@@ -3717,6 +3734,19 @@ function rememberUserEmailEvent(user, event) {
 
 function compactText(value, limit = 300) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, limit);
+}
+
+// 2026-07-21: 일부 모델(gemini-3.5-flash, gemini-flash-latest 에서 재현)이 JSON 문자열 안에
+// 개행을 한 번 더 이스케이프해서 돌려준다. 그대로 두면 발행된 블로그 글에 역슬래시 n 이
+// 글자로 보인다. 다만 코드 블록이 든 정상 글을 망가뜨리면 안 되므로, 진짜 개행이 거의 없는
+// (= 통째로 이스케이프된) 경우에만 되돌린다.
+function restoreEscapedNewlines(value) {
+  const text = String(value || "");
+  const escaped = (text.match(/\\n/g) || []).length;
+  if (!escaped) return text;
+  const real = (text.match(/\n/g) || []).length;
+  if (escaped < real) return text;
+  return text.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
 }
 
 function cleanMultilineText(value, limit = 8000) {
@@ -10554,11 +10584,14 @@ const REPORT_AUTO_GUIDANCE = {
     public_message: "AI 무료 사용량 또는 분당 호출 한도에 걸린 상태입니다. 같은 작업을 반복 제출하면 대기 시간이 더 길어질 수 있습니다.",
     next_update_message: "분당 한도면 10~30분 뒤, 일일 무료 한도면 다음 날 다시 시도해주세요. 급하면 본인 유료 API 키를 등록하거나 이미지 수/글 수를 줄여 1건만 테스트해주세요.",
   },
+  // 2026-07-21: 원래 "사용자 확인 필요 + AIMAX 기본 모델로 전환" 안내였는데, 기본값 자체가
+  // 내려간 상황(gemini-2.5-flash 신규 키 차단)에서는 안내를 따라가도 같은 실패로 되돌아왔다.
+  // AIMAX가 검증한 모델만 목록에 두는 구조이므로 이 오류는 운영팀 조치 신호로 잡는다.
   model_not_found: {
-    status: "waiting_user",
-    status_label: "사용자 확인 필요",
-    public_message: "선택한 AI 모델을 현재 계정에서 사용할 수 없거나 모델명이 맞지 않아 작업이 중단되었습니다.",
-    next_update_message: "설정 > AI/API 연결에서 AIMAX 기본 모델 또는 현재 계정에서 사용 가능한 모델로 바꾼 뒤 새 작업 1건만 다시 시도해주세요.",
+    status: "reviewing",
+    status_label: "확인 중",
+    public_message: "선택한 AI 모델을 제공자가 더 이상 지원하지 않아 작업이 중단되었습니다. 사용자 설정 문제가 아니라 AIMAX가 모델 목록을 갱신해야 하는 건으로 접수되었습니다.",
+    next_update_message: "AIMAX에서 사용 가능한 모델로 교체하는 중입니다. 교체가 끝나면 이 화면에 안내가 업데이트되며, 그 뒤 새 작업 1건만 다시 시도해주세요. 같은 증상은 여러 번 보내지 않아도 됩니다.",
   },
   organization_verification_required: {
     status: "waiting_user",
@@ -11079,14 +11112,19 @@ function automationTicketId(reportId, storedAt) {
 function automationTicketCategory(summary, report) {
   if (isFeedbackReport(summary)) return "staff_feedback";
   const autoGuidanceCategory = sanitizeFailedStage(report?.support?.auto_guidance_category || summary.auto_guidance_category || "");
-  if (/api_key|quota|rate_limit|provider_transient|model_not_found|image_paid_required/.test(autoGuidanceCategory)) return "user_ai_provider";
+  // 2026-07-21: model_not_found 를 user_ai_provider 로 묶어두니 "사용자가 키/한도만 확인하면
+  // 되는 건"으로 분류돼 11일간(7/10~7/21) 아무도 손대지 않았다. 실제로는 AIMAX가 제공한
+  // 모델 목록이 낡아서 생긴 우리 쪽 작업이므로 별도 카테고리로 분리한다.
+  if (/model_not_found/.test(autoGuidanceCategory)) return "aimax_model_catalog";
+  if (/api_key|quota|rate_limit|provider_transient|image_paid_required/.test(autoGuidanceCategory)) return "user_ai_provider";
   if (/runner_update_required|bundle_integrity_mismatch/.test(autoGuidanceCategory)) return "local_runner";
   if (/naver_login_required/.test(autoGuidanceCategory)) return "naver_editor";
   const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
   const diagnosticCode = sanitizeFailedStage(diagnostic?.code || "");
   const stage = sanitizeFailedStage(summary.job_stage || "");
   const worker = sanitizeFailedStage(summary.job_worker || summary.job_kind || "");
-  if (/api_key|quota|rate_limit|provider_transient|model_not_found|image_paid_required/.test(diagnosticCode)) return "user_ai_provider";
+  if (/model_not_found/.test(diagnosticCode)) return "aimax_model_catalog";
+  if (/api_key|quota|rate_limit|provider_transient|image_paid_required/.test(diagnosticCode)) return "user_ai_provider";
   const issueText = `${summary.visible_error || ""} ${summary.work_context || ""} ${summary.user_note || ""}`.toLowerCase();
   if (isBundleIntegrityMismatchText(issueText)) return "local_runner";
   if (/runner|local_worker|local_ui_queue/.test(diagnosticCode) || /runner/.test(stage)) return "local_runner";
@@ -11115,6 +11153,7 @@ function automationTicketPriority(summary, report) {
 function automationTicketNextAction(category) {
   if (category === "local_runner") return "실행기 로그/버전/큐 처리 상태와 설치 파일 무결성/보안 격리 여부를 확인";
   if (category === "naver_editor") return "Smart Editor selector/저장/발행 경로를 재현하고 패치 후보 준비";
+  if (category === "aimax_model_catalog") return "제공자가 내린 모델인지 확인하고 AIMAX 기본값/선택 목록을 사용 가능한 모델로 교체 후 배포";
   if (category === "user_ai_provider") return "사용자 안내로 해결 가능한 API 키/한도/제공자 일시 오류인지 분류";
   if (category === "staff_feedback") return "직원 피드백을 개선 후보로 분류하고 필요 시 사용자 추가 정보 요청";
   if (category === "songi_research") return "송이/리서치 작업 로그와 외부 도구 상태를 확인";

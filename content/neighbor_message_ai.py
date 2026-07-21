@@ -41,7 +41,9 @@ _PROMPT_TEMPLATE = """당신은 네이버 블로그 운영자가 서로이웃을
 def generate_neighbor_messages(
     profile_text: str,
     api_key: str,
-    model: str = "gemini-2.5-flash",
+    # 2026-07-21: 2.x 계열은 구글이 신규 API 키에 대해 내렸다. 서로이웃 멘트는 출력이
+    # 아주 짧고 건수가 많아, 예리 본문(3.5 Flash)과 달리 최저가 3.x 인 flash-lite 를 쓴다.
+    model: str = "gemini-3.1-flash-lite",
     count: int = 10,
     claude_key: Optional[str] = None,
     openai_key: Optional[str] = None,
@@ -51,7 +53,7 @@ def generate_neighbor_messages(
     Args:
         profile_text: 운영자 블로그 소개 (사용자가 설정 탭에 작성)
         api_key: Gemini API 키 (model이 gemini 계열일 때)
-        model: "claude" | "gpt-*" | "gemini-2.5-flash" | "gemini-2.5-pro" | "gemini-3.1-pro-preview"
+        model: "claude" | "gpt-*" | "gemini-3.5-flash" | "gemini-3.1-flash-lite" | "gemini-3.1-pro-preview"
         count: 생성할 멘트 개수 (기본 10)
         claude_key: Claude API 키 (model이 "claude"일 때 필요)
         openai_key: OpenAI API 키 (model이 "gpt-*"일 때 필요)
@@ -82,7 +84,7 @@ def generate_neighbor_messages(
             if not api_key:
                 logger.error("Gemini 모델 선택했으나 gemini api_key 없음")
                 return []
-            gemini_model = model if model.startswith("gemini-") else "gemini-2.5-flash"
+            gemini_model = model if model.startswith("gemini-") else "gemini-3.1-flash-lite"
             text = _call_gemini(prompt, api_key, gemini_model)
     except Exception as e:
         logger.error(f"AI 멘트 생성 중 예외: {e}")

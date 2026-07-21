@@ -47,12 +47,12 @@ def check_module(module) -> None:
         assert loaded[5] == "openai-secret-before"
         assert loaded[6] == "apify-secret-before"
 
-        module.save_settings("naver-third", "", "", "gemini-2.5-flash", "", "", "")
+        module.save_settings("naver-third", "", "", "gemini-3.1-flash-lite", "", "", "")
         loaded = module.load_settings()
         assert loaded[0] == "naver-third"
         assert loaded[1] == "naver-pw-after"
         assert loaded[2] == "gemini-secret-before"
-        assert loaded[3] == "gemini-2.5-flash"
+        assert loaded[3] == "gemini-3.1-flash-lite"
         assert loaded[4] == "claude-secret-before"
         assert loaded[5] == "openai-secret-before"
         assert loaded[6] == "apify-secret-before"

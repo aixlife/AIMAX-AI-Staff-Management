@@ -4960,9 +4960,14 @@
     const SANGSU_STORAGE_KEY = "aimax_sangsu_quote_generator_state_v1";
     const SIDEBAR_COLLAPSED_KEY = "aimax_sidebar_collapsed";
     const NEW_SONGI_PROJECT_VALUE = "__new_project__";
-    const DEFAULT_AI_MODEL = "gemini-2.5-flash";
+    // 2026-07-21: gemini-2.5-flash 는 구글이 신규 API 키에 대해 404(no longer available to
+    // new users) 처리해 새로 가입한 사용자가 글을 한 편도 못 쓰는 상태가 됐다. 2.x 계열은
+    // 선택지에서 내리고 3.x 로 옮긴다. 실측(2500자 요청, 서버 실제 프롬프트 기준):
+    //   3.5-flash      34.6초 / 3489자 / 출력 8684tok  - 글자수·구조 최상
+    //   3.1-flash-lite  3.2초 / 1139자 / 출력  690tok  - 5배 빠르고 9배 싸지만 글이 짧음
+    const DEFAULT_AI_MODEL = "gemini-3.5-flash";
     const DEFAULT_IMAGE_MODEL = "gpt-image-1";
-    const SONGI_DEFAULT_AI_MODEL = "gemini-2.5-flash";
+    const SONGI_DEFAULT_AI_MODEL = "gemini-3.1-flash-lite";
     const USD_KRW_RATE = 1476;
     const USD_KRW_RATE_LABEL = "2026-06-24 official model pricing check";
     const SONGI_APIFY_PRICES_USD = {
@@ -4985,8 +4990,8 @@
     };
     const SONGI_META_ADS_MIN_RESULTS = 10;
     const AI_MODEL_OPTIONS = [
-      ["gemini-2.5-flash", "Gemini 2.5 Flash (기본/무료 티어 가능)"],
-      ["gemini-3.5-flash", "Gemini 3.5 Flash (고품질/유료)"],
+      ["gemini-3.5-flash", "Gemini 3.5 Flash (기본/긴 글에 유리)"],
+      ["gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite (가장 빠르고 저렴/글이 짧음)"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (유료/고급)"],
       ["gpt-5.4-mini", "GPT-5.4 mini"],
       ["gpt-5-mini", "GPT-5 mini"],
@@ -4995,7 +5000,8 @@
     const IMAGE_MODEL_OPTIONS = [
       ["gpt-image-1", "OpenAI gpt-image-1"],
       ["gpt-image-2", "OpenAI gpt-image-2"],
-      ["gemini-2.5-flash-image", "Gemini Nano Banana"],
+      // gemini-2.5-flash-image(Nano Banana 1)는 2.x 동반 은퇴 위험으로 선택지에서 제외.
+      // 가격표에는 남겨둬 과거 잡의 비용 표시가 깨지지 않게 한다.
       ["gemini-3.1-flash-image", "Gemini Nano Banana 2"],
       ["gemini-3-pro-image", "Gemini Nano Banana Pro"],
     ];
@@ -5008,12 +5014,12 @@
     };
     const YUNMI_AI_MODEL_OPTIONS = [
       ["gemini-3.5-flash", "Gemini 3.5 Flash"],
+      ["gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
-      ["gemini-2.5-pro", "Gemini 2.5 Pro"],
-      ["gemini-2.5-flash", "Gemini 2.5 Flash"],
     ];
     const AI_MODEL_PRICES = {
       "gemini-3.5-flash": { inputUsdPer1m: 1.50, outputUsdPer1m: 9.00, label: "Gemini 3.5 Flash" },
+      "gemini-3.1-flash-lite": { inputUsdPer1m: 0.25, outputUsdPer1m: 1.50, label: "Gemini 3.1 Flash Lite" },
       "gemini-3.1-pro-preview": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
       "gemini-2.5-pro": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
       "gemini-2.5-flash": { inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
@@ -5928,7 +5934,10 @@
         openai: "gpt-image-1",
         "gpt-image": "gpt-image-1",
         gemini: "gemini-3.1-flash-image",
-        "nano-banana": "gemini-2.5-flash-image",
+        // Nano Banana 1(2.5 계열) 저장값은 후속인 Nano Banana 2 로 넘긴다.
+        // 그대로 두면 선택지에서 빠진 탓에 OpenAI(gpt-image-1)로 조용히 갈아타 버린다.
+        "nano-banana": "gemini-3.1-flash-image",
+        "gemini-2.5-flash-image": "gemini-3.1-flash-image",
         "nano-banana-pro": "gemini-3-pro-image",
       };
       const normalized = aliases[model] || model;
@@ -6403,8 +6412,13 @@
       if (/server_generation_quota_exceeded|quota_exceeded|billing|payment|credit|balance|결제|크레딧|잔액/.test(text)) {
         return make("quota_exceeded", "결제/크레딧 확인 필요", "유료 API의 결제 계정, 크레딧, 쿼터 상태 때문에 요청이 막혔습니다.", true, ["결제 상태 확인", "AI/API 연결 열기", "오류 보고 보내기"]);
       }
+      // 2026-07-21: 이 오류는 사용자 조치로 못 푸는 경우가 있다. 실제로 길문수님 건은
+      // 선택 모델이 AIMAX 기본값(gemini-2.5-flash) 그대로였는데 구글이 신규 키에 대해
+      // 내려버린 상황이라, "기본 모델로 전환" 안내를 따라가면 같은 실패로 되돌아왔다.
+      // AIMAX가 검증한 모델만 목록에 두는 지금 구조에서는 이 오류 = 목록이 낡았다는 신호이므로
+      // 관리자 조치 대상으로 올린다.
       if (/server_generation_model_not_found|model_not_found|model.*not found|not found.*model|unsupported model|모델.*없|모델.*사용할 수 없/.test(text)) {
-        return make("model_not_found", "AI 모델 사용 불가", "모델명이 잘못되었거나 이 계정에서 선택한 모델을 사용할 수 없습니다.", true, ["AIMAX 기본 모델로 전환", "AI/API 연결 열기", "오류 보고 보내기"]);
+        return make("model_not_found", "AI 모델 사용 불가", "선택한 모델을 제공자가 더 이상 지원하지 않습니다. AIMAX가 모델 목록을 갱신해야 하는 문제라 접수되었습니다.", false, ["AIMAX 기본 모델로 전환", "오류 보고 보내기"]);
       }
       if (/image_paid_required|gemini.*image|이미지.*무료|이미지.*유료|nano banana|flash-image/.test(text)) {
         return make("image_paid_required", "이미지 생성은 유료 키 필요", "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 생성이 건너뛰어졌습니다.", true, ["이미지 없이 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"]);
@@ -7173,12 +7187,12 @@
         api_key_invalid: "API 키 인증 실패입니다. 새 키를 발급받아 교체해주세요.",
         rate_limited: "무료 사용량 한도에 도달했습니다. 잠시 기다리거나 유료 키를 등록해주세요.",
         quota_exceeded: "결제/크레딧 문제로 요청이 막혔습니다. 결제 계정과 잔액을 확인해주세요.",
-        model_not_found: "선택한 AI 모델을 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.",
+        model_not_found: "선택한 AI 모델을 제공자가 더 이상 지원하지 않습니다. AIMAX가 목록을 갱신해야 하는 문제로 접수되었습니다.",
         image_paid_required: "Gemini 이미지 생성은 유료 키가 필요합니다. 이미지 0장으로 다시 시도할 수 있습니다.",
         server_generation_auth_failed: "API 키 인증 실패입니다. 웹 설정의 AI/API 연결에서 키를 확인하거나 갱신해주세요.",
         server_generation_quota_exceeded: "사용량/요금제 한도 초과입니다. 결제/쿼터 상태를 확인해주세요.",
         server_generation_rate_limited: "AI 제공자 요청 제한이 걸렸습니다. 잠시 뒤 다시 시도해주세요.",
-        server_generation_model_not_found: "선택한 AI 모델을 찾을 수 없거나 이 계정에서 사용할 수 없습니다. AIMAX 기본 모델로 전환해주세요.",
+        server_generation_model_not_found: "선택한 AI 모델을 제공자가 더 이상 지원하지 않습니다. AIMAX가 목록을 갱신해야 하는 문제로 접수되었습니다.",
         server_generation_provider_transient: "AI 제공자 일시적 오류입니다. 잠시 뒤 다시 시도해주세요.",
         server_generation_provider_error: "AI 제공자 글 생성 오류입니다. 모델/API 설정을 확인해주세요.",
         server_generation_timeout: "AI 글 생성 시간이 초과되었습니다. 글 분량을 줄이거나 잠시 뒤 다시 시도해주세요.",

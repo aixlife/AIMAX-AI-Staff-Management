@@ -111,7 +111,7 @@ def precheck_gemini_key(api_key):
         return error
 
 
-def generate_blog_content(keyword, api_key, style_id="info", model="gemini-2.5-flash",
+def generate_blog_content(keyword, api_key, style_id="info", model="gemini-3.5-flash",
                           cta_link=None, cta_text=None, word_count=1500,
                           image_count=3,
                           seo_brief=None,
@@ -304,18 +304,22 @@ def _style_reference_instruction(reference_text):
 
 def _normalize_gemini_model_id(model):
     value = str(model or "").strip()
-    # 기본/제네릭/구버전 기본값은 검증된 무료 등급 2.5 Flash 로 통일한다.
+    # 2026-07-21: 구글이 2.x Flash 계열을 신규 API 키에 대해 내려(404 no longer available to
+    # new users) 기본값을 3.5 Flash 로 옮겼다. 저장된 2.x 값도 여기서 흡수한다.
     # 명시적 3.1 Pro 선택만 유료 프리뷰로 유지 (app.py _LEGACY_AI_MODEL_MAP 과 일치).
+    default_model = "gemini-3.5-flash"
     aliases = {
-        "gemini": "gemini-2.5-flash",
+        "gemini": default_model,
         "gemini-pro": "gemini-3.1-pro-preview",
-        "gemini-flash": "gemini-2.5-flash",
-        "gemini-2.5-pro": "gemini-2.5-flash",
-        "gemini-3.1-pro": "gemini-2.5-flash",
+        "gemini-flash": default_model,
+        "gemini-2.5-flash": default_model,
+        "gemini-2.5-flash-lite": default_model,
+        "gemini-2.5-pro": default_model,
+        "gemini-3.1-pro": default_model,
     }
     if value in aliases:
         return aliases[value]
-    return value if value.startswith("gemini-") else "gemini-2.5-flash"
+    return value if value.startswith("gemini-") else default_model
 
 
 def _normalize_generation_result(result):
@@ -684,7 +688,7 @@ def _generate_with_openai(prompt, api_key, model_id="gpt-5.4-mini"):
     raise last_error or AiGenerationError("OpenAI 글 생성 실패")
 
 
-def _generate_with_gemini(prompt, api_key, model_id="gemini-2.5-flash"):
+def _generate_with_gemini(prompt, api_key, model_id="gemini-3.5-flash"):
     """Gemini API로 글 생성 → (content, usage) 반환.
 
     실패 시 None 을 조용히 반환하지 않고 사용자에게 보여줄 오류를 raise 한다.

@@ -113,12 +113,14 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="AI 무료 사용량 또는 분당 호출 한도에 걸린 상태입니다. 같은 작업을 반복 제출하면 대기 시간이 더 길어질 수 있습니다.",
         next_update_message="분당 한도면 10~30분 뒤, 일일 무료 한도면 다음 날 다시 시도해주세요. 급하면 본인 유료 API 키를 등록하거나 이미지 수/글 수를 줄여 1건만 테스트해주세요.",
     ),
+    # 2026-07-21: 기본값(gemini-2.5-flash)이 제공자 쪽에서 내려간 상황에서는 "기본 모델로
+    # 전환" 안내가 같은 실패로 되돌아온다. 사용자 확인이 아니라 운영팀 조치 건으로 잡는다.
     "model_not_found": Guidance(
         category="model_not_found",
-        status="waiting_user",
-        status_label="사용자 확인 필요",
-        public_message="선택한 AI 모델을 현재 계정에서 사용할 수 없거나 모델명이 맞지 않아 작업이 중단되었습니다.",
-        next_update_message="설정 > AI/API 연결에서 AIMAX 기본 모델 또는 현재 계정에서 사용 가능한 모델로 바꾼 뒤 새 작업 1건만 다시 시도해주세요.",
+        status="reviewing",
+        status_label="확인 중",
+        public_message="선택한 AI 모델을 제공자가 더 이상 지원하지 않아 작업이 중단되었습니다. 사용자 설정 문제가 아니라 AIMAX가 모델 목록을 갱신해야 하는 건으로 접수되었습니다.",
+        next_update_message="AIMAX에서 사용 가능한 모델로 교체하는 중입니다. 교체가 끝나면 이 화면에 안내가 업데이트되며, 그 뒤 새 작업 1건만 다시 시도해주세요. 같은 증상은 여러 번 보내지 않아도 됩니다.",
     ),
     "organization_verification_required": Guidance(
         category="organization_verification_required",
