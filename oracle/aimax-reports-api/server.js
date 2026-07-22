@@ -288,6 +288,8 @@ const YUNMI_AI_MODEL_PRICES = {
   "gemini-3.1-pro-preview": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
   "gemini-2.5-pro": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
   "gemini-2.5-flash": { provider: "gemini", inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
+  "gpt-5.6-luna": { provider: "openai", inputUsdPer1m: 1.00, outputUsdPer1m: 6.00, label: "GPT-5.6 luna" },
+  "gpt-5.6-terra": { provider: "openai", inputUsdPer1m: 2.50, outputUsdPer1m: 15.00, label: "GPT-5.6 terra" },
   "gpt-5.4-mini": { provider: "openai", inputUsdPer1m: 0.75, outputUsdPer1m: 4.50, label: "GPT-5.4 mini" },
   "gpt-5.4-nano": { provider: "openai", inputUsdPer1m: 0.20, outputUsdPer1m: 1.25, label: "GPT-5.4 nano" },
   "gpt-5-mini": { provider: "openai", inputUsdPer1m: 0.25, outputUsdPer1m: 2.00, label: "GPT-5 mini" },
@@ -1825,7 +1827,7 @@ function yeriServerGenerationProviderIssue(payload = {}, mode = yeriServerGenera
 function yeriServerGenerationTextModel(payload = {}) {
   const selected = yeriSelectedModel(payload);
   const provider = yeriAiProviderForModel(selected);
-  if (provider === "openai") return selected || "gpt-5.4-mini";
+  if (provider === "openai") return selected || "gpt-5.6-luna";
   if (provider === "claude") return YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-4-6";
   return normalizeYeriGeminiModel(selected);
 }

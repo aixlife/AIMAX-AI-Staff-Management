@@ -4995,8 +4995,8 @@
       ["gemini-3.6-flash", "Gemini 3.6 Flash (기본/고품질)"],
       ["gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite (가장 빠르고 저렴/글이 짧음)"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (유료/고급)"],
-      ["gpt-5.4-mini", "GPT-5.4 mini"],
-      ["gpt-5.4-nano", "GPT-5.4 nano (가장 저렴)"],
+      ["gpt-5.6-luna", "GPT-5.6 luna (저렴/규칙 안정)"],
+      ["gpt-5.6-terra", "GPT-5.6 terra (고품질/정보 구체적)"],
       ["claude", "Claude"],
     ];
     const IMAGE_MODEL_OPTIONS = [
@@ -5028,6 +5028,8 @@
       "gemini-3.1-pro-preview": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
       "gemini-2.5-pro": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
       "gemini-2.5-flash": { inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
+      "gpt-5.6-luna": { inputUsdPer1m: 1.00, outputUsdPer1m: 6.00, label: "GPT-5.6 luna" },
+      "gpt-5.6-terra": { inputUsdPer1m: 2.50, outputUsdPer1m: 15.00, label: "GPT-5.6 terra" },
       "gpt-5.4-mini": { inputUsdPer1m: 0.75, outputUsdPer1m: 4.50, label: "GPT-5.4 mini" },
       "gpt-5.4-nano": { inputUsdPer1m: 0.20, outputUsdPer1m: 1.25, label: "GPT-5.4 nano" },
       "gpt-5-mini": { inputUsdPer1m: 0.25, outputUsdPer1m: 2.00, label: "GPT-5 mini" },
@@ -5042,8 +5044,8 @@
       youtube: { label: "YouTube", input: "#secretYoutubeInput", status: "#secretYoutubeStatus" },
     };
     const COST_REFERENCE_MODELS = {
-      "gpt-5.4-mini": { inputUsdPer1m: 0.75, outputUsdPer1m: 4.50, label: "GPT-5.4 mini" },
-      "gpt-5.4-nano": { inputUsdPer1m: 0.20, outputUsdPer1m: 1.25, label: "GPT-5.4 nano" },
+      "gpt-5.6-luna": { inputUsdPer1m: 1.00, outputUsdPer1m: 6.00, label: "GPT-5.6 luna" },
+      "gpt-5.6-terra": { inputUsdPer1m: 2.50, outputUsdPer1m: 15.00, label: "GPT-5.6 terra" },
     };
 
     const SESSION_TOKEN_STORAGE_KEY = "aimax_session_token";
@@ -5936,9 +5938,11 @@
         "gemini-3.5-flash": DEFAULT_AI_MODEL,
         "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
         "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
-        // 구형 gpt-5-mini 저장값은 provider 유지하며 저렴한 후속(gpt-5.4-nano)으로.
+        // 구형/은퇴 gpt 저장값은 provider(openai) 유지하며 현행 gpt-5.6-luna로.
         // 목록에서만 빼면 Gemini 기본값으로 튀어 provider가 바뀐다.
-        "gpt-5-mini": "gpt-5.4-nano",
+        "gpt-5-mini": "gpt-5.6-luna",
+        "gpt-5.4-mini": "gpt-5.6-luna",
+        "gpt-5.4-nano": "gpt-5.6-luna",
       };
       if (legacy[model]) return legacy[model];
       return AI_MODEL_OPTIONS.some(([id]) => id === model) ? model : DEFAULT_AI_MODEL;
@@ -6197,7 +6201,7 @@
       const text = estimateTextCostWon(model, wordCount);
       const images = estimateImageCostWon(imageCount, imageModel);
       const totalWon = text.won + images.won;
-      const gptMini = estimateTextCostWon("gpt-5.4-mini", wordCount);
+      const gptMini = estimateTextCostWon("gpt-5.6-luna", wordCount);
       // 무료 사용량 안내: 표시 금액은 유료 키 기준이다. 무료 티어는 호출 성공까지 요금이
       // 0원이라 여기서 측정할 수 없고, 대신 일일/분당 호출 한도가 있어 몰아 쓰면 막힌다.
       // 고품질 모델(3.6 Flash 등)은 출력 토큰이 많아 무료 한도에 더 빨리 도달한다.
@@ -6210,7 +6214,7 @@
         `글 ${wonLabel(text.won)} + ${images.modelLabel} 이미지 ${imageCount}장 ${wonLabel(images.won)}`,
         `이미지 단가: 장당 약 ${wonLabel(wonFromUsd(images.perImageUsd))}`,
         `환율 ${USD_KRW_RATE.toLocaleString("ko-KR")}원/USD (${USD_KRW_RATE_LABEL})`,
-        `참고 GPT-5.4 mini 글 비용 ${wonLabel(gptMini.won)} 수준`,
+        `참고 GPT-5.6 luna 글 비용 ${wonLabel(gptMini.won)} 수준`,
         freeNote,
       ].map(escapeHtml).join("<br>");
     }
