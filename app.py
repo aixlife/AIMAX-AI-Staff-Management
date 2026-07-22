@@ -346,9 +346,10 @@ _SECRET_ENV_KEYS = {
     "openai_api_key": ("AIMAX_OPENAI_API_KEY", "OPENAI_API_KEY", "openai_api_key"),
     "apify_api_token": ("AIMAX_APIFY_API_TOKEN", "APIFY_API_TOKEN", "apify_api_token"),
 }
-# 2026-07-21: 구글이 gemini-2.5-flash 를 신규 API 키에 대해 404(no longer available to new
-# users) 처리해 2.x 계열을 기본값/선택지에서 내렸다. 서버(server.js)와 값을 맞춘다.
-_DEFAULT_AI_MODEL = "gemini-3.5-flash"
+# 2026-07-22: 구글이 gemini-2.5-flash 를 신규 API 키에 404 처리한 뒤 반나절 만에 3.6-flash 가
+# 생기고 3.5-flash 가 과부하에 걸리는 등 목록이 계속 변한다. 서버(server.js)는 가용 모델 조회+
+# 폴백 체인으로 대응하고, 러너 기본값도 서버와 맞춘 3.6-flash 로 둔다.
+_DEFAULT_AI_MODEL = "gemini-3.6-flash"
 API_KEY_GUIDE_URL = os.environ.get(
     "AIMAX_API_KEY_GUIDE_URL",
     "https://www.notion.so/367b31f1da5581ed9b11f23757476cd2",
@@ -367,8 +368,11 @@ _IMAGE_MODEL_PRICE_USD = {
 _GEMINI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gemini-3.1-flash-image"]["per_image"]
 _OPENAI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gpt-image-1"]["per_image"]
 _AI_TEXT_PRICE_USD_PER_1M = {
+    # 단가 정본: ai.google.dev/gemini-api/docs/pricing (2026-07-22 확인).
     # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
+    "gemini-3.6-flash": {"input": 1.50, "output": 7.50, "label": "Gemini 3.6 Flash"},
     "gemini-3.5-flash": {"input": 1.50, "output": 9.00, "label": "Gemini 3.5 Flash"},
+    "gemini-3.5-flash-lite": {"input": 0.30, "output": 2.50, "label": "Gemini 3.5 Flash Lite"},
     "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.50, "label": "Gemini 3.1 Flash Lite"},
     "gemini-3.1-pro-preview": {"input": 1.25, "output": 10.00, "label": "Gemini 3.1 Pro Preview"},
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 2.5 Pro"},
@@ -387,9 +391,12 @@ _LEGACY_AI_MODEL_MAP = {
     # (무료 키 사용자가 기본값/레거시값으로 대량 실패하던 문제 방지)
     "gemini-2.5-pro": _DEFAULT_AI_MODEL,
     "gemini-3.1-pro": _DEFAULT_AI_MODEL,
-    # 2026-07-21: 2.x Flash 계열은 구글이 신규 키에 대해 내렸다. 저장값이 남아 있어도 기본값으로.
+    # 2026-07-22: 은퇴/과부하 모델은 성격을 유지해 후속으로. flash 는 3.6-flash(기본값),
+    # lite 계열은 저렴한 3.5-flash-lite 로(저렴한 걸 쓰던 사용자가 비싼 기본값으로 튀지 않게).
     "gemini-2.5-flash": _DEFAULT_AI_MODEL,
-    "gemini-2.5-flash-lite": _DEFAULT_AI_MODEL,
+    "gemini-3.5-flash": _DEFAULT_AI_MODEL,
+    "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -414,7 +421,7 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview", "gpt-5.4-mini", "gpt-5-mini"):
+    if value in ("claude", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gpt-5.4-mini", "gpt-5-mini"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 
@@ -4862,8 +4869,8 @@ class NaverBlogApp:
             bg=COLORS["card_bg"], fg=COLORS["text_secondary"], anchor="w",
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
-            ("gemini-3.5-flash",       "Gemini 3.5 Flash  (긴 글에 유리)  ★ 기본"),
-            ("gemini-3.1-flash-lite",  "Gemini 3.1 Flash Lite  (가장 빠르고 저렴/글이 짧음)"),
+            ("gemini-3.6-flash",       "Gemini 3.6 Flash  (고품질, 약 32원/글)  ★ 기본"),
+            ("gemini-3.5-flash-lite",  "Gemini 3.5 Flash Lite  (가장 빠르고 저렴 약 3.5원/글, 글이 짧음)"),
             ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (~44원/글, 유료/고급)"),
             ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
             ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),

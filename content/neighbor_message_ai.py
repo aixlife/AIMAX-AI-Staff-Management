@@ -53,7 +53,7 @@ def generate_neighbor_messages(
     Args:
         profile_text: 운영자 블로그 소개 (사용자가 설정 탭에 작성)
         api_key: Gemini API 키 (model이 gemini 계열일 때)
-        model: "claude" | "gpt-*" | "gemini-3.5-flash" | "gemini-3.1-flash-lite" | "gemini-3.1-pro-preview"
+        model: "claude" | "gpt-*" | "gemini-3.6-flash" | "gemini-3.5-flash-lite" | "gemini-3.1-pro-preview"
         count: 생성할 멘트 개수 (기본 10)
         claude_key: Claude API 키 (model이 "claude"일 때 필요)
         openai_key: OpenAI API 키 (model이 "gpt-*"일 때 필요)

@@ -26,7 +26,7 @@ def generate_blog_content(keyword, api_key, style_id="info"):
 
     logger.info(f"블로그 글 생성 중: {keyword} (스타일: {style_name})")
     response = client.models.generate_content(
-        model="gemini-3.5-flash",
+        model="gemini-3.6-flash",
         contents=prompt
     )
 

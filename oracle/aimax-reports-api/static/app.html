@@ -4960,16 +4960,17 @@
     const SANGSU_STORAGE_KEY = "aimax_sangsu_quote_generator_state_v1";
     const SIDEBAR_COLLAPSED_KEY = "aimax_sidebar_collapsed";
     const NEW_SONGI_PROJECT_VALUE = "__new_project__";
-    // 2026-07-21: gemini-2.5-flash 는 구글이 신규 API 키에 대해 404(no longer available to
-    // new users) 처리해 새로 가입한 사용자가 글을 한 편도 못 쓰는 상태가 됐다. 2.x 계열은
-    // 선택지에서 내리고 3.x 로 옮긴다. 실측(2500자 요청, 서버 실제 프롬프트 기준):
-    //   3.5-flash      34.6초 / 3489자 / 출력 8684tok  - 글자수·구조 최상
-    //   3.1-flash-lite  3.2초 / 1139자 / 출력  690tok  - 5배 빠르고 9배 싸지만 글이 짧음
-    const DEFAULT_AI_MODEL = "gemini-3.5-flash";
+    // 2026-07-22: 구글이 gemini-2.5-flash 를 신규 API 키에 404 처리한 데 이어, 반나절 만에
+    // 3.6-flash·3.5-flash-lite 가 새로 생기고 3.5-flash 가 503 과부하에 걸렸다. 특정 모델명에
+    // 묶이지 않도록 서버가 시작 시 가용 모델을 조회해 폴백 체인으로 자동 전환한다. UI 는 지금
+    // 실제 되는 2개만 보여준다. 실측(2500자 요청, 서버 실제 프롬프트 기준, 환율 1475원):
+    //   3.6-flash       16~18초 / 1900~2300자 - 안정, 약 32원/글 (3.5-flash 후속·더 저렴)
+    //   3.5-flash-lite   4~5초  / 1490~1707자 - 약 3.5원/글
+    const DEFAULT_AI_MODEL = "gemini-3.6-flash";
     const DEFAULT_IMAGE_MODEL = "gpt-image-1";
-    const SONGI_DEFAULT_AI_MODEL = "gemini-3.1-flash-lite";
-    const USD_KRW_RATE = 1476;
-    const USD_KRW_RATE_LABEL = "2026-06-24 official model pricing check";
+    const SONGI_DEFAULT_AI_MODEL = "gemini-3.5-flash-lite";
+    const USD_KRW_RATE = 1475;
+    const USD_KRW_RATE_LABEL = "2026-07-20 USD/KRW spot";
     const SONGI_APIFY_PRICES_USD = {
       Instagram: 0.0026,
       InstagramProfile: 0.0016,
@@ -4990,8 +4991,8 @@
     };
     const SONGI_META_ADS_MIN_RESULTS = 10;
     const AI_MODEL_OPTIONS = [
-      ["gemini-3.5-flash", "Gemini 3.5 Flash (기본/긴 글에 유리)"],
-      ["gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite (가장 빠르고 저렴/글이 짧음)"],
+      ["gemini-3.6-flash", "Gemini 3.6 Flash (기본/고품질, 약 32원/글)"],
+      ["gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite (가장 빠르고 저렴, 약 3.5원/글·글이 짧음)"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (유료/고급)"],
       ["gpt-5.4-mini", "GPT-5.4 mini"],
       ["gpt-5-mini", "GPT-5 mini"],
@@ -5013,12 +5014,15 @@
       "gemini-3-pro-image": { provider: "Gemini", label: "Gemini Nano Banana Pro", perImageUsd: 0.134 },
     };
     const YUNMI_AI_MODEL_OPTIONS = [
-      ["gemini-3.5-flash", "Gemini 3.5 Flash"],
-      ["gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite"],
+      ["gemini-3.6-flash", "Gemini 3.6 Flash"],
+      ["gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview"],
     ];
     const AI_MODEL_PRICES = {
+      // 단가 정본: ai.google.dev/gemini-api/docs/pricing (2026-07-22 확인).
+      "gemini-3.6-flash": { inputUsdPer1m: 1.50, outputUsdPer1m: 7.50, label: "Gemini 3.6 Flash" },
       "gemini-3.5-flash": { inputUsdPer1m: 1.50, outputUsdPer1m: 9.00, label: "Gemini 3.5 Flash" },
+      "gemini-3.5-flash-lite": { inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 3.5 Flash Lite" },
       "gemini-3.1-flash-lite": { inputUsdPer1m: 0.25, outputUsdPer1m: 1.50, label: "Gemini 3.1 Flash Lite" },
       "gemini-3.1-pro-preview": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
       "gemini-2.5-pro": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
@@ -5918,11 +5922,17 @@
 
     function normalizeAiModel(value) {
       const model = String(value || "").trim();
+      // 저장된 구모델은 "성격"을 유지해 후속으로 넘긴다. flash 계열은 3.6-flash,
+      // lite 계열은 3.5-flash-lite 로. 저렴한 lite 를 쓰던 사용자가 비싼 기본값으로 튀지 않게.
       const legacy = {
         gemini: DEFAULT_AI_MODEL,
         "gemini-pro": DEFAULT_AI_MODEL,
         "gemini-2.5-pro": DEFAULT_AI_MODEL,
         "gemini-3.1-pro": DEFAULT_AI_MODEL,
+        "gemini-2.5-flash": DEFAULT_AI_MODEL,
+        "gemini-3.5-flash": DEFAULT_AI_MODEL,
+        "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
       };
       if (legacy[model]) return legacy[model];
       return AI_MODEL_OPTIONS.some(([id]) => id === model) ? model : DEFAULT_AI_MODEL;
@@ -5960,6 +5970,10 @@
         gemini: DEFAULT_AI_MODEL,
         "gemini-pro": DEFAULT_AI_MODEL,
         "gemini-3.1-pro": DEFAULT_AI_MODEL,
+        "gemini-2.5-flash": DEFAULT_AI_MODEL,
+        "gemini-3.5-flash": DEFAULT_AI_MODEL,
+        "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
       };
       if (legacy[model]) return legacy[model];
       return YUNMI_AI_MODEL_OPTIONS.some(([id]) => id === model) ? model : DEFAULT_AI_MODEL;
@@ -6178,12 +6192,20 @@
       const images = estimateImageCostWon(imageCount, imageModel);
       const totalWon = text.won + images.won;
       const gptMini = estimateTextCostWon("gpt-5.4-mini", wordCount);
+      // 무료 사용량 안내: 표시 금액은 유료 키 기준이다. 무료 티어는 호출 성공까지 요금이
+      // 0원이라 여기서 측정할 수 없고, 대신 일일/분당 호출 한도가 있어 몰아 쓰면 막힌다.
+      // 고품질 모델(3.6 Flash 등)은 출력 토큰이 많아 무료 한도에 더 빨리 도달한다.
+      const isLite = /flash-lite/.test(model);
+      const freeNote = isLite
+        ? "무료 사용량은 요금이 0원이라 위 금액에 잡히지 않습니다. 대신 호출 횟수 한도가 있어 많이 몰아 쓰면 잠시 막힐 수 있습니다."
+        : "무료 사용량은 요금이 0원이라 위 금액에 잡히지 않습니다. 고품질 모델은 긴 글을 반복하면 무료 호출 한도에 빨리 도달해, 저렴한 Flash Lite 보다 일찍 막힐 수 있습니다.";
       target.innerHTML = [
-        `예상 원가 약 ${wonLabel(totalWon)}`,
+        `예상 원가 약 ${wonLabel(totalWon)} (유료 키 기준)`,
         `글 ${wonLabel(text.won)} + ${images.modelLabel} 이미지 ${imageCount}장 ${wonLabel(images.won)}`,
         `이미지 단가: 장당 약 ${wonLabel(wonFromUsd(images.perImageUsd))}`,
         `환율 ${USD_KRW_RATE.toLocaleString("ko-KR")}원/USD (${USD_KRW_RATE_LABEL})`,
         `참고 GPT-5.4 mini 글 비용 ${wonLabel(gptMini.won)} 수준`,
+        freeNote,
       ].map(escapeHtml).join("<br>");
     }
 

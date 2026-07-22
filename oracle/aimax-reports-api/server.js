@@ -37,10 +37,28 @@ const YERI_PROGRESS_STALL_MS = Math.max(5, safeInt(process.env.AIMAX_JOB_PROGRES
 const YERI_RETRY_LIMIT = Number(process.env.AIMAX_YERI_RETRY_LIMIT || 3);
 const YERI_SERVER_GENERATION_ENABLED = envFlag("AIMAX_YERI_SERVER_GENERATION_ENABLED");
 const YERI_SERVER_GENERATION_MOCK = envFlag("AIMAX_YERI_SERVER_GENERATION_MOCK");
-// 2026-07-21: 구글이 gemini-2.5-flash 를 신규 API 키에 대해 404(no longer available to new
-// users) 처리해, 최근 키를 만든 사용자는 글이 한 편도 생성되지 않았다(7/10~7/21, 2명 15건).
-// 기존 키는 아직 유예 중이지만 종료 시점이 공지되지 않아 2.x 를 기본값에서 전부 내린다.
-const YERI_SERVER_GENERATION_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_MODEL || "gemini-3.5-flash").trim();
+// 2026-07-21~22: 구글이 gemini-2.5-flash 를 신규 API 키에 404 처리하며 신규 사용자 생성이 전부
+// 실패했고, 이후 반나절 만에 3.6-flash·3.5-flash-lite 가 새로 생기고 3.5-flash 가 503 과부하에
+// 걸리는 등 모델 목록이 계속 변한다. 특정 모델명에 묶이지 않도록 (1) 선호 순서 체인 (2) 사용자
+// 키로 실제 가용 모델 조회 (3) 런타임 실패 시 다음 후보 자동 전환의 3중 구조로 간다.
+// 체인은 env(AIMAX_YERI_GEMINI_MODEL_CHAIN, 콤마구분)로 코드 배포 없이 조정 가능하다.
+const YERI_GEMINI_MODEL_CHAIN = String(
+  process.env.AIMAX_YERI_GEMINI_MODEL_CHAIN
+    || "gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash",
+).split(",").map((item) => item.trim()).filter(Boolean);
+// 기본 모델 = 체인의 첫 항목. env override 가 있으면 그것을 우선한다.
+const YERI_SERVER_GENERATION_MODEL = String(
+  process.env.AIMAX_YERI_SERVER_GENERATION_MODEL || YERI_GEMINI_MODEL_CHAIN[0] || "gemini-3.6-flash",
+).trim();
+// 가용 모델 조회 캐시 TTL(기본 10분). 조회는 사용자 키별로 하므로 신규/기존 키 차이를 그대로 반영한다.
+const YERI_GEMINI_MODEL_LIST_TTL_MS = Number(process.env.AIMAX_YERI_GEMINI_MODEL_LIST_TTL_MS || 600000);
+// 다음 후보로 넘어갈 수 있는 실패 코드: 모델 은퇴(404), 과부하(5xx), 모델별 무료 한도(429).
+// 인증 실패·결제 고갈·응답 파싱 실패는 다음 모델로 넘겨도 같은 결과라 즉시 중단한다.
+const YERI_GEMINI_CHAIN_FALLBACK_CODES = new Set([
+  "server_generation_model_not_found",
+  "server_generation_provider_transient",
+  "server_generation_rate_limited",
+]);
 const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-4-6").trim();
 const YERI_SERVER_GENERATION_TIMEOUT_MS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_TIMEOUT_MS || 60000);
 const YERI_SERVER_GENERATION_MAX_ATTEMPTS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
@@ -91,12 +109,12 @@ const KEYCHAIN_ACCOUNT = String(process.env.AIMAX_KEYCHAIN_ACCOUNT || "minsu-api
 const LOCAL_KEYRING_SERVICE = String(process.env.AIMAX_KEYRING_SERVICE || "AIMAX").trim();
 const LEGACY_KEYRING_SERVICE = String(process.env.AIMAX_LEGACY_KEYRING_SERVICE || "NaverBlogAuto").trim();
 // 송이는 수집 자료 분석/요약이라 출력이 짧다. 예리(긴 글)와 달리 3.5-flash 를 쓸 이유가 없어
-// 같은 2.x 탈출을 최저가 3.x 인 flash-lite 로 한다(출력 1M 당 $9.00 -> $1.50).
-const SONGI_GEMINI_MODEL = String(process.env.AIMAX_SONGI_GEMINI_MODEL || "gemini-3.1-flash-lite").trim();
+// 송이는 수집 자료 분석/요약이라 출력이 짧다. 예리(긴 글, 3.6-flash)와 달리 저렴한 lite 를 쓴다.
+const SONGI_GEMINI_MODEL = String(process.env.AIMAX_SONGI_GEMINI_MODEL || "gemini-3.5-flash-lite").trim();
 // 기본 fallback 은 무료 등급에서 동작하는 flash. 명시적 "Gemini 2.5 Pro" 선택은
 // normalizeYunmiAiModel 가 가격표 passthrough 로 그대로 honor 하므로 유료 옵션은 보존된다.
 // (모델 없는/레거시 API payload 가 유료 기본값으로 떨어져 무료키 사용자가 실패하던 문제 방지)
-const YUNMI_DEFAULT_AI_MODEL = String(process.env.AIMAX_YUNMI_DEFAULT_AI_MODEL || "gemini-3.5-flash").trim();
+const YUNMI_DEFAULT_AI_MODEL = String(process.env.AIMAX_YUNMI_DEFAULT_AI_MODEL || "gemini-3.6-flash").trim();
 const YUNMI_AI_MOCK_ENABLED = envFlag("AIMAX_YUNMI_AI_MOCK");
 const YUNMI_PUBLIC_ENABLED = envFlag("AIMAX_YUNMI_PUBLIC_ENABLED");
 const YUNMI_DEFAULT_ALLOWED_USERS = [
@@ -260,7 +278,10 @@ const USER_SECRET_PROVIDERS = {
 // 2.x 항목은 선택지에서는 내렸지만 표에는 남긴다. 과거 잡의 비용 표시가 기본값 단가로
 // 뒤바뀌지 않게 하기 위한 것이다(조회 실패 시 YUNMI_DEFAULT_AI_MODEL 단가로 대체되는 구조).
 const YUNMI_AI_MODEL_PRICES = {
+  // 단가 정본: ai.google.dev/gemini-api/docs/pricing (2026-07-22 확인).
+  "gemini-3.6-flash": { provider: "gemini", inputUsdPer1m: 1.50, outputUsdPer1m: 7.50, label: "Gemini 3.6 Flash" },
   "gemini-3.5-flash": { provider: "gemini", inputUsdPer1m: 1.50, outputUsdPer1m: 9.00, label: "Gemini 3.5 Flash" },
+  "gemini-3.5-flash-lite": { provider: "gemini", inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 3.5 Flash Lite" },
   "gemini-3.1-flash-lite": { provider: "gemini", inputUsdPer1m: 0.25, outputUsdPer1m: 1.50, label: "Gemini 3.1 Flash Lite" },
   "gemini-3.1-pro-preview": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
   "gemini-2.5-pro": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
@@ -1712,7 +1733,7 @@ function yeriSelectedModel(payload = {}) {
 
 function normalizeYeriGeminiModel(model) {
   const value = String(model || "").trim();
-  const fallback = YERI_SERVER_GENERATION_MODEL || "gemini-3.5-flash";
+  const fallback = YERI_SERVER_GENERATION_MODEL || "gemini-3.6-flash";
   // 기본/제네릭/접미사 없는 레거시값(2.5 Pro, 3.1 Pro)은 현재 기본 모델로 통일.
   // UI 선택지 값은 "gemini-3.1-pro-preview"(접미사 포함)라, 접미사 없는 "gemini-3.1-pro"는
   // 명시 선택이 아니라 자동/레거시값 → 기본값 안전 (runner app.py/_LEGACY_AI_MODEL_MAP 과 일치).
@@ -1730,6 +1751,61 @@ function normalizeYeriGeminiModel(model) {
     "gemini-3.1-pro": fallback,
   };
   return aliases[value] || (value.startsWith("gemini-") ? value : fallback);
+}
+
+// 사용자 키로 조회한 "실제 generateContent 가능한 Gemini 모델" Set. 캐시 miss 이거나 만료면
+// ListModels 를 한 번 호출한다. 조회 실패(네트워크/일시 오류)면 null 을 캐시해 다음 요청이
+// 폴백 체인만으로 진행하게 한다(기존 동작 보존, 조회가 생성을 막지 않는다).
+const geminiModelListCache = new Map();
+
+async function fetchAvailableGeminiModels(apiKey) {
+  const key = String(apiKey || "");
+  if (!key) return null;
+  const keyHash = crypto.createHash("sha256").update(key).digest("hex").slice(0, 16);
+  const now = Date.now();
+  const cached = geminiModelListCache.get(keyHash);
+  if (cached && cached.expiresAt > now) return cached.models;
+  let models = null;
+  try {
+    const res = await requestExternalJson(
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+      { method: "GET", headers: { "x-goog-api-key": key }, timeoutMs: 8000, maxBytes: 2 * 1024 * 1024 },
+    );
+    const list = Array.isArray(res.json?.models) ? res.json.models : [];
+    const set = new Set();
+    for (const item of list) {
+      const methods = Array.isArray(item?.supportedGenerationMethods) ? item.supportedGenerationMethods : [];
+      if (!methods.includes("generateContent")) continue;
+      const name = String(item?.name || "").replace(/^models\//, "").trim();
+      if (name) set.add(name);
+    }
+    models = set.size ? set : null;
+  } catch (error) {
+    // 조회 실패는 치명적이지 않다. 폴백 체인이 런타임에 걸러준다.
+    console.warn("[yeri-hybrid] gemini ListModels failed", error?.status || error?.code || error?.message || "unknown");
+    models = null;
+  }
+  geminiModelListCache.set(keyHash, { expiresAt: now + YERI_GEMINI_MODEL_LIST_TTL_MS, models });
+  return models;
+}
+
+// 선호 모델 + 폴백 체인을 합쳐 실제 시도 순서를 만든다. 가용 Set 이 있으면 그 안에 있는 것만
+// 남기고, 조회 실패(null)이거나 하나도 안 맞으면 선호+체인 원본 순서를 반환한다(런타임 폴백이 판단).
+function yeriGeminiModelCandidates(preferred, availableSet) {
+  const seen = new Set();
+  const ordered = [];
+  const push = (candidate) => {
+    const value = String(candidate || "").trim();
+    if (value && !seen.has(value)) {
+      seen.add(value);
+      ordered.push(value);
+    }
+  };
+  push(preferred);
+  for (const model of YERI_GEMINI_MODEL_CHAIN) push(model);
+  if (!(availableSet instanceof Set)) return ordered;
+  const usable = ordered.filter((model) => availableSet.has(model));
+  return usable.length ? usable : ordered;
 }
 
 function yeriServerGenerationProviderIssue(payload = {}, mode = yeriServerGenerationMode()) {
@@ -1751,10 +1827,15 @@ function yeriServerGenerationTextModel(payload = {}) {
   return normalizeYeriGeminiModel(selected);
 }
 
+// 폴백 체인에서 주어진 모델의 "다음 후보"를 반환한다. 체인에 없거나 마지막이면 체인 첫 항목
+// (단, 자기 자신이면 빈 값)으로. yeriGeminiModelCandidates 가 정식 경로이고 이 함수는 단발
+// 폴백/테스트 호환용이다.
 function yeriGeminiFallbackModel(model) {
   const primary = String(model || "").trim();
-  const fallback = String(YERI_SERVER_GENERATION_MODEL || "gemini-3.5-flash").trim() || "gemini-3.5-flash";
-  return primary && primary !== fallback ? fallback : "";
+  const idx = YERI_GEMINI_MODEL_CHAIN.indexOf(primary);
+  if (idx >= 0 && idx < YERI_GEMINI_MODEL_CHAIN.length - 1) return YERI_GEMINI_MODEL_CHAIN[idx + 1];
+  const first = YERI_GEMINI_MODEL_CHAIN[0] || YERI_SERVER_GENERATION_MODEL || "gemini-3.6-flash";
+  return primary && primary !== first ? first : "";
 }
 
 function canUseYeriServerGeneration(user) {
@@ -2516,9 +2597,11 @@ async function generateYeriGeminiArtifact(job, userId) {
     error.code = "yeri_gemini_key_missing";
     throw error;
   }
-  const model = yeriServerGenerationTextModel(job.payload || {});
-  let response;
-  let usedModel = model;
+  const preferred = yeriServerGenerationTextModel(job.payload || {});
+  // 사용자 키로 실제 가용 모델을 조회해(캐시) 이미 은퇴한 모델을 후보에서 미리 제거한다.
+  // 조회 실패 시 candidates 는 선호+체인 원본이 되고, 런타임 실패가 다음 후보로 넘긴다.
+  const availableModels = await fetchAvailableGeminiModels(apiKey);
+  const candidates = yeriGeminiModelCandidates(preferred, availableModels);
   const requestGemini = (targetModel) => requestYeriProviderJson("gemini", `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent`, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey },
@@ -2546,21 +2629,35 @@ async function generateYeriGeminiArtifact(job, userId) {
     maxBytes: 1024 * 1024,
     onTransientRetry: yeriTransientRetryLogger("gemini", job, userId),
   });
-  try {
-    response = await requestGemini(model);
-  } catch (error) {
-    const fallbackModel = yeriGeminiFallbackModel(model);
-    if (!fallbackModel || !["server_generation_provider_transient", "server_generation_model_not_found"].includes(String(error?.code || ""))) {
+  let response;
+  let usedModel = candidates[0];
+  let lastError = null;
+  for (let i = 0; i < candidates.length; i += 1) {
+    const targetModel = candidates[i];
+    try {
+      response = await requestGemini(targetModel);
+      usedModel = targetModel;
+      break;
+    } catch (error) {
+      lastError = error;
+      const code = String(error?.code || "");
+      const hasNext = i < candidates.length - 1;
+      // 은퇴(404)/과부하(5xx)/모델별 한도(429)면 다음 후보로. 인증·결제·응답오류는 즉시 중단.
+      if (hasNext && YERI_GEMINI_CHAIN_FALLBACK_CODES.has(code)) {
+        console.warn("[yeri-hybrid] gemini chain fallback", {
+          from: targetModel,
+          to: candidates[i + 1],
+          code,
+          status: Number(error.status || 0),
+        });
+        appendJobLogById(job?.id, userId, "warn", `Gemini ${targetModel} 사용 불가(${code}) - ${candidates[i + 1]}(으)로 자동 전환`);
+        continue;
+      }
       throw error;
     }
-    console.warn("[yeri-hybrid] gemini fallback", {
-      primary_model: model,
-      fallback_model: fallbackModel,
-      code: error.code || "",
-      status: Number(error.status || 0),
-    });
-    usedModel = fallbackModel;
-    response = await requestGemini(fallbackModel);
+  }
+  if (!response) {
+    throw lastError || yeriProviderError("gemini", "server_generation_provider_error", "AI 글 생성 오류가 발생했습니다.");
   }
   const text = extractGeminiText(response.json);
   const parsed = parseYeriGeneratedJson(text, "yeri_gemini", {
