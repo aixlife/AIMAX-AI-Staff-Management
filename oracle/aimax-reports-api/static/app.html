@@ -4991,8 +4991,9 @@
     };
     const SONGI_META_ADS_MIN_RESULTS = 10;
     const AI_MODEL_OPTIONS = [
-      ["gemini-3.6-flash", "Gemini 3.6 Flash (기본/고품질, 약 32원/글)"],
-      ["gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite (가장 빠르고 저렴, 약 3.5원/글·글이 짧음)"],
+      // 원화 비용은 글자수마다 달라 라벨에 고정하지 않는다. 실행 전 비용창이 실제 글자수로 계산해 보여준다.
+      ["gemini-3.6-flash", "Gemini 3.6 Flash (기본/고품질)"],
+      ["gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite (가장 빠르고 저렴/글이 짧음)"],
       ["gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview (유료/고급)"],
       ["gpt-5.4-mini", "GPT-5.4 mini"],
       ["gpt-5-mini", "GPT-5 mini"],

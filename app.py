@@ -4869,8 +4869,8 @@ class NaverBlogApp:
             bg=COLORS["card_bg"], fg=COLORS["text_secondary"], anchor="w",
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
-            ("gemini-3.6-flash",       "Gemini 3.6 Flash  (고품질, 약 32원/글)  ★ 기본"),
-            ("gemini-3.5-flash-lite",  "Gemini 3.5 Flash Lite  (가장 빠르고 저렴 약 3.5원/글, 글이 짧음)"),
+            ("gemini-3.6-flash",       "Gemini 3.6 Flash  (고품질)  ★ 기본"),
+            ("gemini-3.5-flash-lite",  "Gemini 3.5 Flash Lite  (가장 빠르고 저렴/글이 짧음)"),
             ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (~44원/글, 유료/고급)"),
             ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
             ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),
