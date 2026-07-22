@@ -379,6 +379,7 @@ _AI_TEXT_PRICE_USD_PER_1M = {
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50, "label": "Gemini 2.5 Flash"},
     "claude": {"input": 3.00, "output": 15.00, "label": "Claude Sonnet"},
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50, "label": "GPT-5.4 mini"},
+    "gpt-5.4-nano": {"input": 0.20, "output": 1.25, "label": "GPT-5.4 nano"},
     "gpt-5-mini": {"input": 0.25, "output": 2.00, "label": "GPT-5 mini"},
 }
 _LEGACY_AI_MODEL_MAP = {
@@ -397,6 +398,8 @@ _LEGACY_AI_MODEL_MAP = {
     "gemini-3.5-flash": _DEFAULT_AI_MODEL,
     "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
+    # 2026-07-22: 구형 gpt-5-mini는 provider 유지하며 저렴한 후속 gpt-5.4-nano로.
+    "gpt-5-mini": "gpt-5.4-nano",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -421,7 +424,7 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gpt-5.4-mini", "gpt-5-mini"):
+    if value in ("claude", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gpt-5.4-mini", "gpt-5.4-nano"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 
@@ -4872,9 +4875,9 @@ class NaverBlogApp:
             ("gemini-3.6-flash",       "Gemini 3.6 Flash  (고품질)  ★ 기본"),
             ("gemini-3.5-flash-lite",  "Gemini 3.5 Flash Lite  (가장 빠르고 저렴/글이 짧음)"),
             ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (~44원/글, 유료/고급)"),
-            ("gpt-5.4-mini",           "GPT-5.4 mini  (~21원/글)"),
-            ("gpt-5-mini",             "GPT-5 mini  (~9원/글)"),
-            ("claude",                 "Claude Sonnet  (~70원/글)"),
+            ("gpt-5.4-mini",           "GPT-5.4 mini  (~9원/글)"),
+            ("gpt-5.4-nano",           "GPT-5.4 nano  (~3원/글, 가장 저렴)"),
+            ("claude",                 "Claude Sonnet 5  (~40원/글, 문체 자연스러움)"),
         ]
         self.ai_model_var.set(_normalize_ai_model(self.ai_model_var.get()))
 

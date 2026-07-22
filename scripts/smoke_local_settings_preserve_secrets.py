@@ -37,12 +37,12 @@ def check_module(module) -> None:
             "apify-secret-before",
         )
 
-        module.save_local_security_settings("naver-after", "naver-pw-after", "gpt-5-mini")
+        module.save_local_security_settings("naver-after", "naver-pw-after", "gpt-5.4-nano")
         loaded = module.load_settings()
         assert loaded[0] == "naver-after"
         assert loaded[1] == "naver-pw-after"
         assert loaded[2] == "gemini-secret-before"
-        assert loaded[3] == "gpt-5-mini"
+        assert loaded[3] == "gpt-5.4-nano"
         assert loaded[4] == "claude-secret-before"
         assert loaded[5] == "openai-secret-before"
         assert loaded[6] == "apify-secret-before"

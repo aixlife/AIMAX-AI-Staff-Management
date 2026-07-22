@@ -87,3 +87,16 @@
 ## Backlog: 세무 직원(세금계산서 발행) 추가 (2026-07-10)
 - 팝빌 기반 세금계산서 발행 AI 직원 추가가 대기 중이다. 스펙: `claudedocs/tax-employee-popbill-integration-2026-07-10.md`. 첫 사용자는 윤대표.
 - "세무 직원", "세금계산서 직원" 언급 시 이 스펙을 먼저 제안한다.
+
+## Model Freshness Check
+- 트리거: 이 저장소에서 "모델 업데이트 확인", "최신 모델 확인해줘", "모델 최신인지 봐줘" 등
+  → 3사(Gemini/OpenAI/Anthropic) 최신 모델·가격을 무료 조회로 점검하고 AIMAX 하드코딩과의 델타를 보고.
+- 무료 점검 절차: (1) provider ListModels — Gemini `GET /v1beta/models`, OpenAI `GET /v1/models`,
+  Anthropic `GET /v1/models` (회사 키는 Keychain, 값 노출 금지) (2) 공식 가격 문서 확인
+  (3) AIMAX 현행 대조 — server.js `YERI_*/SONGI_*/YUNMI_*` 상수·`YERI_GEMINI_MODEL_CHAIN`,
+  static/app.html `AI_MODEL_OPTIONS`·`YUNMI_AI_MODEL_OPTIONS`·`IMAGE_MODEL_OPTIONS`·`AI_MODEL_PRICES`,
+  app.py `_AI_MODELS`·`_AI_TEXT_PRICE_USD_PER_1M` (4) 은퇴·과부하·신규·가격변동 델타를 표로 보고.
+- 유료 실측(속도·비용·품질 생성 테스트)은 무료 점검에 넣지 않는다. 교체가 필요해 보이면
+  예상 비용을 산정해 CEO 승인 후 실측한다(무료 티어 없는 gpt/claude는 매 호출 과금).
+- 기본값은 실측으로 검증된 현행 세대만. 특정 모델명 하드코딩 대신 server.js의 가용 모델
+  조회+폴백 체인 구조를 우선한다(2026-07-22 Gemini 신규키 404 사고 교훈).

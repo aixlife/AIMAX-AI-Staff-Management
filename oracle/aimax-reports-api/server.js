@@ -59,7 +59,9 @@ const YERI_GEMINI_CHAIN_FALLBACK_CODES = new Set([
   "server_generation_provider_transient",
   "server_generation_rate_limited",
 ]);
-const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-4-6").trim();
+// 2026-07-22: claude-sonnet-4-6(이전 세대) -> claude-sonnet-5(현행). 실측에서 문체가 가장
+// 자연스러움(34초/40원). 실측·가격 근거: 세션 리포트, docs/pricing 2026-07-22.
+const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-5").trim();
 const YERI_SERVER_GENERATION_TIMEOUT_MS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_TIMEOUT_MS || 60000);
 const YERI_SERVER_GENERATION_MAX_ATTEMPTS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
 const YERI_SERVER_GENERATION_ALLOWED_USER_IDENTIFIERS = new Set(
@@ -287,6 +289,7 @@ const YUNMI_AI_MODEL_PRICES = {
   "gemini-2.5-pro": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
   "gemini-2.5-flash": { provider: "gemini", inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
   "gpt-5.4-mini": { provider: "openai", inputUsdPer1m: 0.75, outputUsdPer1m: 4.50, label: "GPT-5.4 mini" },
+  "gpt-5.4-nano": { provider: "openai", inputUsdPer1m: 0.20, outputUsdPer1m: 1.25, label: "GPT-5.4 nano" },
   "gpt-5-mini": { provider: "openai", inputUsdPer1m: 0.25, outputUsdPer1m: 2.00, label: "GPT-5 mini" },
   claude: { provider: "claude", inputUsdPer1m: 3.00, outputUsdPer1m: 15.00, label: "Claude Sonnet" },
 };
