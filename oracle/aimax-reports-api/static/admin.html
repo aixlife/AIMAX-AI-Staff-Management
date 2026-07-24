@@ -952,6 +952,8 @@
 
     tbody tr:hover .action-cell { background: var(--brand-faint); }
 
+    td.action-cell.menu-open { z-index: 5; }
+
     th.action-cell {
       background: var(--surface-soft);
       z-index: 3;
@@ -1556,6 +1558,7 @@
       reportFilter: "all",
       activeTab: "buyers",
       openUserMenu: null,
+      drawerOpen: false,
     };
 
     const statusLabels = {
@@ -1984,6 +1987,7 @@
       const summary = menu.querySelector("summary");
       const panel = menu.querySelector(".action-menu__panel");
       if (!summary || !panel) return;
+      menu.closest("td")?.classList.add("menu-open");
       const rect = summary.getBoundingClientRect();
       const panelHeight = panel.offsetHeight;
       const panelWidth = panel.offsetWidth;
@@ -2058,6 +2062,7 @@
       });
       $$("[data-user-menu]").forEach((menu) => {
         menu.addEventListener("toggle", () => {
+          if (!menu.open) menu.closest("td")?.classList.remove("menu-open");
           if (menu.open) {
             state.openUserMenu = menu.dataset.userMenu;
             $$("[data-user-menu]").forEach((other) => {
@@ -2604,6 +2609,7 @@
     }
 
     function openReportDrawer() {
+      state.drawerOpen = true;
       $("#reportDrawerBackdrop").classList.add("open");
       $("#reportDrawer").classList.add("open");
       $("#reportDrawer").setAttribute("aria-hidden", "false");
@@ -2611,6 +2617,7 @@
     }
 
     function closeReportDrawer() {
+      state.drawerOpen = false;
       $("#reportDrawerBackdrop").classList.remove("open");
       $("#reportDrawer").classList.remove("open");
       $("#reportDrawer").setAttribute("aria-hidden", "true");
@@ -2719,7 +2726,7 @@
       `;
       fillReportSupportForm(summary);
       setSelectedReportActions();
-      openReportDrawer();
+      if (state.drawerOpen) openReportDrawer();
     }
 
     function guideText(email, password, product) {
