@@ -524,12 +524,78 @@
     .pill.warn { background: var(--warning-soft); color: var(--warning); border-color: #eddaa7; }
     .pill.bad { background: var(--critical-soft); color: var(--critical); border-color: #f1cbc6; }
 
-    #catalogSummary {
-      white-space: normal;
-      line-height: 1.5;
-      padding-top: 4px;
-      padding-bottom: 4px;
+    .catalog-summary {
+      max-width: 340px;
+      text-align: right;
+      line-height: 1.6;
     }
+
+    /* ---------- 권한 일괄 추가 ---------- */
+
+    .grant-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+    }
+
+    .grant-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface-soft);
+    }
+
+    .grant-card__copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .grant-card .btn { flex: 0 0 auto; }
+
+    /* ---------- 직원 권한 드롭다운 ---------- */
+
+    .action-menu { min-width: 0; }
+
+    .action-menu summary {
+      list-style: none;
+      user-select: none;
+    }
+
+    .action-menu summary::-webkit-details-marker { display: none; }
+
+    .action-menu summary svg {
+      width: 15px;
+      height: 15px;
+      transition: transform var(--motion-fast) var(--ease-out);
+    }
+
+    .action-menu[open] summary {
+      border-color: var(--brand);
+      color: var(--brand-strong);
+      background: var(--brand-soft);
+    }
+
+    .action-menu[open] summary svg { transform: rotate(180deg); }
+
+    .action-menu__panel {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      width: 300px;
+      max-width: 100%;
+      margin-top: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: var(--surface-soft);
+    }
+
+    .action-menu__panel .btn { min-width: 0; }
 
     /* ---------- 직원 카탈로그 ---------- */
 
@@ -564,11 +630,41 @@
       gap: 6px;
     }
 
+    .catalog-downloads { border-top: 1px solid var(--line); }
+
+    .catalog-downloads summary {
+      list-style: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 8px 0 2px;
+      color: var(--brand-strong);
+      font-size: 13px;
+      font-weight: 760;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .catalog-downloads summary::-webkit-details-marker { display: none; }
+
+    .catalog-downloads summary::after {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-right: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      transform: rotate(45deg) translateY(-2px);
+      transition: transform var(--motion-fast) var(--ease-out);
+    }
+
+    .catalog-downloads[open] summary::after {
+      transform: rotate(225deg) translateY(-2px);
+    }
+
     .catalog-options {
       display: grid;
       gap: 6px;
       padding-top: 6px;
-      border-top: 1px solid var(--line);
     }
 
     .catalog-option {
@@ -695,7 +791,7 @@
 
     tr:last-child td { border-bottom: 0; }
 
-    .users-table { min-width: 1180px; }
+    .users-table { min-width: 1060px; }
     .orders-table { min-width: 1120px; }
     .orders-table .order-select-col { width: 48px; text-align: center; }
     .orders-table .order-product-col { width: 150px; }
@@ -771,7 +867,7 @@
     .action-cell {
       position: sticky;
       right: 0;
-      min-width: 230px;
+      min-width: 340px;
       background: var(--surface);
       box-shadow: -8px 0 16px rgba(23, 33, 28, .06);
       z-index: 2;
@@ -1146,17 +1242,39 @@
     </div>
 
     <div id="staffTab" class="tab-panel hidden" data-admin-tab-panel="staff">
-      <section class="panel">
-        <div class="row">
-          <div>
-            <h2>직원 권한 일괄 추가</h2>
-            <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 권한형 직원 권한만 추가합니다. 원회원 전용 직원은 메이크패밀리 원회원 계정에만 동기화합니다.</p>
+      <section class="panel stack">
+        <div>
+          <h2>직원 권한 일괄 추가</h2>
+          <p class="small">기존 활성 계정의 구매 상품은 유지하고, 선택한 직원 권한만 추가합니다. 원회원 전용 직원은 메이크패밀리 원회원 계정에만 동기화합니다.</p>
+        </div>
+        <div class="grant-grid">
+          <div class="grant-card">
+            <div class="grant-card__copy">
+              <strong>전체 통합</strong>
+              <span class="small muted">메이크패밀리 원회원 대상</span>
+            </div>
+            <button id="grantBundleAllBtn" class="btn" type="button">권한 추가</button>
           </div>
-          <div class="actions">
-            <button id="grantBundleAllBtn" class="btn primary" type="button">메이크패밀리 원회원에게 전체 통합 권한 추가</button>
-            <button id="grantSongiAllBtn" class="btn primary" type="button">활성 사용자에게 송이 권한 추가</button>
-            <button id="grantSangsuMembersBtn" class="btn primary" type="button">메이크패밀리 원회원에게 상수 권한 추가</button>
-            <button id="grantEunseoMembersBtn" class="btn primary" type="button">메이크패밀리 원회원에게 은서 권한 추가</button>
+          <div class="grant-card">
+            <div class="grant-card__copy">
+              <strong>송이</strong>
+              <span class="small muted">활성 사용자 전체 대상</span>
+            </div>
+            <button id="grantSongiAllBtn" class="btn" type="button">권한 추가</button>
+          </div>
+          <div class="grant-card">
+            <div class="grant-card__copy">
+              <strong>상수</strong>
+              <span class="small muted">메이크패밀리 원회원 대상</span>
+            </div>
+            <button id="grantSangsuMembersBtn" class="btn" type="button">권한 추가</button>
+          </div>
+          <div class="grant-card">
+            <div class="grant-card__copy">
+              <strong>은서</strong>
+              <span class="small muted">메이크패밀리 원회원 대상</span>
+            </div>
+            <button id="grantEunseoMembersBtn" class="btn" type="button">권한 추가</button>
           </div>
         </div>
         <div id="grantProductResult" class="notice warn">은서는 무료 공개가 아니라 원회원 전용입니다. 웹앱과 Mac 다운로드는 로그인한 원회원 계정에서만 열립니다.</div>
@@ -1168,7 +1286,7 @@
             <h2>직원 카탈로그</h2>
             <p class="small">운영 서버 기준 직원, 실행 방식, 작업 연결 상태입니다.</p>
           </div>
-          <span id="catalogSummary" class="pill">확인 중</span>
+          <span id="catalogSummary" class="small muted catalog-summary">확인 중</span>
         </div>
         <div id="workerCatalogGrid" class="catalog-grid"></div>
       </section>
@@ -1355,6 +1473,7 @@
       selectedReportDetail: null,
       reportFilter: "all",
       activeTab: "buyers",
+      openUserMenus: new Set(),
     };
 
     const statusLabels = {
@@ -1629,6 +1748,8 @@
       const options = workerExecutionOptions(worker);
       if (!options.length) return "";
       return `
+        <details class="catalog-downloads">
+          <summary>실행 옵션 ${options.length}개 보기</summary>
         <div class="catalog-options">
           ${options.map((option) => {
             const platforms = Array.isArray(option.platforms) && option.platforms.length
@@ -1649,6 +1770,7 @@
             `;
           }).join("")}
         </div>
+        </details>
       `;
     }
 
@@ -1799,15 +1921,20 @@
           </td>
           <td class="action-cell">
             <div class="actions">
-              ${state.products.map((item) => {
-                const disabled = item.member_only && !isMakefamilyMemberUser(user);
-                return `
-                <button class="btn ${userProducts(user).has(item.product) ? "active" : ""}" type="button" data-action="product" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(item.product)}" ${disabled ? "disabled" : ""} title="${disabled ? "원회원 전용 직원입니다." : ""}">${escapeHtml(item.label)}</button>
-              `;
-              }).join("")}
-              <button class="btn" type="button" data-action="reset" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(user.product || "bundle")}">비번 재발급</button>
-              <button class="btn" type="button" data-action="expire" data-email="${escapeHtml(user.email)}">만료</button>
-              <button class="btn danger" type="button" data-action="delete" data-email="${escapeHtml(user.email)}">삭제</button>
+              <details class="action-menu" data-user-menu="${escapeHtml(user.email)}" ${state.openUserMenus.has(user.email) ? "open" : ""}>
+                <summary class="btn compact">직원 권한 ${state.products.filter((item) => userProducts(user).has(item.product)).length}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+                <div class="action-menu__panel">
+                  ${state.products.map((item) => {
+                    const disabled = item.member_only && !isMakefamilyMemberUser(user);
+                    return `
+                    <button class="btn compact ${userProducts(user).has(item.product) ? "active" : ""}" type="button" data-action="product" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(item.product)}" ${disabled ? "disabled" : ""} title="${disabled ? "원회원 전용 직원입니다." : ""}">${escapeHtml(item.label)}</button>
+                  `;
+                  }).join("")}
+                </div>
+              </details>
+              <button class="btn compact" type="button" data-action="reset" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(user.product || "bundle")}">비번 재발급</button>
+              <button class="btn compact" type="button" data-action="expire" data-email="${escapeHtml(user.email)}">만료</button>
+              <button class="btn compact danger" type="button" data-action="delete" data-email="${escapeHtml(user.email)}">삭제</button>
             </div>
           </td>
         </tr>
@@ -1826,6 +1953,12 @@
       });
       $$("[data-action='delete']").forEach((button) => {
         button.addEventListener("click", () => deleteUser(button.dataset.email));
+      });
+      $$("[data-user-menu]").forEach((menu) => {
+        menu.addEventListener("toggle", () => {
+          if (menu.open) state.openUserMenus.add(menu.dataset.userMenu);
+          else state.openUserMenus.delete(menu.dataset.userMenu);
+        });
       });
     }
 
