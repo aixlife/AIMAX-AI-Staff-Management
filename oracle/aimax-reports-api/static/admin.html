@@ -583,19 +583,74 @@
     .action-menu[open] summary svg { transform: rotate(180deg); }
 
     .action-menu__panel {
+      position: fixed;
+      z-index: 26;
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 6px;
-      width: 300px;
-      max-width: 100%;
-      margin-top: 8px;
-      padding: 10px;
+      gap: 3px;
+      width: 210px;
+      max-height: min(55vh, 400px);
+      overflow: auto;
+      padding: 7px;
       border: 1px solid var(--line);
       border-radius: var(--radius-md);
-      background: var(--surface-soft);
+      background: var(--surface);
+      box-shadow: var(--shadow-panel);
     }
 
-    .action-menu__panel .btn { min-width: 0; }
+    .action-menu__panel .btn {
+      min-width: 0;
+      justify-content: space-between;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    .action-menu__panel .btn:hover:not(:disabled) {
+      background: var(--surface-soft);
+      border-color: var(--line);
+    }
+
+    .action-menu__check {
+      color: var(--brand-strong);
+      font-weight: 900;
+    }
+
+    /* ---------- 세그먼트 토글 ---------- */
+
+    .segmented {
+      width: fit-content;
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-pill);
+      background: var(--surface);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .segmented__btn {
+      appearance: none;
+      min-height: 36px;
+      padding: 0 20px;
+      border: 0;
+      border-radius: var(--radius-pill);
+      background: transparent;
+      color: var(--muted-strong);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 780;
+      cursor: pointer;
+      transition:
+        color var(--motion-fast) var(--ease-out),
+        background var(--motion-fast) var(--ease-out);
+    }
+
+    .segmented__btn:hover:not(.active) { color: var(--ink); background: var(--surface-soft); }
+
+    .segmented__btn.active {
+      color: #ffffff;
+      background: var(--brand);
+      box-shadow: 0 4px 12px rgba(15, 118, 110, 0.22);
+    }
 
     /* ---------- 직원 카탈로그 ---------- */
 
@@ -853,8 +908,30 @@
       color: var(--muted-strong);
       font-size: 12px;
       font-weight: 800;
-      white-space: nowrap;
+      line-height: 1.4;
       cursor: pointer;
+    }
+
+    .checkline--form {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ink-soft);
+    }
+
+    .toolbar--orders {
+      grid-template-columns: 200px 180px auto 1fr;
+    }
+
+    .toolbar--orders .checkline {
+      align-self: end;
+      margin: 0;
+      padding-bottom: 11px;
+    }
+
+    .toolbar--orders .actions {
+      align-self: end;
+      justify-content: flex-end;
     }
 
     .checkline input {
@@ -1145,7 +1222,12 @@
     </div>
 
     <div id="registerTab" class="tab-panel hidden" data-admin-tab-panel="register">
-      <section class="grid">
+      <div class="segmented" role="group" aria-label="등록 방식">
+        <button type="button" class="segmented__btn active" data-register-mode="single">1명 등록</button>
+        <button type="button" class="segmented__btn" data-register-mode="bulk">여러 명 등록</button>
+      </div>
+
+      <section class="grid" data-register-panel="single">
         <form id="provisionForm" class="panel span-5 stack">
           <div>
             <h2>구매자 등록</h2>
@@ -1175,8 +1257,8 @@
             <label for="buyerNote">운영 메모</label>
             <textarea id="buyerNote" placeholder="선택"></textarea>
           </div>
-          <label class="row" style="justify-content:flex-start;">
-            <input id="buyerResetPassword" type="checkbox" style="width:auto;">
+          <label class="checkline checkline--form">
+            <input id="buyerResetPassword" type="checkbox">
             <span>기존 사용자도 임시 비밀번호 재발급</span>
           </label>
           <button class="btn primary" type="submit">계정 등록</button>
@@ -1197,7 +1279,7 @@
         </section>
       </section>
 
-      <section class="grid">
+      <section class="grid hidden" data-register-panel="bulk">
         <form id="bulkForm" class="panel span-5 stack">
           <div>
             <h2>여러 구매자 등록</h2>
@@ -1219,8 +1301,8 @@
             <label for="bulkBuyers">구매자 목록</label>
             <textarea id="bulkBuyers" placeholder="buyer1@example.com, 홍길동&#10;member1@example.com, 김민수, 상수, , 메이크패밀리&#10;buyer3@example.com, 이예리, yeri, , 유료"></textarea>
           </div>
-          <label class="row" style="justify-content:flex-start;">
-            <input id="bulkResetPassword" type="checkbox" style="width:auto;">
+          <label class="checkline checkline--form">
+            <input id="bulkResetPassword" type="checkbox">
             <span>기존 사용자도 모두 임시 비밀번호 재발급</span>
           </label>
           <button class="btn primary" type="submit">여러 계정 등록</button>
@@ -1304,7 +1386,7 @@
               <button id="refreshCafe24OrdersBtn" class="btn" type="button">갱신</button>
             </div>
           </div>
-          <div class="toolbar">
+          <div class="toolbar toolbar--orders">
             <div class="field">
               <label for="orderStatusFilter">처리 상태</label>
               <select id="orderStatusFilter">
@@ -1320,11 +1402,11 @@
               <label for="orderExpires">공통 만료일</label>
               <input id="orderExpires" type="date">
             </div>
-            <label class="checkline" style="align-self:end; margin:0 0 9px;">
+            <label class="checkline">
               <input id="orderResetPassword" type="checkbox">
               기존 계정도 비번 재발급
             </label>
-            <div class="actions" style="align-self:end;">
+            <div class="actions">
               <button id="provisionCafe24OrdersBtn" class="btn primary" type="button">선택 계정 생성</button>
               <button id="sendCafe24GuidesBtn" class="btn primary" type="button" disabled>생성 안내문 발송</button>
             </div>
@@ -1473,7 +1555,7 @@
       selectedReportDetail: null,
       reportFilter: "all",
       activeTab: "buyers",
-      openUserMenus: new Set(),
+      openUserMenu: null,
     };
 
     const statusLabels = {
@@ -1799,8 +1881,8 @@
             </div>
             <div class="catalog-pills">
               ${executionPill(worker.execution || worker.type)}
-              <span class="pill">${escapeHtml(worker.product || "-")}</span>
-              <span class="pill">${escapeHtml(apiMode)}</span>
+              ${worker.product ? `<span class="pill">${escapeHtml(worker.product)}</span>` : ""}
+              ${apiMode !== "-" ? `<span class="pill">${escapeHtml(apiMode)}</span>` : ""}
               <span class="pill ${jobKind?.queue === false ? "ok" : ""}">${escapeHtml(queue)}</span>
               ${workerAccessPills(worker)}
             </div>
@@ -1898,6 +1980,25 @@
         : `<span class="pill warn">미연결</span>`;
     }
 
+    function positionUserMenu(menu) {
+      const summary = menu.querySelector("summary");
+      const panel = menu.querySelector(".action-menu__panel");
+      if (!summary || !panel) return;
+      const rect = summary.getBoundingClientRect();
+      const panelHeight = panel.offsetHeight;
+      const panelWidth = panel.offsetWidth;
+      const openUp = rect.bottom + panelHeight + 8 > window.innerHeight && rect.top - panelHeight - 8 > 0;
+      const top = openUp ? rect.top - panelHeight - 6 : rect.bottom + 6;
+      const left = Math.max(8, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 8));
+      panel.style.top = `${Math.round(top)}px`;
+      panel.style.left = `${Math.round(left)}px`;
+    }
+
+    function closeUserMenu() {
+      const openMenu = document.querySelector(".action-menu[open]");
+      if (openMenu) openMenu.open = false;
+    }
+
     function renderUsers() {
       $("#resultCount").textContent = `${state.users.length}명`;
       $("#usersBody").innerHTML = state.users.length ? state.users.map((user) => `
@@ -1921,13 +2022,14 @@
           </td>
           <td class="action-cell">
             <div class="actions">
-              <details class="action-menu" data-user-menu="${escapeHtml(user.email)}" ${state.openUserMenus.has(user.email) ? "open" : ""}>
+              <details class="action-menu" data-user-menu="${escapeHtml(user.email)}" ${state.openUserMenu === user.email ? "open" : ""}>
                 <summary class="btn compact">직원 권한 ${state.products.filter((item) => userProducts(user).has(item.product)).length}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
                 <div class="action-menu__panel">
                   ${state.products.map((item) => {
                     const disabled = item.member_only && !isMakefamilyMemberUser(user);
+                    const active = userProducts(user).has(item.product);
                     return `
-                    <button class="btn compact ${userProducts(user).has(item.product) ? "active" : ""}" type="button" data-action="product" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(item.product)}" ${disabled ? "disabled" : ""} title="${disabled ? "원회원 전용 직원입니다." : ""}">${escapeHtml(item.label)}</button>
+                    <button class="btn compact ${active ? "active" : ""}" type="button" data-action="product" data-email="${escapeHtml(user.email)}" data-product="${escapeHtml(item.product)}" ${disabled ? "disabled" : ""} title="${disabled ? "원회원 전용 직원입니다." : ""}"><span>${escapeHtml(item.label)}</span>${active ? `<span class="action-menu__check">✓</span>` : ""}</button>
                   `;
                   }).join("")}
                 </div>
@@ -1956,10 +2058,22 @@
       });
       $$("[data-user-menu]").forEach((menu) => {
         menu.addEventListener("toggle", () => {
-          if (menu.open) state.openUserMenus.add(menu.dataset.userMenu);
-          else state.openUserMenus.delete(menu.dataset.userMenu);
+          if (menu.open) {
+            state.openUserMenu = menu.dataset.userMenu;
+            $$("[data-user-menu]").forEach((other) => {
+              if (other !== menu && other.open) other.open = false;
+            });
+            positionUserMenu(menu);
+          } else if (state.openUserMenu === menu.dataset.userMenu) {
+            state.openUserMenu = null;
+          }
         });
       });
+      if (state.openUserMenu) {
+        const openMenu = document.querySelector(`[data-user-menu="${CSS.escape(state.openUserMenu)}"]`);
+        if (openMenu) positionUserMenu(openMenu);
+        else state.openUserMenu = null;
+      }
     }
 
     function orderStatusPill(order) {
@@ -3327,7 +3441,34 @@
     $("#closeReportDrawerBtn").addEventListener("click", closeReportDrawer);
     $("#reportDrawerBackdrop").addEventListener("click", closeReportDrawer);
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeReportDrawer();
+      if (event.key === "Escape") {
+        closeUserMenu();
+        closeReportDrawer();
+      }
+    });
+    document.addEventListener("click", (event) => {
+      const openMenu = document.querySelector(".action-menu[open]");
+      if (openMenu && event.target instanceof Node && !openMenu.contains(event.target)) {
+        openMenu.open = false;
+      }
+    });
+    window.addEventListener("scroll", (event) => {
+      const openMenu = document.querySelector(".action-menu[open]");
+      if (!openMenu) return;
+      const panel = openMenu.querySelector(".action-menu__panel");
+      if (event.target instanceof Node && panel && panel.contains(event.target)) return;
+      openMenu.open = false;
+    }, true);
+    window.addEventListener("resize", closeUserMenu);
+    $$("[data-register-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        $$("[data-register-mode]").forEach((other) => {
+          other.classList.toggle("active", other === button);
+        });
+        $$("[data-register-panel]").forEach((panel) => {
+          panel.classList.toggle("hidden", panel.dataset.registerPanel !== button.dataset.registerMode);
+        });
+      });
     });
     $("#filterBtn").addEventListener("click", () => loadUsers().catch((error) => alert(apiError(error))));
     $$("[data-admin-tab]").forEach((button) => {
