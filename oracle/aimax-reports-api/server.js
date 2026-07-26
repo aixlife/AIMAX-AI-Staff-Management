@@ -12297,16 +12297,25 @@ async function sweepOnboardingReminders() {
         });
         sent += 1;
       } catch (error) {
-        // 실패도 시도로 기록해 자동 재시도 루프를 막는다. 미해결 계정은 admin 목록의 '변경 전' 상태로 남는다.
-        rememberUserEmailEvent(user, {
-          type: "onboarding_reminder_failed",
-          provider: String(error?.code || error?.message || "send_failed").slice(0, 40),
-          to: user.email,
-          subject,
-          sent_at: now,
-        });
+        const code = String(error?.code || error?.message || "send_failed");
+        // Resend 일일 한도(429)·제공자 일시 장애(5xx)는 시도로 기록하지 않고 다음 스윕으로 이월한다 —
+        // 쿼터가 바닥난 날 평생 1회 기회가 소멸하는 것을 막는다. 그 외(주소 오류 등)는 기록해 루프를 차단한다.
+        const transient = code === "http_429" || /^http_5\d\d$/.test(code);
+        if (!transient) {
+          rememberUserEmailEvent(user, {
+            type: "onboarding_reminder_failed",
+            provider: code.slice(0, 40),
+            to: user.email,
+            subject,
+            sent_at: now,
+          });
+        }
         failed += 1;
-        console.warn("[onboarding-reminder] send failed", user.email, error?.code || error?.message || error);
+        console.warn(`[onboarding-reminder] send failed${transient ? " (carryover to next sweep)" : ""}`, user.email, code);
+        if (transient) {
+          saveUsers(users);
+          break;
+        }
       }
       saveUsers(users);
     }
