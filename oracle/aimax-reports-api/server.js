@@ -7380,6 +7380,8 @@ const CAFE24_NON_STAFF_PRODUCT_PATTERNS = [
   /공동구매수익화/,
   /사업자pt/,
   /평생회원제/,
+  // 0원 리드마그넷 무료 배포판 (2026-07-24~). 직원 판매가 아니므로 needs_review/텔레그램 알림 대상에서 제외.
+  /무료배포판|무료배포/,
 ];
 
 function inferCafe24Product(productName, amountValue) {
