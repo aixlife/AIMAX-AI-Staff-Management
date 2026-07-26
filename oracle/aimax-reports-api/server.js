@@ -12213,6 +12213,128 @@ function startWaitingUserReportMailSweep() {
   return timer;
 }
 
+const ONBOARDING_REMINDER_ENABLED = String(process.env.AIMAX_ONBOARDING_REMINDER ?? "1").trim() !== "0";
+const ONBOARDING_REMINDER_AFTER_DAYS = safeInt(process.env.AIMAX_ONBOARDING_REMINDER_AFTER_DAYS || "3", 1, 60);
+const ONBOARDING_REMINDER_MAX_AGE_DAYS = safeInt(process.env.AIMAX_ONBOARDING_REMINDER_MAX_AGE_DAYS || "21", 2, 365);
+const ONBOARDING_REMINDER_MAX_PER_RUN = safeInt(process.env.AIMAX_ONBOARDING_REMINDER_MAX_PER_RUN || "8", 1, 50);
+const ONBOARDING_REMINDER_INTERVAL_MS = safeInt(process.env.AIMAX_ONBOARDING_REMINDER_INTERVAL_MS || String(6 * 60 * 60 * 1000), 60 * 1000, 24 * 60 * 60 * 1000);
+const ONBOARDING_REMINDER_INITIAL_DELAY_MS = safeInt(process.env.AIMAX_ONBOARDING_REMINDER_INITIAL_DELAY_MS || "90000", 1000, 60 * 60 * 1000);
+// 자동 리마인드 적용 기준일(epoch). 이 시각 이전에 안내가 시작된 계정(과거 백로그 156명 규모)은
+// 자동 대상에서 제외한다 — 백로그 일괄 발송은 운영자가 명시적으로 결정해야 한다.
+const ONBOARDING_REMINDER_SINCE = String(process.env.AIMAX_ONBOARDING_REMINDER_SINCE || "2026-07-26T00:00:00Z").trim();
+let onboardingReminderSweepBusy = false;
+
+function onboardingReminderBaseTime(user) {
+  const events = Array.isArray(user.email_events) ? user.email_events : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    if (String(events[i]?.type || "") === "onboarding_guide") {
+      const at = Date.parse(events[i].sent_at || "");
+      if (Number.isFinite(at)) return at;
+    }
+  }
+  const created = Date.parse(user.created_at || "");
+  return Number.isFinite(created) ? created : null;
+}
+
+function onboardingReminderAlreadyAttempted(user) {
+  const events = Array.isArray(user.email_events) ? user.email_events : [];
+  return events.some((event) => String(event?.type || "").startsWith("onboarding_reminder"));
+}
+
+function collectOnboardingReminderTargets(users, nowMs) {
+  const since = Date.parse(ONBOARDING_REMINDER_SINCE);
+  const minAge = ONBOARDING_REMINDER_AFTER_DAYS * 24 * 60 * 60 * 1000;
+  const maxAge = ONBOARDING_REMINDER_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+  return users.users.filter((user) => {
+    if (user.status !== "active" || !user.must_change_password) return false;
+    if (user.entitlements?.status === "expired") return false;
+    const expiresAt = Date.parse(user.entitlements?.expires_at || "");
+    if (Number.isFinite(expiresAt) && expiresAt <= nowMs) return false;
+    if (onboardingReminderAlreadyAttempted(user)) return false;
+    const base = onboardingReminderBaseTime(user);
+    if (!Number.isFinite(base)) return false;
+    if (Number.isFinite(since) && base < since) return false;
+    const age = nowMs - base;
+    return age >= minAge && age <= maxAge;
+  });
+}
+
+async function sweepOnboardingReminders() {
+  if (onboardingReminderSweepBusy) return { sent: 0, failed: 0 };
+  onboardingReminderSweepBusy = true;
+  try {
+    const nowMs = Date.now();
+    const users = loadUsers();
+    const targets = collectOnboardingReminderTargets(users, nowMs).slice(0, ONBOARDING_REMINDER_MAX_PER_RUN);
+    if (!targets.length) return { sent: 0, failed: 0 };
+    let sent = 0;
+    let failed = 0;
+    for (const user of targets) {
+      const now = nowIso();
+      const product = primaryProductForEntitlements(user.entitlements, user.entitlements?.product || "");
+      const temporaryPassword = generateTemporaryPassword();
+      user.password_hash = hashPassword(temporaryPassword);
+      user.must_change_password = true;
+      user.updated_at = now;
+      const name = String(user.name || "").trim();
+      const subject = name
+        ? `[AIMAX] ${name}님, 로그인 안내를 다시 보내드립니다.`
+        : "[AIMAX] 로그인 안내를 다시 보내드립니다.";
+      const text = [
+        "처음 안내드린 임시 비밀번호로 아직 로그인 전이라, 새 임시 비밀번호를 다시 보내드립니다.",
+        "",
+        onboardingGuideText(user.email, temporaryPassword, product),
+      ].join("\n");
+      try {
+        const mail = await sendAdminGuideEmail({ to: user.email, subject, text });
+        rememberUserEmailEvent(user, {
+          type: "onboarding_reminder",
+          provider: mail.provider,
+          provider_message_id: mail.id,
+          to: user.email,
+          subject,
+          sent_at: now,
+        });
+        sent += 1;
+      } catch (error) {
+        // 실패도 시도로 기록해 자동 재시도 루프를 막는다. 미해결 계정은 admin 목록의 '변경 전' 상태로 남는다.
+        rememberUserEmailEvent(user, {
+          type: "onboarding_reminder_failed",
+          provider: String(error?.code || error?.message || "send_failed").slice(0, 40),
+          to: user.email,
+          subject,
+          sent_at: now,
+        });
+        failed += 1;
+        console.warn("[onboarding-reminder] send failed", user.email, error?.code || error?.message || error);
+      }
+      saveUsers(users);
+    }
+    console.warn(`[onboarding-reminder] sweep done sent=${sent} failed=${failed} targets=${targets.length}`);
+    return { sent, failed };
+  } catch (error) {
+    console.warn("[onboarding-reminder] sweep failed", error?.code || error?.message || error);
+    return { sent: 0, failed: 0, error: true };
+  } finally {
+    onboardingReminderSweepBusy = false;
+  }
+}
+
+function startOnboardingReminderSweep() {
+  if (!ONBOARDING_REMINDER_ENABLED) return null;
+  const runSweep = () => {
+    sweepOnboardingReminders().catch((error) => {
+      console.warn("[onboarding-reminder] sweep failed", error?.code || error?.message || error);
+    });
+  };
+  const initial = setTimeout(runSweep, Math.min(ONBOARDING_REMINDER_INITIAL_DELAY_MS, ONBOARDING_REMINDER_INTERVAL_MS));
+  if (typeof initial.unref === "function") initial.unref();
+  const timer = setInterval(runSweep, ONBOARDING_REMINDER_INTERVAL_MS);
+  if (typeof timer.unref === "function") timer.unref();
+  console.warn(`[onboarding-reminder] armed after=${ONBOARDING_REMINDER_AFTER_DAYS}d window<=${ONBOARDING_REMINDER_MAX_AGE_DAYS}d since=${ONBOARDING_REMINDER_SINCE} cap=${ONBOARDING_REMINDER_MAX_PER_RUN}/run`);
+  return timer;
+}
+
 function telegramAlertsConfigured() {
   return Boolean(TELEGRAM_ALERTS_ENABLED && TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID);
 }
@@ -18240,6 +18362,7 @@ function startServer() {
 
   startSongiDiscoverySubscriptionPoller();
   startWaitingUserReportMailSweep();
+  startOnboardingReminderSweep();
   server.listen(PORT, HOST, () => {
     console.log(`aimax-reports-api listening on http://${HOST}:${PORT}`);
   });
