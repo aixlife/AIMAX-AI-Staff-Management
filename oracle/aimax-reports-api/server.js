@@ -3820,6 +3820,11 @@ function productLabel(product) {
   return adminProductCatalog().find((item) => item.product === product)?.label || product || "";
 }
 
+function productLabels(product) {
+  const list = Array.isArray(product) ? product : [product];
+  return list.map((item) => productLabel(item)).filter(Boolean).join(", ");
+}
+
 function rememberUserEmailEvent(user, event) {
   const events = Array.isArray(user.email_events) ? user.email_events : [];
   events.push({
@@ -7367,7 +7372,8 @@ const CAFE24_STAFF_PRODUCT_RULES = [
   // 카페24 상품번호 243 "PC 알람앱 맥스" 3,000원 (2026-07-08 실조회). 넓은 패턴이어도 priceWon 게이트가 오매칭을 needs_review로 막는다.
   { product: "maxalert", priceWon: 3000, patterns: [/맥스|maxalert|max_alert|알람앱/] },
   { product: "hyojin", priceWon: 33000, reviewIssue: "product_not_ready", patterns: [/효진|hyojin|영상제작|아나운서/] },
-  { product: "sangsu", priceWon: 0, patterns: [/상수|sangsu|견적|견적서|quote|quotation|estimate/] },
+  // 경리 상수씨 9,900원 (2026-06-23 실주문 실측 — 0원이던 규칙이 다품목 분해를 막았음)
+  { product: "sangsu", priceWon: 9900, patterns: [/상수|sangsu|견적|견적서|quote|quotation|estimate/] },
   { product: "bundle", priceWon: 0, patterns: [/전체통합|통합권한|통합설치|bundle|올인원|allinone/] },
 ];
 
@@ -7384,6 +7390,30 @@ const CAFE24_NON_STAFF_PRODUCT_PATTERNS = [
   /무료배포판|무료배포/,
 ];
 
+// 카페24 주문 메일은 다품목 주문도 대표 상품명 1개 + 주문 총액으로 합쳐져 들어온다.
+// 총액을 단품가 조합(상품당 1개, 최대 4개)으로 분해해 다품목 주문을 복원한다.
+const CAFE24_MULTI_PRODUCT_MAX_ITEMS = 4;
+
+function cafe24AmountCombos(amount, rules = CAFE24_STAFF_PRODUCT_RULES) {
+  const priced = rules.filter((rule) => Number(rule.priceWon) > 0);
+  const combos = [];
+  const walk = (start, remaining, picked) => {
+    if (remaining === 0) {
+      if (picked.length >= 2) combos.push([...picked]);
+      return;
+    }
+    if (picked.length >= CAFE24_MULTI_PRODUCT_MAX_ITEMS) return;
+    for (let i = start; i < priced.length; i += 1) {
+      if (priced[i].priceWon > remaining) continue;
+      picked.push(priced[i]);
+      walk(i + 1, remaining - priced[i].priceWon, picked);
+      picked.pop();
+    }
+  };
+  walk(0, amount, []);
+  return combos;
+}
+
 function inferCafe24Product(productName, amountValue) {
   const amount = parseCafe24Amount(amountValue);
   const normalized = normalizeCafe24ProductText(productName);
@@ -7393,6 +7423,23 @@ function inferCafe24Product(productName, amountValue) {
   const rule = CAFE24_STAFF_PRODUCT_RULES.find((item) => item.patterns.some((pattern) => pattern.test(normalized)));
   if (rule) {
     if (rule.priceWon && amount && amount !== rule.priceWon) {
+      const combos = cafe24AmountCombos(amount).filter((combo) => combo.some((item) => item.product === rule.product));
+      if (combos.length === 1) {
+        const products = combos[0].map((item) => item.product);
+        const reviewItem = combos[0].find((item) => item.reviewIssue);
+        if (reviewItem) {
+          return { product: rule.product, products, confidence: "needs_review", issue: reviewItem.reviewIssue };
+        }
+        return { product: rule.product, products, confidence: "auto", issue: "" };
+      }
+      if (combos.length > 1) {
+        return {
+          product: rule.product,
+          confidence: "needs_review",
+          issue: "multi_product_suspected",
+          products_candidates: combos.map((combo) => combo.map((item) => item.product)),
+        };
+      }
       return { product: rule.product, confidence: "needs_review", issue: "amount_mismatch" };
     }
     if (rule.reviewIssue) {
@@ -7913,6 +7960,11 @@ function buildCafe24Order(body, now) {
   const inferred = inferCafe24Product(productName, amount);
   const explicitProduct = String(row.aimax_product || row.aimaxProduct || row.product_code || row.productCode || "").trim();
   const product = PRODUCTS.has(explicitProduct) ? explicitProduct : inferred.product;
+  const products = PRODUCTS.has(explicitProduct)
+    ? [explicitProduct]
+    : Array.isArray(inferred.products) && inferred.products.length
+      ? inferred.products.filter((item) => PRODUCTS.has(item))
+      : product ? [product] : [];
   const issue = inferred.status === "ignored"
     ? inferred.issue
     : !isValidEmail(email)
@@ -7930,6 +7982,8 @@ function buildCafe24Order(body, now) {
     product_name: productName,
     amount,
     product,
+    products,
+    products_candidates: Array.isArray(inferred.products_candidates) ? inferred.products_candidates : [],
     product_confidence: product ? (PRODUCTS.has(explicitProduct) ? "explicit" : inferred.confidence) : inferred.confidence || "needs_review",
     issue,
     status,
@@ -8008,6 +8062,9 @@ function adminCafe24OrderRow(order) {
     amount: Number(order.amount || 0),
     product: order.product || "",
     product_label: productLabel(order.product || ""),
+    products: cafe24OrderProducts(order),
+    products_label: productLabels(cafe24OrderProducts(order)),
+    products_candidates: Array.isArray(order.products_candidates) ? order.products_candidates : [],
     product_confidence: order.product_confidence || "",
     issue: order.issue || "",
     status: order.status || "pending",
@@ -8064,7 +8121,7 @@ function onboardingGuideText(email, password, product) {
     lines.push("3. 기존 비밀번호로 로그인해주세요.", "", "4. 비밀번호를 잊으셨다면 운영자에게 재발급을 요청해주세요.");
   }
   lines.push(
-    `5. 구매 상품: ${productLabel(product)}`,
+    `5. 구매 상품: ${productLabels(product)}`,
     "6. 설치 파일을 한 번 설치한 뒤, 웹앱에서 실행기 연결을 눌러주세요.",
     "",
     "설치가 막히면 웹앱의 권한 허용 가이드를 순서대로 확인해주세요.",
@@ -8081,7 +8138,7 @@ function onboardingSetupLinkText(user, setupLink, product, expiresAt) {
     setupLink,
     "",
     `2. 이메일: ${email}`,
-    `3. 구매 상품: ${productLabel(product)}`,
+    `3. 구매 상품: ${productLabels(product)}`,
   ];
   if (expiresAt) lines.push(`4. 설정 링크 만료: ${expiresAt}`);
   lines.push(
@@ -12627,6 +12684,15 @@ function cafe24GuideForProvision(provision, product, setupTokens, now, source, o
   };
 }
 
+function cafe24OrderProducts(order) {
+  const primary = String(order?.product || "").trim();
+  const list = Array.isArray(order?.products)
+    ? order.products.map((item) => String(item || "").trim()).filter((item) => PRODUCTS.has(item))
+    : [];
+  if (primary && PRODUCTS.has(primary) && !list.includes(primary)) list.unshift(primary);
+  return list.length ? list : primary && PRODUCTS.has(primary) ? [primary] : [];
+}
+
 async function autoProcessCafe24Order(snapshot, options = {}) {
   const data = loadCafe24Orders();
   const order = data.orders.find((item) => item.id === snapshot.id);
@@ -12653,6 +12719,7 @@ async function autoProcessCafe24Order(snapshot, options = {}) {
   const setupTokens = loadSetupTokens();
   const now = nowIso();
   const product = String(order.product || "").trim();
+  const orderProducts = cafe24OrderProducts(order);
   order.auto_process_started_at = now;
   order.auto_process_stage = "provisioning";
   order.auto_process_attempts = Number(order.auto_process_attempts || 0) + (options.countAttempt === false ? 0 : 1);
@@ -12668,6 +12735,7 @@ async function autoProcessCafe24Order(snapshot, options = {}) {
     email: order.email,
     name: order.name,
     product,
+    products: orderProducts,
     source: options.provisionSource || (options.resendGuide ? "cafe24_order_admin_resend" : "cafe24_order_auto"),
     admin_note: [
       `${options.resendGuide ? "Cafe24 안내 메일 재발송" : options.adminRetry ? "Cafe24 자동 처리 재시도" : "Cafe24 주문 자동 처리"}: ${order.external_id || order.id}`,
@@ -12684,13 +12752,14 @@ async function autoProcessCafe24Order(snapshot, options = {}) {
   saveCafe24Orders(data);
   const guide = cafe24GuideForProvision(
     provision,
-    product,
+    orderProducts.length > 1 ? orderProducts : product,
     setupTokens,
     now,
     options.setupSource || (options.resendGuide ? "cafe24_order_admin_resend_setup_link" : "cafe24_order_auto_setup_link"),
     { forceSetupLink: Boolean(options.forceSetupLink || options.resendGuide) },
   );
   order.product = product;
+  order.products = orderProducts;
   order.product_confidence = order.product_confidence === "explicit" ? "explicit" : order.product_confidence || "auto";
   order.issue = "";
   order.status = "provisioned";
@@ -12966,6 +13035,9 @@ function validateAdminProvisionInput(body) {
 function provisionAdminUser(users, body, now) {
   const email = normalizeEmail(body.email);
   const product = String(body.product || "").trim();
+  const extraProducts = Array.isArray(body.products)
+    ? [...new Set(body.products.map((item) => String(item || "").trim()).filter((item) => PRODUCTS.has(item) && item !== product))]
+    : [];
   const source = String(body.source || "buyer").trim() || "buyer";
   const fallbackSegment = defaultAccountSegmentForSource(source);
   const requestedSegment = body.account_segment || body.accountSegment || body.member_segment || body.memberSegment || "";
@@ -13016,6 +13088,9 @@ function provisionAdminUser(users, body, now) {
       source: user.entitlements?.source || source,
       expires_at: body.expires_at || user.entitlements?.expires_at || null,
     };
+  }
+  for (const extra of extraProducts) {
+    grantProductToUser(user, extra, now, source);
   }
   user.admin_note = body.admin_note ? redactText(body.admin_note) : user.admin_note || "";
   user.updated_at = now;
@@ -13524,7 +13599,20 @@ async function handleAdminUpdateCafe24Order(req, res) {
     json(req, res, 404, { ok: false, error: "order_not_found" });
     return;
   }
-  const product = String(Object.prototype.hasOwnProperty.call(body, "product") ? body.product : order.product || "").trim();
+  const requestedProducts = Array.isArray(body.products)
+    ? [...new Set(body.products.map((item) => String(item || "").trim()).filter(Boolean))]
+    : null;
+  if (requestedProducts && requestedProducts.some((item) => !PRODUCTS.has(item))) {
+    json(req, res, 400, { ok: false, error: "invalid_product" });
+    return;
+  }
+  const product = String(
+    Object.prototype.hasOwnProperty.call(body, "product")
+      ? body.product
+      : requestedProducts?.length
+        ? requestedProducts[0]
+        : order.product || "",
+  ).trim();
   if (product && !PRODUCTS.has(product)) {
     json(req, res, 400, { ok: false, error: "invalid_product" });
     return;
@@ -13536,6 +13624,12 @@ async function handleAdminUpdateCafe24Order(req, res) {
     return;
   }
   order.product = product;
+  if (requestedProducts) {
+    order.products = product && !requestedProducts.includes(product)
+      ? [product, ...requestedProducts]
+      : requestedProducts;
+    order.products_candidates = [];
+  }
   order.product_confidence = product ? "admin" : "needs_review";
   order.issue = product && isValidEmail(order.email) ? "" : order.issue || "invalid_order";
   order.status = status || (order.issue ? "needs_review" : "pending");
@@ -18418,6 +18512,9 @@ module.exports = {
     buildCafe24Order,
     cafe24AdminExtractProductNos,
     cafe24AdminOrderId,
+    cafe24AmountCombos,
+    cafe24OrderProducts,
+    provisionAdminUser,
     cafe24AutoStageLabel,
     cafe24GuideForProvision,
     cafe24ReviewIssueLabel,
