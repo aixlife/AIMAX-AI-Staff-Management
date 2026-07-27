@@ -121,6 +121,13 @@ preflight_web_guard() {
     node --check "$server_js" || { echo "[DEPLOY][ABORT] server.js 문법 오류 — 배포 중단" >&2; exit 3; }
   fi
   local br; br="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+  # 마커 검사는 옛 브랜치의 "기능 부재"만 잡는다 — 마커가 다 있는 작업 브랜치에서 배포하면
+  # 최신 main 커밋이 빠진 채로 통과한다 (2026-07-28 codex 브랜치 구버전 배포 사고).
+  if [[ "$br" != "main" ]]; then
+    echo "[DEPLOY][ABORT] 현재 브랜치=$br — 웹 배포는 main 체크아웃에서만 실행합니다." >&2
+    echo "  (긴급 우회: AIMAX_DEPLOY_SKIP_GUARD=1)" >&2
+    exit 3
+  fi
   echo "[DEPLOY] web preflight OK — 브랜치=$br, 라이브 카탈로그/모델 마커 + 문법 확인."
 }
 
