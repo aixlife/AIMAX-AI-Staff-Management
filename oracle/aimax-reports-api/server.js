@@ -283,6 +283,12 @@ const PLATFORM_AGENT_RELEASE_NOTES = {
 };
 const DOWNLOAD_DIR = process.env.AIMAX_DOWNLOAD_DIR || path.join(__dirname, "downloads");
 const DOWNLOAD_TICKET_TTL_MS = Number(process.env.AIMAX_DOWNLOAD_TICKET_TTL_MS || 10 * 60 * 1000);
+// 파트너 직원 실행 유형: AIMAX 는 소개와 유입 연결만 담당하고 계정·결제·실행은 제작사가 운영한다.
+// 잡 생성, 실행기 다운로드, 필수 설정, 티켓/오류 보고 대상이 아니다.
+const PARTNER_EXECUTION = "partner_external";
+function isPartnerWorker(worker) {
+  return worker?.execution === PARTNER_EXECUTION || worker?.type === PARTNER_EXECUTION;
+}
 const WORKERS = {
   yeri_writer: {
     code: "yeri_writer",
@@ -608,6 +614,33 @@ const WORKERS = {
         description: "토스 앱 안에서 실행하는 미니앱 버전입니다. 앱인토스 검수 후 활성화됩니다.",
       },
     ],
+  },
+  boram_hoomcha: {
+    code: "boram_hoomcha",
+    staffCode: "hoomcha",
+    name: "훔쳐봐",
+    label: "훔쳐봐",
+    role: "레퍼런스 수집 직원",
+    category: "content",
+    product: "hoomcha",
+    jobKind: "",
+    execution: PARTNER_EXECUTION,
+    type: PARTNER_EXECUTION,
+    status: "available",
+    accessPolicy: "partner",
+    requiredSettings: [],
+    // TODO(CEO): 전용 아바타 이미지가 준비되면 공용 placeholder 를 교체한다.
+    profileImage: "/assets/avatar_placeholder.svg",
+    avatarImage: "/assets/avatar_placeholder.svg",
+    externalUrl: "https://hoomcha.com/aimax",
+    ctaLabel: "훔쳐봐 체험 시작",
+    partner: {
+      name: "훔쳐봐",
+      maker: "정보람",
+      supportNote: "가입, 결제, 고객 문의, 환불, 서비스 운영은 제작사가 담당합니다.",
+    },
+    shortDescription: "유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가 요약·분류해줍니다.",
+    capabilities: ["레퍼런스 수집", "AI 요약", "채널 5종"],
   },
 };
 const JOB_KINDS = {
@@ -8356,6 +8389,8 @@ function canAccessEunseo(user) {
 
 function canAccessWorker(worker, user) {
   if (!worker) return false;
+  // 파트너 직원은 구매·회원 엔타이틀먼트와 무관하게 로그인 사용자면 소개/이동이 열린다.
+  if (isPartnerWorker(worker)) return Boolean(user);
   if (worker.accessPolicy === "public") return Boolean(user && user.status === "active");
   if (worker.accessPolicy === "makefamily_member" || worker.accessPolicy === "member_only") {
     if (worker.staffCode === "eunseo" || worker.product === "eunseo") return canAccessEunseo(user);
@@ -9976,6 +10011,14 @@ function publicWorker(worker) {
     short_description: worker.shortDescription || "",
     capabilities: worker.capabilities || [],
     execution_options: executionOptions,
+    // 파트너 직원: 외부 서비스 이동 링크와 제작사 표기 (AIMAX 는 소개와 유입 연결만 담당)
+    external_url: worker.externalUrl || "",
+    cta_label: worker.ctaLabel || "",
+    partner: worker.partner && typeof worker.partner === "object" ? {
+      name: String(worker.partner.name || ""),
+      maker: String(worker.partner.maker || ""),
+      support_note: String(worker.partner.supportNote || ""),
+    } : undefined,
     // 이력서: 카탈로그에 resume 객체가 있으면 그대로 전달 (웹앱 employeeResumeData가 소비)
     resume: worker.resume && typeof worker.resume === "object" ? worker.resume : undefined,
   };
@@ -11425,6 +11468,17 @@ function workerCatalogContractIssues() {
         issues.push({ code: "external_download_platform_missing", worker: worker.code });
       }
     }
+    // 파트너 직원은 설치 파일/잡이 아니라 외부 서비스 링크와 제작사 표기가 계약 조건이다.
+    if (isPartnerWorker(worker)) {
+      if (!worker.externalUrl) issues.push({ code: "partner_external_url_missing", worker: worker.code || "" });
+      if (!worker.partner?.maker && !worker.partner?.name) {
+        issues.push({ code: "partner_maker_missing", worker: worker.code || "" });
+      }
+      if (worker.jobKind) issues.push({ code: "partner_job_kind_not_allowed", worker: worker.code || "" });
+      if (Array.isArray(worker.requiredSettings) && worker.requiredSettings.length) {
+        issues.push({ code: "partner_required_settings_not_allowed", worker: worker.code || "" });
+      }
+    }
   }
   for (const [kind, config] of Object.entries(JOB_KINDS)) {
     const worker = WORKERS[config.workerCode];
@@ -11723,8 +11777,10 @@ function waitingUserMailKstTimestamp(value) {
 // 떨어진다. product 를 1순위로 사용하고, bundle 계정은 보고 문맥의 직원명을 보조
 // 신호로 사용해 해당 직원의 설치형 앱 안내로 분기한다.
 function waitingUserMailDesktopWorker(row) {
+  // 파트너 직원은 설치형 앱이 아니고 오류 보고/안내 대상도 아니므로 후보에서 제외한다.
   const desktopWorkers = Object.values(WORKERS).filter((worker) => (
-    worker?.type === "desktop_app" || worker?.execution === "external_download"
+    !isPartnerWorker(worker)
+    && (worker?.type === "desktop_app" || worker?.execution === "external_download")
   ));
   const product = String(row?.product || "").trim().toLowerCase();
   const exact = desktopWorkers.find((worker) => String(worker?.product || "").trim().toLowerCase() === product);
