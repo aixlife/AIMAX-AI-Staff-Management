@@ -92,6 +92,22 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="AI/API 키가 저장되어 있지 않거나 실행기/웹앱에서 사용할 수 없는 상태입니다.",
         next_update_message="설정 > AI/API 연결에서 사용하는 제공자 키를 저장한 뒤 웹앱을 새로고침하고 새 작업 1건만 다시 시도해주세요.",
     ),
+    # 본문은 서버 키로 생성되지만 이미지는 PC 실행기에 저장된 키만 쓴다. 웹에만 키를
+    # 넣은 사용자에게 일반 api_key_missing 안내(웹 설정)를 주면 계속 엉뚱한 곳을 고친다.
+    "editor_structure_changed": Guidance(
+        category="editor_structure_changed",
+        status="reviewing",
+        status_label="확인 중",
+        public_message="네이버 글쓰기 화면의 입력 영역을 실행기가 찾지 못해 작업이 중단됐습니다. 사용자 설정 문제가 아니라 AIMAX 쪽 확인이 필요한 오류입니다.",
+        next_update_message="운영팀이 네이버 에디터 화면 인식 부분을 확인하고 있습니다. 그 전까지는 같은 작업을 반복 실행하지 않으셔도 됩니다. 확인이 끝나면 이 화면으로 안내드립니다.",
+    ),
+    "image_local_key_missing": Guidance(
+        category="image_local_key_missing",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message="글 본문은 서버에서 정상 생성되어 저장됐고 이미지만 생성되지 않았습니다. 이미지 생성은 웹에 저장한 키가 아니라 PC 실행기(Mac/Windows 앱) 안에 저장된 키를 사용합니다.",
+        next_update_message="실행기 앱을 열고 AI/API 연결 화면에서 선택한 이미지 모델에 맞는 키를 저장한 뒤, 이미지 1장으로 새 작업 1건만 다시 시도해주세요. 이미지 없이 글만 필요하면 이미지 수를 0장으로 두고 실행하시면 됩니다.",
+    ),
     "api_key_invalid": Guidance(
         category="api_key_invalid",
         status="waiting_user",
@@ -370,6 +386,9 @@ STRUCTURED_JOB_RULES: list[tuple[str, str]] = [
     ("ai_response_invalid", r"invalid_json|server_generation_invalid_response|empty_content|응답을 글 형식으로 해석하지 못했"),
     ("bundle_integrity_mismatch", r"bundle_integrity|startup bundle integrity"),
     ("browser_driver_policy_blocked", r"browser_start|chromedriver|undetected_chromedriver|application control policy|애플리케이션 제어 정책|winerror 4551"),
+    # 조치 위치가 정반대(실행기 앱 vs 웹 설정)라 api_key_missing 앞에서 걸러야 한다.
+    ("editor_structure_changed", r"editor_title_area_not_found|se-section-documenttitle|제목 입력 영역을 찾지 못"),
+    ("image_local_key_missing", r"이미지 생성용 로컬 api 키"),
     ("api_key_missing", r"key_missing|no api key|api 키가 없습니다|키가 없습니다"),
     ("api_key_invalid", r"server_generation_auth_failed|api_key_invalid|invalid api key|invalid x-api-key|api 키 인증"),
     ("quota_exceeded", r"server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|balance|out of credit|결제|크레딧"),
@@ -646,6 +665,8 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dic
         ("bundle_integrity_mismatch", r"bundle.*integrity|integrity.*mismatch|startup bundle integrity|무결성"),
         ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
+        ("editor_structure_changed", r"editor_title_area_not_found|se-section-documenttitle|제목 입력 영역을 찾지 못"),
+        ("image_local_key_missing", r"이미지 생성용 로컬 api 키"),
         ("image_generation_failed", r"image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted"),
         ("api_key_missing", r"api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안"),
         ("api_key_invalid", r"api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized"),

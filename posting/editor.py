@@ -674,6 +674,16 @@ def input_title(driver, title):
         TITLE_AREA,
     ]
 
+    # 아래 탐색은 전부 즉시 조회(find_element)라, 에디터가 아직 그려지지 않았으면
+    # 후보를 전부 놓치고 맨 마지막 폴백에서 raw NoSuchElement 로 죽는다.
+    # 실제로 2026-07-24 보고 건이 이 경로로 실패했다. 탐색 전에 한 번만 기다린다.
+    try:
+        WebDriverWait(driver, 15, poll_frequency=0.5).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, ", ".join(title_container_selectors)))
+        )
+    except Exception:
+        logger.warning("제목 영역이 15초 안에 나타나지 않았습니다. 남은 후보로 계속 시도합니다.")
+
     container_element = None
     for sel in title_container_selectors:
         try:
@@ -723,8 +733,18 @@ def input_title(driver, title):
             continue
 
     if not title_element:
-        title_element = driver.find_element(By.CSS_SELECTOR, TITLE_AREA)
-        logger.warning(f"적합한 제목 입력 엘리먼트를 찾지 못해 기본 영역({TITLE_AREA})을 타겟팅합니다.")
+        try:
+            title_element = driver.find_element(By.CSS_SELECTOR, TITLE_AREA)
+            logger.warning(f"적합한 제목 입력 엘리먼트를 찾지 못해 기본 영역({TITLE_AREA})을 타겟팅합니다.")
+        except Exception as exc:
+            # 여기까지 왔다는 건 에디터 화면 자체가 안 떴다는 뜻이다. selenium 원문
+            # ("no such element: .se-section-documentTitle")만 올리면 사용자도 운영팀도
+            # 원인을 못 읽어 API 키 문제 등으로 오분류된다. 원인을 문장으로 남긴다.
+            raise RuntimeError(
+                "editor_title_area_not_found: 네이버 글쓰기 화면의 제목 입력 영역을 찾지 못했습니다. "
+                "에디터가 끝까지 열리지 않았거나 네이버 화면 구조가 바뀐 경우입니다. "
+                "사용자 설정이 아니라 AIMAX 실행기 확인이 필요합니다."
+            ) from exc
 
     try:
         logger.info(f"[디버그] 매칭된 제목 엘리먼트 HTML: {title_element.get_attribute('outerHTML')}")
