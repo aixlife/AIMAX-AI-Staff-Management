@@ -3957,20 +3957,18 @@
                   <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">조회수 10만 이상 숏폼 데이터를 근거로 헤드카피 3안과 대본을 만듭니다.</div>
                 </div>
                 <div id="yunmiJobBlocker" class="notice warn job-blocker hidden"></div>
-                <div class="job-workspace">
-                  <section class="job-input-panel">
-                    <div class="notice ok small">계정 주제를 넣으면 헤드카피 3안이 나오고, 마음에 드는 안을 고르면 촬영용 대본까지 만들어줍니다.</div>
-                    <div id="yunmiAdvancedMode" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px;">
-                      <button id="yunmiAdvancedModeBtn" class="btn primary" type="button">대본 작성 시작</button>
-                      <span id="yunmiAdvancedModeNotice" class="small muted" style="flex:1 1 260px;">AIMAX에 연결해 둔 회원님의 Gemini 키로 작동하며 API 사용료가 발생할 수 있습니다.</span>
-                    </div>
-                    <div id="yunmiKeyGuide" class="notice warn hidden" style="margin-top:10px;">
-                      아직 Gemini 키가 연결돼 있지 않습니다. 설정 탭의 <b>AI/API 연결</b>에서 키를 한 번만 등록하면 윤미를 바로 쓸 수 있습니다.
-                      <div class="actions" style="margin-top:8px;">
-                        <button id="yunmiGoSettingsBtn" class="btn" type="button">설정에서 키 연결하기</button>
-                      </div>
-                    </div>
-                  </section>
+                <div id="yunmiAdvancedMode" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                  <button id="yunmiAdvancedModeBtn" class="btn primary" type="button">대본 작성 시작</button>
+                  <span id="yunmiAdvancedModeNotice" class="small muted" style="flex:1 1 260px;">AIMAX에 연결해 둔 회원님의 Gemini 키로 작동하며 API 사용료가 발생할 수 있습니다.</span>
+                </div>
+                <div id="yunmiKeyGuide" class="notice warn hidden" style="margin-top:10px;">
+                  아직 Gemini 키가 연결돼 있지 않습니다. 설정 탭의 <b>AI/API 연결</b>에서 키를 한 번만 등록하면 윤미를 바로 쓸 수 있습니다.
+                  <div class="actions" style="margin-top:8px;">
+                    <button id="yunmiGoSettingsBtn" class="btn" type="button">설정에서 키 연결하기</button>
+                  </div>
+                </div>
+                <div id="yunmiEmbedWrap" class="hidden" style="margin-top:12px;">
+                  <iframe id="yunmiEmbed" title="윤미 대본 작성" style="width:100%; height:74vh; border:1px solid #d7dfec; border-radius:12px; background:#fff;"></iframe>
                 </div>
               </form>
 
@@ -10175,14 +10173,27 @@
 
     function renderYunmiJobForm() {
       const target = $("#yunmiJobResult");
-      if (!target) return;
-      const job = latestYunmiJob();
-      target.classList.toggle("hidden", !job);
-      target.innerHTML = job ? yunmiJobResultHtml(job) : "";
-      $("#yunmiJobPlaceholder")?.classList.toggle("hidden", Boolean(job));
-      const copyButton = $("#yunmiCopyResultBtn");
-      if (copyButton) copyButton.disabled = !job;
+      if (target) {
+        const job = latestYunmiJob();
+        target.classList.toggle("hidden", !job);
+        target.innerHTML = job ? yunmiJobResultHtml(job) : "";
+        $("#yunmiJobPlaceholder")?.classList.toggle("hidden", Boolean(job));
+        const copyButton = $("#yunmiCopyResultBtn");
+        if (copyButton) copyButton.disabled = !job;
+      }
       renderYunmiAdvancedMode();
+      maybeAutoStartYunmiEmbed();
+    }
+
+    // 윤미 폼이 열리면 별도 클릭 없이 바로 대본 작성 화면을 안에 띄운다 (2026-07-28 CEO 지시).
+    function maybeAutoStartYunmiEmbed() {
+      const form = $("#yunmiJobForm");
+      if (!form || form.classList.contains("hidden")) return;
+      if (state.yunmiEmbedStarted) return;
+      const option = yunmiAdvancedOption();
+      if (!option || !hasEmployeeEntitlement(yunmiEmployee()) || !canUseJob("yunmi_script")) return;
+      state.yunmiEmbedStarted = true;
+      openYunmiAdvancedMode({ auto: true });
     }
 
     function yunmiEmployee() {
@@ -10201,7 +10212,8 @@
       const option = yunmiAdvancedOption();
       const employee = yunmiEmployee();
       const allowed = Boolean(option) && hasEmployeeEntitlement(employee);
-      row.classList.toggle("hidden", !allowed);
+      const embedShowing = !($("#yunmiEmbedWrap")?.classList.contains("hidden") ?? true);
+      row.classList.toggle("hidden", !allowed || embedShowing);
       if (!allowed) return;
       const button = $("#yunmiAdvancedModeBtn");
       if (button) {
@@ -10212,10 +10224,10 @@
       if (notice && state.yunmiAdvancedCostNotice) notice.textContent = state.yunmiAdvancedCostNotice;
     }
 
-    async function openYunmiAdvancedMode() {
+    async function openYunmiAdvancedMode(opts = {}) {
       const option = yunmiAdvancedOption();
       if (!option) {
-        showToast("윤미를 아직 사용할 수 없습니다.");
+        if (!opts.auto) showToast("윤미를 아직 사용할 수 없습니다.");
         return;
       }
       const button = $("#yunmiAdvancedModeBtn");
@@ -10223,17 +10235,26 @@
       try {
         const launch = await api(option.launchEndpoint, { method: "POST", body: "{}" });
         if (launch.cost_notice) state.yunmiAdvancedCostNotice = launch.cost_notice;
-        // 키가 없으면 창을 열지 않고 AIMAX 안에서 키 연결부터 안내한다 (2026-07-28 CEO 지시).
+        // 키가 없으면 작업 화면 대신 AIMAX 안에서 키 연결부터 안내한다 (2026-07-28 CEO 지시).
         if (launch.key_source === "none") {
           $("#yunmiKeyGuide")?.classList.remove("hidden");
-          showToast("Gemini 키를 먼저 연결해주세요. 설정 탭에서 한 번만 등록하면 됩니다.");
+          if (!opts.auto) showToast("Gemini 키를 먼저 연결해주세요. 설정 탭에서 한 번만 등록하면 됩니다.");
           return;
         }
         $("#yunmiKeyGuide")?.classList.add("hidden");
-        openExternalLink(launch.url || option.url);
-        showToast("윤미 대본 작업 창을 열었습니다.");
+        // 새 창 금지 — AIMAX 화면 안에 임베드로 바로 실행한다 (2026-07-28 CEO 지시).
+        const url = String(launch.url || option.url || "");
+        const frame = $("#yunmiEmbed");
+        if (frame) {
+          frame.src = url + (url.includes("?") ? "&" : "?") + "embed=1";
+          $("#yunmiEmbedWrap")?.classList.remove("hidden");
+          $("#yunmiAdvancedMode")?.classList.add("hidden");
+        } else {
+          openExternalLink(url);
+        }
       } catch (error) {
-        showToast(error?.body?.error || error?.message || "윤미 작업 창을 열지 못했습니다.");
+        state.yunmiEmbedStarted = false;
+        if (!opts.auto) showToast(error?.body?.error || error?.message || "윤미 작업 화면을 열지 못했습니다.");
       } finally {
         renderYunmiAdvancedMode();
       }
