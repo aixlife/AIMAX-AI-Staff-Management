@@ -8543,8 +8543,9 @@ function appendScriptbotUsage(event, detail = {}) {
 
 // 사용자 키가 있으면 사용자 키, 없으면 운영 저장 키(윤미 ai_beta 와 동일 경로).
 function scriptbotKeySource(userId) {
-  if (hasUserSecret(userId, "gemini")) return "user";
-  return hasStoredSecret("GEMINI_API_KEY") ? "stored" : "none";
+  // 회사 저장 키 폴백 금지 (2026-07-28 CEO 결정) — scriptbot 경로에는 비용 확인 게이트가
+  // 없어서 stored 폴백을 열면 회사 키 무제한 호출이 가능해진다. 고객 본인 키만 허용.
+  return hasUserSecret(userId, "gemini") ? "user" : "none";
 }
 
 function downloadContentType(filename) {
@@ -15345,7 +15346,8 @@ async function handleScriptbotVerify(req, res) {
     key_source: keySource,
     cost_notice: SCRIPTBOT_COST_NOTICE,
     // localhost 응답에만 실린다. 브라우저로 나가지 않고, 기록에도 남기지 않는다.
-    gemini_api_key: getUserOrStoredSecret(user.id, "gemini"),
+    // 사용자 본인 키만 — 회사 저장 키 폴백 금지 (scriptbotKeySource 주석 참고)
+    gemini_api_key: keySource === "user" ? getUserSecret(user.id, "gemini") : "",
   });
 }
 
