@@ -3954,50 +3954,21 @@
               <form id="yunmiJobForm" class="job-form hidden" data-job-kind="yunmi_script">
                 <div>
                   <h3>윤미 스크립트작가</h3>
-                  <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">주제와 목적을 바탕으로 A/B/C 타깃별 숏폼 스크립트 1안/2안/3안을 만듭니다.</div>
-                  <div id="yunmiAdvancedMode" class="hidden" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px;">
-                    <button id="yunmiAdvancedModeBtn" class="btn" type="button">코퍼스 기반 고급 모드</button>
-                    <span id="yunmiAdvancedModeNotice" class="small muted" style="flex:1 1 260px;">회원님 계정에 저장된 Gemini 키로 호출되며 API 사용료가 발생할 수 있습니다.</span>
-                  </div>
+                  <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">조회수 10만 이상 숏폼 데이터를 근거로 헤드카피 3안과 대본을 만듭니다.</div>
                 </div>
                 <div id="yunmiJobBlocker" class="notice warn job-blocker hidden"></div>
                 <div class="job-workspace">
                   <section class="job-input-panel">
-                    <div class="notice ok small">기본 초안은 외부 AI/API 비용 0원으로 만듭니다. 주제와 목적만 정확히 넣으면 윤미가 A/B/C 타깃별 스크립트를 추천합니다.</div>
-                    <div class="form-grid">
-                      <div class="field wide">
-                        <label for="yunmiTopic">주제</label>
-                        <input id="yunmiTopic" placeholder="예: 30대 피부관리 루틴, 학부모 설명회 오프닝">
-                      </div>
-                      <div class="field wide">
-                        <label for="yunmiObjective">목적</label>
-                        <textarea id="yunmiObjective" placeholder="예: 저장을 유도하기, 상담 전환 만들기, 설명회 기대감 높이기"></textarea>
-                      </div>
-                      <div class="field">
-                        <label for="yunmiAiModel">AI 모델</label>
-                        <select id="yunmiAiModel"></select>
-                      </div>
-                      <div class="field">
-                        <label for="yunmiReferenceUrl">레퍼런스 URL</label>
-                        <input id="yunmiReferenceUrl" placeholder="선택: 참고 링크">
-                      </div>
-                      <div class="field wide">
-                        <label for="yunmiReferenceText">레퍼런스에서 좋았던 점</label>
-                        <textarea id="yunmiReferenceText" placeholder="참고한 영상 흐름, 첫 문장, 고객 반응, 꼭 살릴 표현"></textarea>
-                      </div>
+                    <div class="notice ok small">계정 주제를 넣으면 헤드카피 3안이 나오고, 마음에 드는 안을 고르면 촬영용 대본까지 만들어줍니다.</div>
+                    <div id="yunmiAdvancedMode" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+                      <button id="yunmiAdvancedModeBtn" class="btn primary" type="button">대본 작성 시작</button>
+                      <span id="yunmiAdvancedModeNotice" class="small muted" style="flex:1 1 260px;">AIMAX에 연결해 둔 회원님의 Gemini 키로 작동하며 API 사용료가 발생할 수 있습니다.</span>
                     </div>
-                    <div id="yunmiCostEstimate" class="notice ok small"></div>
-                    <div class="actions">
-                      <button id="yunmiSubmitBtn" class="btn primary" type="submit">윤미에게 업무지시</button>
-                      <button id="yunmiCopyResultBtn" class="btn" type="button">결과 복사</button>
-                    </div>
-                  </section>
-                  <section class="job-output-panel">
-                    <div class="small muted job-panel-label">결과 미리보기</div>
-                    <div id="yunmiJobResult" class="songi-preview hidden"></div>
-                    <div id="yunmiJobPlaceholder" class="job-output-placeholder">
-                      <h4>윤미 A/B/C 3안이 여기에 표시됩니다</h4>
-                      <p>주제와 목적을 입력한 뒤 업무지시를 누르면 타깃별 1안, 2안, 3안을 바로 비교할 수 있습니다.</p>
+                    <div id="yunmiKeyGuide" class="notice warn hidden" style="margin-top:10px;">
+                      아직 Gemini 키가 연결돼 있지 않습니다. 설정 탭의 <b>AI/API 연결</b>에서 키를 한 번만 등록하면 윤미를 바로 쓸 수 있습니다.
+                      <div class="actions" style="margin-top:8px;">
+                        <button id="yunmiGoSettingsBtn" class="btn" type="button">설정에서 키 연결하기</button>
+                      </div>
                     </div>
                   </section>
                 </div>
@@ -5446,7 +5417,7 @@
         executionOptions: [
           {
             kind: "web_app",
-            label: "코퍼스 기반 고급 모드",
+            label: "대본 작성 시작",
             platforms: ["web"],
             status: "available",
             url: "https://aimax.ai.kr/scriptbot/",
@@ -10234,7 +10205,7 @@
       if (!allowed) return;
       const button = $("#yunmiAdvancedModeBtn");
       if (button) {
-        button.textContent = option.label || "코퍼스 기반 고급 모드";
+        button.textContent = option.label || "대본 작성 시작";
         button.disabled = !canUseJob("yunmi_script");
       }
       const notice = $("#yunmiAdvancedModeNotice");
@@ -10244,7 +10215,7 @@
     async function openYunmiAdvancedMode() {
       const option = yunmiAdvancedOption();
       if (!option) {
-        showToast("고급 모드를 아직 사용할 수 없습니다.");
+        showToast("윤미를 아직 사용할 수 없습니다.");
         return;
       }
       const button = $("#yunmiAdvancedModeBtn");
@@ -10252,12 +10223,17 @@
       try {
         const launch = await api(option.launchEndpoint, { method: "POST", body: "{}" });
         if (launch.cost_notice) state.yunmiAdvancedCostNotice = launch.cost_notice;
+        // 키가 없으면 창을 열지 않고 AIMAX 안에서 키 연결부터 안내한다 (2026-07-28 CEO 지시).
+        if (launch.key_source === "none") {
+          $("#yunmiKeyGuide")?.classList.remove("hidden");
+          showToast("Gemini 키를 먼저 연결해주세요. 설정 탭에서 한 번만 등록하면 됩니다.");
+          return;
+        }
+        $("#yunmiKeyGuide")?.classList.add("hidden");
         openExternalLink(launch.url || option.url);
-        showToast(launch.key_source === "none"
-          ? "고급 모드 창을 열었습니다. 저장된 Gemini 키가 없어 고급 모드 화면에서 키 입력이 필요합니다."
-          : "고급 모드 창을 열었습니다.");
+        showToast("윤미 대본 작업 창을 열었습니다.");
       } catch (error) {
-        showToast(error?.body?.error || error?.message || "고급 모드를 열지 못했습니다.");
+        showToast(error?.body?.error || error?.message || "윤미 작업 창을 열지 못했습니다.");
       } finally {
         renderYunmiAdvancedMode();
       }
@@ -13933,7 +13909,7 @@
       }
     });
 
-    $("#yunmiCopyResultBtn").addEventListener("click", () => {
+    $("#yunmiCopyResultBtn")?.addEventListener("click", () => {
       const job = latestYunmiJob();
       copyTextToClipboard(job?.result?.copy_text || "", "윤미 초안 전체를 복사했습니다.");
     });
@@ -13942,7 +13918,11 @@
       openYunmiAdvancedMode();
     });
 
-    $("#yunmiJobResult").addEventListener("click", (event) => {
+    $("#yunmiGoSettingsBtn")?.addEventListener("click", () => {
+      document.querySelector('[data-tab="settings"]')?.click();
+    });
+
+    $("#yunmiJobResult")?.addEventListener("click", (event) => {
       const reportButton = event.target.closest("[data-yunmi-report-error]");
       if (reportButton) {
         reportButton.disabled = true;

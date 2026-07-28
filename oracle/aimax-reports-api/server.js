@@ -440,14 +440,14 @@ const WORKERS = {
     profileImage: "/assets/avatar_yunmi.jpg",
     avatarImage: "/assets/avatar_yunmi.jpg",
     repoUrl: "https://github.com/makefamily/script-writer",
-    shortDescription: "주제와 목적을 받아 A/B/C 타깃별 숏폼 대본, 촬영 가이드, CTA 후보를 나눠 쓰는 스크립트작가입니다.",
+    shortDescription: "조회수 10만 이상 숏폼 데이터를 근거로 헤드카피 3안과 촬영용 대본을 만드는 스크립트작가입니다.",
     capabilities: ["숏폼 후킹 설계", "시간대별 대본", "촬영 가이드", "CTA 후보"],
     // 기존 web_module 폼은 그대로 두고, 코퍼스 기반 고급 모드만 별도 실행 방법으로 추가한다.
     // launchEndpoint 가 있으면 웹앱이 그 엔드포인트로 티켓을 받아 새 창을 연다.
     executionOptions: [
       {
         kind: "web_app",
-        label: "코퍼스 기반 고급 모드",
+        label: "대본 작성 시작",
         platforms: ["web"],
         status: "available",
         url: SCRIPTBOT_PUBLIC_URL,
