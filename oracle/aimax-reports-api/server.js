@@ -7951,13 +7951,57 @@ async function resolveCafe24PartnerAttribution(input) {
   };
 }
 
+// 품목 배열 기반 판정 — n8n 파서가 주문 메일의 상품 테이블 전체(items[])를 넘길 때 사용.
+// 품목별 이름 매칭 + 단가 검증이므로 금액 분해(추정)가 필요 없다. items가 없으면 기존 분해 경로 폴백.
+function inferCafe24ProductsFromItems(items) {
+  const result = { products: [], unknown: [], mismatched: [], ignored: [], reviewIssue: "" };
+  for (const item of Array.isArray(items) ? items : []) {
+    const itemName = String(item?.name || "").trim();
+    if (!itemName) continue;
+    const normalized = normalizeCafe24ProductText(itemName);
+    if (CAFE24_NON_STAFF_PRODUCT_PATTERNS.some((pattern) => pattern.test(normalized))) {
+      result.ignored.push(itemName);
+      continue;
+    }
+    const rule = CAFE24_STAFF_PRODUCT_RULES.find((r) => r.patterns.some((p) => p.test(normalized)));
+    if (!rule) {
+      result.unknown.push(itemName);
+      continue;
+    }
+    const price = parseCafe24Amount(item.price != null ? item.price : item.line_total);
+    if (rule.priceWon && price && price !== rule.priceWon) result.mismatched.push(itemName);
+    if (rule.reviewIssue && !result.reviewIssue) result.reviewIssue = rule.reviewIssue;
+    if (!result.products.includes(rule.product)) result.products.push(rule.product);
+  }
+  return result;
+}
+
 function buildCafe24Order(body, now) {
   const row = cafe24OrderSource(body);
   const email = normalizeEmail(row.email || row.buyer_email || row.buyerEmail);
   const name = compactText(row.name || row.buyer_name || row.buyerName || row.customer_name || row.customerName, 120);
   const productName = compactText(row.product || row.product_name || row.productName || row.item_name || row.itemName || row.order_name || row.orderName, 220);
   const amount = parseCafe24Amount(row.amount || row.price || row.total_amount || row.totalAmount || row.payment_amount || row.paymentAmount);
-  const inferred = inferCafe24Product(productName, amount);
+  const rawItems = Array.isArray(row.items) ? row.items : [];
+  const itemsInfo = rawItems.length ? inferCafe24ProductsFromItems(rawItems) : null;
+  let inferred;
+  if (itemsInfo && (itemsInfo.products.length || itemsInfo.unknown.length)) {
+    const issueFromItems = itemsInfo.unknown.length
+      ? "unknown_product"
+      : itemsInfo.mismatched.length
+        ? "amount_mismatch"
+        : itemsInfo.reviewIssue || "";
+    inferred = {
+      product: itemsInfo.products[0] || "",
+      products: itemsInfo.products,
+      confidence: issueFromItems ? "needs_review" : "auto",
+      issue: issueFromItems,
+    };
+  } else if (itemsInfo && itemsInfo.ignored.length && !itemsInfo.products.length) {
+    inferred = { product: "", confidence: "ignored", issue: "non_staff_product", status: "ignored" };
+  } else {
+    inferred = inferCafe24Product(productName, amount);
+  }
   const explicitProduct = String(row.aimax_product || row.aimaxProduct || row.product_code || row.productCode || "").trim();
   const product = PRODUCTS.has(explicitProduct) ? explicitProduct : inferred.product;
   const products = PRODUCTS.has(explicitProduct)
@@ -7981,6 +8025,14 @@ function buildCafe24Order(body, now) {
     masked_phone: maskPhone(row.phone || row.mobile || row.cellphone || row.buyer_phone || row.buyerPhone),
     product_name: productName,
     amount,
+    cafe24_order_id: compactText(row.order_id || row.orderId || row.cafe24_order_id || "", 80),
+    items: rawItems.slice(0, 20).map((item) => ({
+      name: compactText(item?.name, 200),
+      qty: Number(item?.qty) || 1,
+      price: parseCafe24Amount(item?.price),
+      line_total: parseCafe24Amount(item?.line_total),
+    })),
+    items_unknown: itemsInfo ? itemsInfo.unknown.slice(0, 10) : [],
     product,
     products,
     products_candidates: Array.isArray(inferred.products_candidates) ? inferred.products_candidates : [],
@@ -8065,6 +8117,9 @@ function adminCafe24OrderRow(order) {
     products: cafe24OrderProducts(order),
     products_label: productLabels(cafe24OrderProducts(order)),
     products_candidates: Array.isArray(order.products_candidates) ? order.products_candidates : [],
+    cafe24_order_id: order.cafe24_order_id || "",
+    items: Array.isArray(order.items) ? order.items : [],
+    items_unknown: Array.isArray(order.items_unknown) ? order.items_unknown : [],
     product_confidence: order.product_confidence || "",
     issue: order.issue || "",
     status: order.status || "pending",
@@ -18514,6 +18569,7 @@ module.exports = {
     cafe24AdminOrderId,
     cafe24AmountCombos,
     cafe24OrderProducts,
+    inferCafe24ProductsFromItems,
     provisionAdminUser,
     cafe24AutoStageLabel,
     cafe24GuideForProvision,
