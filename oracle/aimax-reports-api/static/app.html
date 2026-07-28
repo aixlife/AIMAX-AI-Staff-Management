@@ -5144,6 +5144,7 @@
       hyojin: "효진",
       sangsu: "상수",
       eunseo: "은서",
+      hoomcha: "훔쳐봐",
       blog_team: "블로그팀",
       bundle: "전체 통합",
       free: "무료 공개",
@@ -5183,6 +5184,10 @@
     };
 
     const defaultEmployeeAvatar = "/assets/avatar_placeholder.svg";
+    // 파트너 직원 실행 유형: 창업프로그램 참여자가 만든 외부 서비스를 소개하고 링크로 연결만 한다.
+    // AIMAX 는 계정·결제·실행을 통합하지 않으므로 잡, 실행기, 필수 설정, 오류 보고 대상이 아니다.
+    const PARTNER_EXECUTION = "partner_external";
+    const PARTNER_SUPPORT_NOTE_FALLBACK = "가입, 결제, 고객 문의, 환불, 서비스 운영은 제작사가 담당합니다.";
 
     const employees = {
       yeri: {
@@ -5637,6 +5642,30 @@
             description: "토스 앱 안에서 실행하는 미니앱 버전입니다. 앱인토스 검수 후 활성화됩니다.",
           },
         ],
+      },
+      hoomcha: {
+        code: "hoomcha",
+        name: "훔쳐봐",
+        role: "레퍼런스 수집 직원",
+        // TODO(CEO): 전용 아바타 이미지가 준비되면 공용 placeholder 를 교체한다.
+        avatar: "/assets/avatar_placeholder.svg",
+        photo: "/assets/avatar_placeholder.svg",
+        product: "hoomcha",
+        jobKind: "",
+        status: "available",
+        execution: PARTNER_EXECUTION,
+        type: PARTNER_EXECUTION,
+        accessPolicy: "partner",
+        requiredSettings: [],
+        externalUrl: "https://hoomcha.com/aimax",
+        ctaLabel: "훔쳐봐 체험 시작",
+        partner: {
+          name: "훔쳐봐",
+          maker: "정보람",
+          supportNote: PARTNER_SUPPORT_NOTE_FALLBACK,
+        },
+        description: "유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가 요약·분류해줍니다.",
+        meta: ["레퍼런스 수집", "AI 요약", "채널 5종"],
       },
     };
 
@@ -7409,6 +7438,9 @@
             description: worker.short_description || "기능 연결 전이라 기본 설정이 필요한 상태입니다.",
             meta: Array.isArray(worker.capabilities) ? worker.capabilities : [],
             executionOptions: Array.isArray(worker.execution_options) ? worker.execution_options : [],
+            externalUrl: worker.external_url || "",
+            ctaLabel: worker.cta_label || "",
+            partner: worker.partner && typeof worker.partner === "object" ? normalizePartnerInfo(worker.partner) : undefined,
             resume: worker.resume && typeof worker.resume === "object" ? worker.resume : undefined,
           };
           continue;
@@ -7445,6 +7477,9 @@
         employees[key].executionOptions = Array.isArray(worker.execution_options)
           ? worker.execution_options
           : employees[key].executionOptions;
+        employees[key].externalUrl = worker.external_url || employees[key].externalUrl;
+        employees[key].ctaLabel = worker.cta_label || employees[key].ctaLabel;
+        if (worker.partner && typeof worker.partner === "object") employees[key].partner = normalizePartnerInfo(worker.partner);
         if (worker.resume && typeof worker.resume === "object") employees[key].resume = worker.resume;
       }
       for (const jobKind of state.jobKindCatalog || []) {
@@ -7485,6 +7520,8 @@
 
     function hasEmployeeEntitlement(employee) {
       if (!employee) return false;
+      // 파트너 직원은 AIMAX 구매·회원 여부와 무관하게 로그인 사용자 전원에게 열린다.
+      if (isPartnerEmployee(employee)) return Boolean(state.me?.user);
       if (isPublicEmployee(employee)) return Boolean(state.me?.user?.status === "active" || state.me?.can_execute);
       if (isMemberOnlyEmployee(employee)) return hasMakefamilyMemberAccess();
       if (!state.me?.can_execute) return false;
@@ -7494,6 +7531,34 @@
 
     function isPublicEmployee(employee) {
       return employee?.accessPolicy === "public";
+    }
+
+    function isPartnerEmployee(employee) {
+      return employee?.execution === PARTNER_EXECUTION || employee?.type === PARTNER_EXECUTION;
+    }
+
+    function normalizePartnerInfo(partner) {
+      return {
+        name: String(partner?.name || partner?.maker || "").trim(),
+        maker: String(partner?.maker || partner?.name || "").trim(),
+        supportNote: String(partner?.support_note || partner?.supportNote || "").trim(),
+      };
+    }
+
+    function partnerExternalUrl(employee) {
+      return String(employee?.externalUrl || "").trim();
+    }
+
+    function partnerMakerName(employee) {
+      return String(employee?.partner?.maker || employee?.partner?.name || "").trim() || "제작사";
+    }
+
+    function partnerSupportNote(employee) {
+      return String(employee?.partner?.supportNote || "").trim() || PARTNER_SUPPORT_NOTE_FALLBACK;
+    }
+
+    function partnerCtaLabel(employee) {
+      return String(employee?.ctaLabel || "").trim() || `${employee?.name || "파트너 서비스"} 체험 시작`;
     }
 
     function normalizeAccountSegment(value) {
@@ -7516,12 +7581,14 @@
     }
 
     function isExternalDownloadEmployee(employee) {
+      if (isPartnerEmployee(employee)) return false;
       return employee?.execution === "external_download"
         || employee?.type === "desktop_app"
         || Boolean(employee?.setupDownloadUrl || employee?.releaseUrl);
     }
 
     function isMultiChannelEmployee(employee) {
+      if (isPartnerEmployee(employee)) return false;
       // 웹 모듈 직원(윤미 등)은 보조 실행 방법이 붙어도 기존 폼 흐름을 유지한다.
       if (isWebModuleEmployee(employee)) return false;
       return Array.isArray(employee?.executionOptions) && employee.executionOptions.length > 0
@@ -7537,6 +7604,18 @@
     }
 
     function employeeExecutionOptions(employee) {
+      if (isPartnerEmployee(employee)) {
+        return [{
+          kind: "partner_external",
+          label: "파트너 사이트에서 사용",
+          platforms: ["web"],
+          status: partnerExternalUrl(employee) ? "available" : "coming_soon",
+          url: partnerExternalUrl(employee),
+          launchEndpoint: "",
+          primary: true,
+          description: `AIMAX 밖의 파트너 사이트로 이동합니다. ${partnerSupportNote(employee)}`,
+        }];
+      }
       const configured = (Array.isArray(employee?.executionOptions) ? employee.executionOptions : [])
         .map((option) => ({
           kind: option.kind || "",
@@ -7634,6 +7713,7 @@
       if (option.status === "testing") return "검수 중";
       if (option.status === "unsupported") return "미지원";
       if (option.status !== "available") return "발령 대기";
+      if (option.kind === "partner_external") return "바로가기";
       if (String(option.kind || "").includes("download")) return "다운로드";
       if (option.kind === "android_apk") return "APK 받기";
       return "열기";
@@ -7684,6 +7764,7 @@
     }
 
     function employeeExecutionLabel(employee) {
+      if (isPartnerEmployee(employee)) return "파트너 사이트 실행";
       if (isMultiChannelEmployee(employee)) return "다중 실행";
       if (isExternalDownloadEmployee(employee)) return "직접 다운로드";
       if (isWebModuleEmployee(employee)) return "웹 기반";
@@ -7692,6 +7773,7 @@
     }
 
     function staffCardExecutionLabel(employee, recent) {
+      if (isPartnerEmployee(employee)) return "파트너 직원";
       if (isMultiChannelEmployee(employee)) return "실행 방법 선택";
       if (isExternalDownloadEmployee(employee)) return `${employeePlatformLabel(employee)} 앱`;
       if (isWebModuleEmployee(employee)) return "웹에서 바로 사용";
@@ -7749,6 +7831,17 @@
     function employeeResumeIdentityBoxes(employee, status) {
       const resume = employeeResumeData(employee);
       const code = String(employee?.code || "staff").toUpperCase();
+      // 파트너 직원은 AIMAX 소속 인물 설정이 아니라 제작사·운영 주체를 그대로 밝힌다.
+      if (isPartnerEmployee(employee)) {
+        return [
+          { label: "직원 구분", detail: "파트너 직원" },
+          { label: "만든 사람", detail: partnerMakerName(employee) },
+          { label: "직무", detail: employee.role || "AI 직원" },
+          { label: "실행 위치", detail: "AIMAX 밖의 파트너 사이트" },
+          { label: "운영 주체", detail: `${partnerMakerName(employee)} (제작사)` },
+          { label: "이용 상태", detail: status.label || "확인 중" },
+        ];
+      }
       return [
         { label: "사번", detail: resume.employeeNo || `AIMAX-${code}` },
         { label: "소속", detail: resume.team || `${employee.role || "AI 직원"}팀` },
@@ -7778,6 +7871,12 @@
     function employeeResumeReference(employee) {
       const resume = employeeResumeData(employee);
       if (resume.reference?.quote) return resume.reference;
+      if (isPartnerEmployee(employee)) {
+        return {
+          quote: `AIMAX는 이 파트너 직원을 소개하고 연결만 합니다. ${partnerSupportNote(employee)}`,
+          from: `AIMAX 파트너 안내`,
+        };
+      }
       return {
         quote: `${employee.name || "이 직원"}은 담당 업무가 정해지면 조용히 끝까지 처리하는 편입니다.`,
         from: "AIMAX 운영팀",
@@ -7786,7 +7885,11 @@
 
     function employeeResumeInterviewLine(employee) {
       const resume = employeeResumeData(employee);
-      return resume.interviewLine || `${employee.role || "맡은 일"}은 제 자리에서 차분하게 처리하겠습니다.`;
+      if (resume.interviewLine) return resume.interviewLine;
+      if (isPartnerEmployee(employee)) {
+        return `${partnerMakerName(employee)}님이 만든 서비스이고, 사용은 파트너 사이트에서 이어집니다.`;
+      }
+      return `${employee.role || "맡은 일"}은 제 자리에서 차분하게 처리하겠습니다.`;
     }
 
     function employeeResumeSkills(employee) {
@@ -7802,6 +7905,15 @@
     }
 
     function employeeResumeBoxes(employee, status) {
+      if (isPartnerEmployee(employee)) {
+        return [
+          { label: "직원 구분", detail: "파트너 직원 (AIMAX는 소개와 유입 연결만 담당)" },
+          { label: "만든 사람", detail: partnerMakerName(employee) },
+          { label: "실행 방식", detail: "AIMAX 밖의 파트너 사이트에서 가입하고 사용합니다." },
+          { label: "운영 책임", detail: partnerSupportNote(employee) },
+          { label: "주요 기능", detail: (employee.meta || []).join(", ") || "기능 준비 중" },
+        ];
+      }
       if (isMultiChannelEmployee(employee)) {
         const resume = employeeResumeData(employee);
         return [
@@ -8000,6 +8112,16 @@
     function employeeStatusInfo(key) {
       const employee = employees[key];
       if (!employee) return { status: "unknown", label: "확인 중", className: "warn", reason: "직원 정보를 확인할 수 없습니다." };
+      // 파트너 직원은 AIMAX 엔타이틀먼트·설정 게이트를 타지 않고 로그인만 확인한다.
+      if (isPartnerEmployee(employee)) {
+        if (!hasEmployeeEntitlement(employee)) {
+          return { status: "no_entitlement", label: "로그인 필요", className: "warn", reason: "로그인 후 파트너 직원을 사용할 수 있습니다." };
+        }
+        if (!partnerExternalUrl(employee)) {
+          return { status: "needs_setup", label: "준비 중", className: "warn", reason: "파트너 서비스 링크 연결을 준비 중입니다." };
+        }
+        return { status: "available", label: "사용 가능", className: "ok", reason: "" };
+      }
       if (state.me?.requires_password_change && !isPublicEmployee(employee)) {
         return { status: "needs_setup", label: "비밀번호 변경", className: "warn", reason: "첫 로그인 비밀번호 변경 후 사용할 수 있습니다." };
       }
@@ -8277,12 +8399,14 @@
     }
 
     function isWebModuleEmployee(employee) {
+      if (isPartnerEmployee(employee)) return false;
       return isResearchEmployee(employee)
         || employee?.execution === "web_module"
         || employee?.type === "web_module";
     }
 
     function requiresLocalAgentEmployee(employee) {
+      if (isPartnerEmployee(employee)) return false;
       return !isMultiChannelEmployee(employee) && !isWebModuleEmployee(employee) && !isExternalDownloadEmployee(employee);
     }
 
@@ -8292,6 +8416,7 @@
 
     function isPlannedEmployee(employee) {
       if (!employee) return true;
+      if (isPartnerEmployee(employee)) return false;
       if (isMultiChannelEmployee(employee)) return false;
       if (isWebModuleEmployee(employee)) return false;
       if (isExternalDownloadEmployee(employee)) return false;
@@ -8303,6 +8428,17 @@
     function employeeAction(key) {
       const employee = employees[key];
       const kind = employeeJobKind(key);
+      // 파트너 직원은 잡 생성/설치 흐름을 타지 않고 외부 사이트로만 연결한다.
+      if (isPartnerEmployee(employee)) {
+        if (!canUseEmployee(key)) {
+          return { label: "로그인 필요", action: "", disabled: true };
+        }
+        return {
+          label: partnerCtaLabel(employee),
+          action: "partner-external",
+          disabled: !partnerExternalUrl(employee),
+        };
+      }
       if (isExternalDownloadEmployee(employee) && isPublicEmployee(employee)) {
         if (!canUseEmployee(key)) {
           return { label: "권한 없음", action: "", disabled: true };
@@ -8406,6 +8542,20 @@
       anchor.click();
       anchor.remove();
       return directDownload;
+    }
+
+    function openPartnerEmployeeSite(employee) {
+      if (!employee || !isPartnerEmployee(employee)) {
+        showToast("직원 정보를 확인할 수 없습니다.");
+        return;
+      }
+      const url = partnerExternalUrl(employee);
+      if (!url) {
+        showToast("파트너 서비스 링크가 아직 준비되지 않았습니다.");
+        return;
+      }
+      openExternalLink(url);
+      showToast(`${employee.name || "파트너 직원"} 파트너 사이트를 새 탭으로 열었습니다.`);
     }
 
     function downloadExternalEmployee(employee) {
@@ -10323,6 +10473,7 @@
               </span>
               <span class="staff-card-meta">
                 ${(employee.meta || []).slice(0, 3).map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("")}
+                ${isPartnerEmployee(employee) ? `<span class="pill">만든 사람 ${escapeHtml(partnerMakerName(employee))}</span>` : ""}
                 <span class="pill">${escapeHtml(staffCardExecutionLabel(employee, recent))}</span>
               </span>
             </button>
@@ -10384,6 +10535,10 @@
         showToast(`${option.label || "이 실행 방법"}은 현재 기기에서 지원하지 않습니다.`);
         return;
       }
+      if (isPartnerEmployee(employee)) {
+        openPartnerEmployeeSite(employee);
+        return;
+      }
       if (option.status === "available" && option.url) {
         try {
           const launchEndpoint = executionOptionLaunchEndpoint(employee, option);
@@ -10430,7 +10585,9 @@
       $("#staffResumePhoto").src = selected.photo;
       $("#staffResumePhoto").alt = `${selected.name} 프로필 사진`;
       $("#staffResumeName").textContent = selected.name;
-      $("#staffResumeRole").textContent = selected.role;
+      $("#staffResumeRole").textContent = isPartnerEmployee(selected)
+        ? `${selected.role} · 파트너 직원 (만든 사람 ${partnerMakerName(selected)})`
+        : selected.role;
       const statusNode = $("#staffResumeStatus");
       if (statusNode) {
         statusNode.textContent = status.label;
@@ -10490,24 +10647,31 @@
             ${statusPill(job.status)}
           </div>
         `).join("")
-        : isExternalDownloadEmployee(selected)
-          ? `<div class="empty">${escapeHtml(selected.name)}은 설치형 앱이라 웹 작업 기록을 만들지 않습니다.</div>`
-          : `<div class="empty">최근 일 맡긴 기록이 없습니다.</div>`;
+        : isPartnerEmployee(selected)
+          ? `<div class="empty">파트너 직원은 AIMAX 밖의 파트너 사이트에서 실행되어 작업 기록을 남기지 않습니다. ${escapeHtml(partnerSupportNote(selected))}</div>`
+          : isExternalDownloadEmployee(selected)
+            ? `<div class="empty">${escapeHtml(selected.name)}은 설치형 앱이라 웹 작업 기록을 만들지 않습니다.</div>`
+            : `<div class="empty">최근 일 맡긴 기록이 없습니다.</div>`;
       const action = employeeAction(selectedKey);
       $("#staffResumePrompt").dataset.action = action.action;
       $("#staffResumePrompt").dataset.jobKind = selected.jobKind || "";
       const actionButton = $("#staffResumeActionBtn");
       if (actionButton) {
+        const isPartner = isPartnerEmployee(selected);
         const isPendingMultiChannel = isMultiChannelEmployee(selected) && action.disabled;
         const actionLabel = isPendingMultiChannel ? "업무지시 준비 중" : action.label || "직원 업무지시";
         $("#staffResumeActionLabel").textContent = actionLabel;
-        $("#staffResumeActionSub").textContent = action.disabled ? "STATUS HOLD" : "AIMAX WORK ORDER";
+        $("#staffResumeActionSub").textContent = action.disabled
+          ? "STATUS HOLD"
+          : isPartner ? "PARTNER SERVICE" : "AIMAX WORK ORDER";
         actionButton.dataset.action = action.action || "";
         actionButton.dataset.jobKind = selected.jobKind || "";
         actionButton.disabled = action.disabled;
         actionButton.title = action.disabled
           ? `${selected.name || "직원"}은 아직 바로 업무지시할 수 없습니다.`
-          : `${selected.name || "직원"}에게 업무를 지시합니다.`;
+          : isPartner
+            ? `${selected.name || "파트너 직원"} 파트너 사이트를 새 탭으로 엽니다.`
+            : `${selected.name || "직원"}에게 업무를 지시합니다.`;
       }
     }
 
@@ -11641,10 +11805,17 @@
       $("#employeeDetailPhoto").alt = `${selected.name} 프로필 사진`;
       $("#employeeDetailName").textContent = selected.name;
       $("#employeeDetailRole").textContent = selected.role;
-      $("#employeeDetailDescription").textContent = selectedStatus.reason ? `${selected.description} ${selectedStatus.reason}` : selected.description;
-      $("#employeeDetailMeta").innerHTML = (selected.meta || [])
+      const detailDescription = selectedStatus.reason ? `${selected.description} ${selectedStatus.reason}` : selected.description;
+      $("#employeeDetailDescription").textContent = isPartnerEmployee(selected)
+        ? `${detailDescription} ${partnerSupportNote(selected)}`
+        : detailDescription;
+      const detailMetaPills = (selected.meta || [])
         .map((item) => `<span class="pill">${escapeHtml(item)}</span>`)
-        .join("") || `<span class="pill">준비 중</span>`;
+        .join("");
+      const partnerMetaPills = isPartnerEmployee(selected)
+        ? `<span class="pill">파트너 직원</span><span class="pill">만든 사람 ${escapeHtml(partnerMakerName(selected))}</span>`
+        : "";
+      $("#employeeDetailMeta").innerHTML = `${partnerMetaPills}${detailMetaPills}` || `<span class="pill">준비 중</span>`;
       const action = employeeAction(selectedKey);
       $("#employeeDetailAction").textContent = action.label;
       $("#employeeDetailAction").dataset.action = action.action;
@@ -13067,6 +13238,8 @@
     function runUiAction(action) {
       if (action === "employee-download") {
         downloadExternalEmployee(employees[state.selectedEmployee]);
+      } else if (action === "partner-external") {
+        openPartnerEmployeeSite(employees[state.selectedEmployee]);
       } else if (action === "execution-option") {
         const option = employeeExecutionOptions(employees[state.selectedEmployee]).find((item) => item.primary)
           || employeeExecutionOptions(employees[state.selectedEmployee])[0];
