@@ -216,6 +216,7 @@ const CAFE24_ORDERS_PATH = path.join(DATA_DIR, "cafe24-orders.json");
 const TAX_SETTINGS_PATH = path.join(DATA_DIR, "tax-settings.json");
 const TAX_INVOICES_PATH = path.join(DATA_DIR, "tax-invoices.json");
 const RESEARCH_STORAGE_CONFIG_PATH = path.join(DATA_DIR, "research-storage.json");
+const SCRIPTBOT_USAGE_PATH = path.join(DATA_DIR, "scriptbot-usage.jsonl");
 let RESEARCH_DATA_DIR = configuredResearchDataDir();
 let RESEARCH_PATH = path.join(RESEARCH_DATA_DIR, "research.json");
 const STATIC_DIR = path.join(__dirname, "static");
@@ -225,6 +226,12 @@ const SETUP_HTML_PATH = path.join(STATIC_DIR, "setup.html");
 const ADMIN_COOKIE_NAME = "aimax_admin_session";
 const EUNSEO_ACCESS_COOKIE_NAME = "aimax_eunseo_access";
 const EUNSEO_ACCESS_TTL_MS = Number(process.env.AIMAX_EUNSEO_ACCESS_TTL_MS || 6 * 60 * 60 * 1000);
+// 윤미 코퍼스 기반 고급 모드(scriptbot). 은서 웹앱과 같은 티켓 게이트 방식이고,
+// 실행 프로세스만 별도 파이썬 서비스라 티켓 검증을 localhost 서버 간 호출로 받는다.
+const SCRIPTBOT_ACCESS_TTL_MS = Number(process.env.AIMAX_SCRIPTBOT_ACCESS_TTL_MS || 6 * 60 * 60 * 1000);
+const SCRIPTBOT_PUBLIC_URL = String(process.env.AIMAX_SCRIPTBOT_PUBLIC_URL || "https://aimax.ai.kr/scriptbot/").trim();
+// 고급 모드는 회사 잡/과금 기록을 거치지 않고 사용자 키로 직접 호출된다. 진입 전에 반드시 고지한다.
+const SCRIPTBOT_COST_NOTICE = "고급 모드는 회원님 계정에 저장된 Gemini 키로 호출됩니다. 생성할 때마다 Google에 API 사용료가 발생할 수 있고, 요금은 키 소유자에게 청구됩니다.";
 const PRODUCT_ORDER = ["yeri", "hyunju", "songi", "yunmi", "jieun", "semu", "maxalert", "nakyung", "hyojin", "sangsu", "eunseo", "blog_team", "bundle"];
 const PRODUCTS = new Set(PRODUCT_ORDER);
 const MEMBER_ONLY_PRODUCTS = new Set(["eunseo"]);
@@ -435,6 +442,20 @@ const WORKERS = {
     repoUrl: "https://github.com/makefamily/script-writer",
     shortDescription: "주제와 목적을 받아 A/B/C 타깃별 숏폼 대본, 촬영 가이드, CTA 후보를 나눠 쓰는 스크립트작가입니다.",
     capabilities: ["숏폼 후킹 설계", "시간대별 대본", "촬영 가이드", "CTA 후보"],
+    // 기존 web_module 폼은 그대로 두고, 코퍼스 기반 고급 모드만 별도 실행 방법으로 추가한다.
+    // launchEndpoint 가 있으면 웹앱이 그 엔드포인트로 티켓을 받아 새 창을 연다.
+    executionOptions: [
+      {
+        kind: "web_app",
+        label: "코퍼스 기반 고급 모드",
+        platforms: ["web"],
+        status: "available",
+        url: SCRIPTBOT_PUBLIC_URL,
+        launchEndpoint: "/api/scriptbot/launch",
+        primary: false,
+        description: "조회수 10만 이상 숏폼 코퍼스를 근거로 헤드카피 3안과 스크립트를 만듭니다. 회원님 Gemini 키로 호출되어 API 비용이 발생할 수 있습니다.",
+      },
+    ],
   },
   songi_data_research: {
     code: "songi_data_research",
@@ -711,6 +732,7 @@ const PUBLIC_DOWNLOAD_FILES = new Set([
 const researchPaidLocks = new Map();
 const downloadTickets = new Map();
 const eunseoLaunchTickets = new Map();
+const scriptbotLaunchTickets = new Map();
 let cafe24PartnerNotionCache = { fetched_at: 0, rows: [] };
 const JOB_STATUSES = new Set(["queued", "generating", "ready_for_publish", "running", "done", "failed", "cancelled"]);
 const TERMINAL_JOB_STATUSES = new Set(["done", "failed", "cancelled"]);
@@ -8434,6 +8456,97 @@ function eunseoAccessFromTicket(ticketValue) {
   return entry;
 }
 
+function cleanupScriptbotLaunchTickets() {
+  const now = Date.now();
+  for (const [ticket, entry] of scriptbotLaunchTickets.entries()) {
+    if (!entry || Number(entry.expires_at_ms || 0) <= now) {
+      scriptbotLaunchTickets.delete(ticket);
+    }
+  }
+}
+
+function scriptbotLaunchUrl(ticket) {
+  const base = SCRIPTBOT_PUBLIC_URL || "https://aimax.ai.kr/scriptbot/";
+  try {
+    const parsed = new URL(base);
+    parsed.searchParams.set("ticket", ticket);
+    return parsed.toString();
+  } catch (_error) {
+    return `${base}${base.includes("?") ? "&" : "?"}ticket=${encodeURIComponent(ticket)}`;
+  }
+}
+
+// 티켓 값은 자격증명이라 기록에 남기지 않는다. 발급-검증 대조는 짧은 해시로만 한다.
+function scriptbotTicketRef(ticketValue) {
+  const ticket = String(ticketValue || "").trim();
+  if (!ticket) return "";
+  return crypto.createHash("sha256").update(ticket).digest("base64url").slice(0, 12);
+}
+
+function createScriptbotLaunchTicket(user) {
+  cleanupScriptbotLaunchTickets();
+  if (!canAccessYunmi(user) || !canExecute(user)) return { error: "scriptbot_not_allowed" };
+  const ticket = crypto.randomBytes(24).toString("base64url");
+  const expiresAtMs = Date.now() + Math.max(60 * 1000, SCRIPTBOT_ACCESS_TTL_MS);
+  scriptbotLaunchTickets.set(ticket, {
+    ticket,
+    user_id: user.id,
+    expires_at_ms: expiresAtMs,
+    created_at: nowIso(),
+  });
+  return {
+    ticket,
+    expires_at: new Date(expiresAtMs).toISOString(),
+    url: scriptbotLaunchUrl(ticket),
+  };
+}
+
+// 1회 소각. 검증에 성공하든 만료됐든 티켓은 즉시 폐기해 재사용을 막는다.
+function consumeScriptbotLaunchTicket(ticketValue) {
+  cleanupScriptbotLaunchTickets();
+  const ticket = String(ticketValue || "").trim();
+  if (!ticket) return { error: "scriptbot_ticket_required" };
+  const entry = scriptbotLaunchTickets.get(ticket);
+  if (!entry) return { error: "scriptbot_ticket_invalid" };
+  scriptbotLaunchTickets.delete(ticket);
+  if (Number(entry.expires_at_ms || 0) <= Date.now()) return { error: "scriptbot_ticket_expired" };
+  return { entry };
+}
+
+// Caddy 를 거쳐 들어온 요청은 원격 주소가 127.0.0.1 이어도 외부 요청이다.
+// 프록시 헤더가 하나라도 붙어 있으면 loopback 으로 인정하지 않는다.
+function isLoopbackRequest(req) {
+  const proxyHeaders = ["x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip", "forwarded"];
+  if (proxyHeaders.some((name) => String(req.headers?.[name] || "").trim())) return false;
+  const address = String(req.socket?.remoteAddress || "").trim().toLowerCase();
+  const normalized = address.startsWith("::ffff:") ? address.slice("::ffff:".length) : address;
+  return normalized === "127.0.0.1" || normalized === "::1";
+}
+
+// 사용 기록: 누가 언제 고급 모드를 열었는지만 남긴다. 티켓 원문·키·본문은 남기지 않는다.
+function appendScriptbotUsage(event, detail = {}) {
+  const row = {
+    event: String(event || "").trim(),
+    user_id: String(detail.userId || "").trim(),
+    ticket_ref: scriptbotTicketRef(detail.ticket),
+    at: nowIso(),
+  };
+  if (detail.keySource) row.key_source = String(detail.keySource);
+  try {
+    appendJsonLineDurable(SCRIPTBOT_USAGE_PATH, row);
+  } catch (error) {
+    // 사용 기록 실패가 고급 모드 진입을 막지는 않는다.
+    console.warn("scriptbot_usage_append_failed", error?.message || error);
+  }
+  return row;
+}
+
+// 사용자 키가 있으면 사용자 키, 없으면 운영 저장 키(윤미 ai_beta 와 동일 경로).
+function scriptbotKeySource(userId) {
+  if (hasUserSecret(userId, "gemini")) return "user";
+  return hasStoredSecret("GEMINI_API_KEY") ? "stored" : "none";
+}
+
 function downloadContentType(filename) {
   const lower = String(filename || "").toLowerCase();
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html; charset=utf-8";
@@ -10137,6 +10250,8 @@ function publicWorker(worker) {
       platforms: Array.isArray(option.platforms) ? option.platforms.filter(Boolean) : [],
       status: ["available", "coming_soon", "testing", "unsupported"].includes(option.status) ? option.status : "coming_soon",
       url: String(option.url || ""),
+      // 티켓 발급이 필요한 실행 방법만 값을 갖는다. 웹앱이 이 엔드포인트로 launch 를 호출한다.
+      launch_endpoint: String(option.launchEndpoint || ""),
       primary: Boolean(option.primary),
       description: String(option.description || ""),
     })).filter((option) => option.kind && option.label)
@@ -15181,6 +15296,59 @@ function handleCreateEunseoLaunch(req, res) {
   });
 }
 
+function handleCreateScriptbotLaunch(req, res) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  const result = createScriptbotLaunchTicket(auth.user);
+  if (result.error) {
+    json(req, res, 403, { ok: false, error: result.error });
+    return;
+  }
+  const keySource = scriptbotKeySource(auth.user.id);
+  appendScriptbotUsage("launch", { userId: auth.user.id, ticket: result.ticket, keySource });
+  json(req, res, 201, {
+    ok: true,
+    url: result.url,
+    expires_at: result.expires_at,
+    cost_notice: SCRIPTBOT_COST_NOTICE,
+    // none 이면 고급 모드 화면에서 사용자가 직접 키를 넣어야 한다.
+    key_source: keySource,
+  });
+}
+
+// scriptbot 프로세스가 부르는 서버 간 전용 엔드포인트.
+// Caddy 에 노출하지 않는다. 노출되면 티켓 검증 자체가 우회 표면이 된다.
+async function handleScriptbotVerify(req, res) {
+  if (!isLoopbackRequest(req)) {
+    json(req, res, 404, { ok: false, error: "not_found" });
+    return;
+  }
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const result = consumeScriptbotLaunchTicket(body.ticket);
+  if (result.error) {
+    json(req, res, 401, { ok: false, error: result.error });
+    return;
+  }
+  const users = loadUsers();
+  const user = users.users.find((item) => item.id === result.entry.user_id) || null;
+  if (!user || !canAccessYunmi(user) || !canExecute(user)) {
+    json(req, res, 403, { ok: false, error: "scriptbot_not_allowed" });
+    return;
+  }
+  const keySource = scriptbotKeySource(user.id);
+  appendScriptbotUsage("verify", { userId: user.id, ticket: body.ticket, keySource });
+  json(req, res, 200, {
+    ok: true,
+    user_id: user.id,
+    expires_at: new Date(result.entry.expires_at_ms).toISOString(),
+    key_source: keySource,
+    cost_notice: SCRIPTBOT_COST_NOTICE,
+    // localhost 응답에만 실린다. 브라우저로 나가지 않고, 기록에도 남기지 않는다.
+    gemini_api_key: getUserOrStoredSecret(user.id, "gemini"),
+  });
+}
+
 function handleDownloadAgent(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const ticket = String(url.searchParams.get("ticket") || "").trim();
@@ -18221,6 +18389,15 @@ function route(req, res) {
     handleCreateEunseoLaunch(req, res);
     return;
   }
+  if (req.method === "POST" && url.pathname === "/api/scriptbot/launch") {
+    handleCreateScriptbotLaunch(req, res);
+    return;
+  }
+  // localhost 전용. Caddy handle 목록에 추가하지 않는다.
+  if (req.method === "POST" && url.pathname === "/api/internal/scriptbot/verify") {
+    handleScriptbotVerify(req, res);
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/downloads/agent") {
     handleDownloadAgent(req, res);
     return;
@@ -18591,6 +18768,18 @@ module.exports = {
     runSongiDiscoverySubscriptionOnce,
     songiDiscoveryRunCostUsd,
     songiDiscoverySubscriptionEstimates,
+  },
+  __scriptbotTest: {
+    SCRIPTBOT_COST_NOTICE,
+    SCRIPTBOT_USAGE_PATH,
+    appendScriptbotUsage,
+    consumeScriptbotLaunchTicket,
+    createScriptbotLaunchTicket,
+    isLoopbackRequest,
+    scriptbotKeySource,
+    scriptbotLaunchTickets,
+    scriptbotLaunchUrl,
+    scriptbotTicketRef,
   },
   __yunmiTest: {
     buildYunmiGenerationPrompt,

@@ -3955,6 +3955,10 @@
                 <div>
                   <h3>윤미 스크립트작가</h3>
                   <div id="yunmiJobHint" class="small muted" style="margin-top:4px;">주제와 목적을 바탕으로 A/B/C 타깃별 숏폼 스크립트 1안/2안/3안을 만듭니다.</div>
+                  <div id="yunmiAdvancedMode" class="hidden" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+                    <button id="yunmiAdvancedModeBtn" class="btn" type="button">코퍼스 기반 고급 모드</button>
+                    <span id="yunmiAdvancedModeNotice" class="small muted" style="flex:1 1 260px;">회원님 계정에 저장된 Gemini 키로 호출되며 API 사용료가 발생할 수 있습니다.</span>
+                  </div>
                 </div>
                 <div id="yunmiJobBlocker" class="notice warn job-blocker hidden"></div>
                 <div class="job-workspace">
@@ -5126,6 +5130,7 @@
       selectedResearchItemId: "",
       lastSongiItemId: "",
       lastYunmiJobId: "",
+      yunmiAdvancedCostNotice: "",
       versionInfo: {},
       reports: [],
       platform: "",
@@ -5421,6 +5426,35 @@
             { label: "비고 정리", score: 4 },
           ],
         },
+      },
+      yunmi: {
+        code: "yunmi",
+        name: "윤미",
+        role: "스크립트작가",
+        avatar: "/assets/avatar_yunmi.jpg",
+        photo: "/assets/avatar_yunmi.jpg",
+        product: "yunmi",
+        jobKind: "yunmi_script",
+        status: "beta",
+        execution: "web_module",
+        type: "web_module",
+        requiredSettings: [],
+        moduleKey: "script_writer",
+        description: "주제와 목적을 받아 A/B/C 타깃별 숏폼 대본, 촬영 가이드, CTA 후보를 나눠 쓰는 스크립트작가입니다.",
+        meta: ["숏폼 후킹 설계", "시간대별 대본", "촬영 가이드", "CTA 후보"],
+        // 서버 카탈로그(WORKERS.yunmi_script_writer.executionOptions) 미러.
+        executionOptions: [
+          {
+            kind: "web_app",
+            label: "코퍼스 기반 고급 모드",
+            platforms: ["web"],
+            status: "available",
+            url: "https://aimax.ai.kr/scriptbot/",
+            launchEndpoint: "/api/scriptbot/launch",
+            primary: false,
+            description: "조회수 10만 이상 숏폼 코퍼스를 근거로 헤드카피 3안과 스크립트를 만듭니다. 회원님 Gemini 키로 호출되어 API 비용이 발생할 수 있습니다.",
+          },
+        ],
       },
       songi: {
         code: "songi",
@@ -7519,6 +7553,8 @@
     }
 
     function isMultiChannelEmployee(employee) {
+      // 웹 모듈 직원(윤미 등)은 보조 실행 방법이 붙어도 기존 폼 흐름을 유지한다.
+      if (isWebModuleEmployee(employee)) return false;
       return Array.isArray(employee?.executionOptions) && employee.executionOptions.length > 0
         || employee?.execution === "external_tool"
         || employee?.type === "multi_channel";
@@ -7532,18 +7568,33 @@
     }
 
     function employeeExecutionOptions(employee) {
-      const configured = Array.isArray(employee?.executionOptions) ? employee.executionOptions : [];
-      if (configured.length) {
-        return configured.map((option) => ({
+      const configured = (Array.isArray(employee?.executionOptions) ? employee.executionOptions : [])
+        .map((option) => ({
           kind: option.kind || "",
           label: option.label || "실행 방법",
           platforms: Array.isArray(option.platforms) ? option.platforms : [],
           status: option.status || "coming_soon",
           url: option.url || "",
+          launchEndpoint: option.launch_endpoint || option.launchEndpoint || "",
           primary: Boolean(option.primary),
           description: option.description || "",
-        })).filter((option) => option.kind && option.label);
+        }))
+        .filter((option) => option.kind && option.label);
+      // 웹 모듈 직원은 기본 실행 방법(웹 폼)이 먼저 오고, 카탈로그 옵션은 보조로 붙는다.
+      // 윤미 고급 모드처럼 옵션이 추가돼도 기존 진입로가 목록에서 사라지지 않는다.
+      if (isWebModuleEmployee(employee)) {
+        return [{
+          kind: "web_module",
+          label: "웹에서 바로 사용",
+          platforms: ["web"],
+          status: "available",
+          url: "",
+          launchEndpoint: "",
+          primary: true,
+          description: "설치 없이 AIMAX 웹에서 바로 일을 맡길 수 있습니다.",
+        }, ...configured];
       }
+      if (configured.length) return configured;
       if (isExternalDownloadEmployee(employee)) {
         const supported = employeeSupportsCurrentPlatform(employee);
         return [{
@@ -7556,17 +7607,6 @@
           description: supported
             ? "설치 파일을 내려받아 PC에서 실행합니다."
             : `${employeePlatformLabel(employee)}에서만 설치와 사용을 지원합니다.`,
-        }];
-      }
-      if (isWebModuleEmployee(employee)) {
-        return [{
-          kind: "web_module",
-          label: "웹에서 바로 사용",
-          platforms: ["web"],
-          status: "available",
-          url: "",
-          primary: true,
-          description: "설치 없이 AIMAX 웹에서 바로 일을 맡길 수 있습니다.",
         }];
       }
       if (requiresLocalAgentEmployee(employee)) {
@@ -7611,6 +7651,14 @@
     function employeeMatchesExecutionFilter(employee, filter = state.staffExecutionFilter) {
       if (filter === "all") return true;
       return employeeExecutionOptions(employee).some((option) => optionMatchesExecutionFilter(option, filter));
+    }
+
+    // 티켓 발급이 필요한 실행 방법은 카탈로그가 내려준 launchEndpoint 를 쓴다.
+    // 은서는 카탈로그에 값이 없어도 기존 엔드포인트를 유지한다(구버전 서버 호환).
+    function executionOptionLaunchEndpoint(employee, option) {
+      if (option?.launchEndpoint) return option.launchEndpoint;
+      if (employee?.product === "eunseo" && option?.kind === "web_app") return "/api/eunseo/launch";
+      return "";
     }
 
     function executionOptionButtonLabel(option) {
@@ -10163,6 +10211,56 @@
       $("#yunmiJobPlaceholder")?.classList.toggle("hidden", Boolean(job));
       const copyButton = $("#yunmiCopyResultBtn");
       if (copyButton) copyButton.disabled = !job;
+      renderYunmiAdvancedMode();
+    }
+
+    function yunmiEmployee() {
+      return employees.yunmi || employeeForJobKind("yunmi_script");
+    }
+
+    // 고급 모드는 티켓 발급이 필요한 실행 방법(launchEndpoint)이 카탈로그에 있을 때만 노출한다.
+    function yunmiAdvancedOption() {
+      const options = employeeExecutionOptions(yunmiEmployee());
+      return options.find((option) => option.launchEndpoint && option.status === "available") || null;
+    }
+
+    function renderYunmiAdvancedMode() {
+      const row = $("#yunmiAdvancedMode");
+      if (!row) return;
+      const option = yunmiAdvancedOption();
+      const employee = yunmiEmployee();
+      const allowed = Boolean(option) && hasEmployeeEntitlement(employee);
+      row.classList.toggle("hidden", !allowed);
+      if (!allowed) return;
+      const button = $("#yunmiAdvancedModeBtn");
+      if (button) {
+        button.textContent = option.label || "코퍼스 기반 고급 모드";
+        button.disabled = !canUseJob("yunmi_script");
+      }
+      const notice = $("#yunmiAdvancedModeNotice");
+      if (notice && state.yunmiAdvancedCostNotice) notice.textContent = state.yunmiAdvancedCostNotice;
+    }
+
+    async function openYunmiAdvancedMode() {
+      const option = yunmiAdvancedOption();
+      if (!option) {
+        showToast("고급 모드를 아직 사용할 수 없습니다.");
+        return;
+      }
+      const button = $("#yunmiAdvancedModeBtn");
+      if (button) button.disabled = true;
+      try {
+        const launch = await api(option.launchEndpoint, { method: "POST", body: "{}" });
+        if (launch.cost_notice) state.yunmiAdvancedCostNotice = launch.cost_notice;
+        openExternalLink(launch.url || option.url);
+        showToast(launch.key_source === "none"
+          ? "고급 모드 창을 열었습니다. 저장된 Gemini 키가 없어 고급 모드 화면에서 키 입력이 필요합니다."
+          : "고급 모드 창을 열었습니다.");
+      } catch (error) {
+        showToast(error?.body?.error || error?.message || "고급 모드를 열지 못했습니다.");
+      } finally {
+        renderYunmiAdvancedMode();
+      }
     }
 
     function renderJobEmployeeSwitch() {
@@ -10291,8 +10389,9 @@
       }
       if (option.status === "available" && option.url) {
         try {
-          if (employee.product === "eunseo" && option.kind === "web_app") {
-            const launch = await api("/api/eunseo/launch", { method: "POST", body: "{}" });
+          const launchEndpoint = executionOptionLaunchEndpoint(employee, option);
+          if (launchEndpoint) {
+            const launch = await api(launchEndpoint, { method: "POST", body: "{}" });
             openExternalLink(launch.url || option.url);
             showToast(`${option.label} 페이지를 열었습니다.`);
             return;
@@ -13837,6 +13936,10 @@
     $("#yunmiCopyResultBtn").addEventListener("click", () => {
       const job = latestYunmiJob();
       copyTextToClipboard(job?.result?.copy_text || "", "윤미 초안 전체를 복사했습니다.");
+    });
+
+    $("#yunmiAdvancedModeBtn").addEventListener("click", () => {
+      openYunmiAdvancedMode();
     });
 
     $("#yunmiJobResult").addEventListener("click", (event) => {
