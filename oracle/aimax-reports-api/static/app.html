@@ -3968,7 +3968,8 @@
                   </div>
                 </div>
                 <div id="yunmiEmbedWrap" class="hidden" style="margin-top:12px;">
-                  <iframe id="yunmiEmbed" title="윤미 대본 작성" style="width:100%; height:74vh; border:1px solid #d7dfec; border-radius:12px; background:#fff;"></iframe>
+                  <!-- allow: 다른 오리진(aimax.ai.kr) iframe 안에서는 clipboard-write 권한이 기본 차단이라 대본 복사 버튼이 죽는다 (2026-07-30) -->
+                  <iframe id="yunmiEmbed" title="윤미 대본 작성" allow="clipboard-write https://aimax.ai.kr" style="width:100%; height:74vh; border:1px solid #d7dfec; border-radius:12px; background:#fff;"></iframe>
                 </div>
               </form>
 
@@ -10396,6 +10397,10 @@
         const url = String(launch.url || option.url || "");
         const frame = $("#yunmiEmbed");
         if (frame) {
+          // 임베드 오리진이 env로 바뀌어도 복사 권한 위임이 유지되도록 실제 URL에서 다시 계산한다.
+          try {
+            frame.setAttribute("allow", `clipboard-write ${new URL(url, window.location.origin).origin}`);
+          } catch (_) {}
           frame.src = url + (url.includes("?") ? "&" : "?") + "embed=1";
           $("#yunmiEmbedWrap")?.classList.remove("hidden");
           $("#yunmiAdvancedMode")?.classList.add("hidden");
