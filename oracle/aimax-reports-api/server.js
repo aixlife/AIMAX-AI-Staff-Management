@@ -7257,18 +7257,23 @@ function normalizeCafe24ProductText(value) {
   return String(value || "").toLowerCase().replace(/\s+/g, "");
 }
 
+// 표시 이름은 카페24에서 이미 영문명으로 교체됐다(2026-07 실조회: 소피아·조지·엠마·존·에밀리·샘).
+// 지금은 상품명에 남아 있는 역할명("자료조사원", "오피스매니저")이 우연히 걸려서 동작 중이라,
+// 카페24에서 역할명까지 손대는 순간 자동 계정 생성이 에러 없이 멈춘다. 그래서 새 이름 패턴을 선반영한다.
+// 짧아서 다른 단어에 오매칭할 수 있는 이름(존·샘)은 단독 토큰 대신 역할명과 붙은 형태로만 매칭한다.
+// product 코드(yeri/songi/...)는 결제 매칭·엔타이틀먼트·잡 종류·아바타 경로에 박혀 있으므로 절대 바꾸지 않는다.
 const CAFE24_STAFF_PRODUCT_RULES = [
   { product: "blog_team", priceWon: 66000, patterns: [/블로그마케팅팀|블로그마케팅.*예리.*현주|예리.*현주|현주.*예리|blogteam|blog_team/] },
-  { product: "yeri", priceWon: 33000, patterns: [/예리|yeri|블로그마케터/] },
+  { product: "yeri", priceWon: 33000, patterns: [/예리|yeri|블로그마케터|소피아|sophia/] },
   { product: "hyunju", priceWon: 33000, patterns: [/현주|hyunju|영업사원/] },
-  { product: "songi", priceWon: 3300, patterns: [/송이|songi|자료조사|자료조사원|리서치|research/] },
-  { product: "yunmi", priceWon: 9900, patterns: [/윤미|yunmi|스크립트작가|스크립트/] },
-  { product: "jieun", priceWon: 5500, patterns: [/지은|jieun|오피스매니저|오피스지원|office/] },
-  { product: "nakyung", priceWon: 9900, patterns: [/나경|nakyung|판서쌤|판서|pencil/] },
+  { product: "songi", priceWon: 3300, patterns: [/송이|songi|자료조사|자료조사원|리서치|research|조지|george/] },
+  { product: "yunmi", priceWon: 9900, patterns: [/윤미|yunmi|스크립트작가|스크립트|엠마|emma/] },
+  { product: "jieun", priceWon: 5500, patterns: [/지은|jieun|오피스매니저|오피스지원|office|오피스매니저존|john/] },
+  { product: "nakyung", priceWon: 9900, patterns: [/나경|nakyung|판서쌤|판서|pencil|에밀리|emily/] },
   // 카페24 상품번호 243 "PC 알람앱 맥스" 3,000원 (2026-07-08 실조회). 넓은 패턴이어도 priceWon 게이트가 오매칭을 needs_review로 막는다.
   { product: "maxalert", priceWon: 3000, patterns: [/맥스|maxalert|max_alert|알람앱/] },
   { product: "hyojin", priceWon: 33000, reviewIssue: "product_not_ready", patterns: [/효진|hyojin|영상제작|아나운서/] },
-  { product: "sangsu", priceWon: 0, patterns: [/상수|sangsu|견적|견적서|quote|quotation|estimate/] },
+  { product: "sangsu", priceWon: 0, patterns: [/상수|sangsu|견적|견적서|quote|quotation|estimate|경리샘/] },
   { product: "bundle", priceWon: 0, patterns: [/전체통합|통합권한|통합설치|bundle|올인원|allinone/] },
 ];
 
@@ -7276,11 +7281,15 @@ const CAFE24_NON_STAFF_PRODUCT_PATTERNS = [
   /회원가입을하셨습니다|회원가입|입금처리가확인/,
   /ai로직원만드는법|ai로직원만드는/,
   /일본구매대행/,
-  /창업프로그램2기/,
+  // 기수가 올라갈 때마다 알림이 다시 새는 걸 막으려고 숫자를 일반화했다 (기존 창업프로그램2기 → N기)
+  /창업프로그램\d+기|aimax창업프로그램/,
   /제2의뇌|제의뇌|나같이생각하는ai비서/,
   /공동구매수익화/,
   /사업자pt/,
   /평생회원제/,
+  // 전자책·가이드북은 계정이 필요 없는 상품인데 규칙에 없어서 매 주문마다 "매핑 불가" 알림이 떴다.
+  // 2026-07-31 하루에만 6건. 오류가 아니라 정상 케이스이므로 무시 대상으로 명시한다.
+  /전자책|스레드가이드북|팔로워0에서완판까지/,
 ];
 
 function inferCafe24Product(productName, amountValue) {
