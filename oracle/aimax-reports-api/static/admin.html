@@ -1182,7 +1182,7 @@
         <div class="toolbar">
           <div class="field">
             <label for="searchInput">검색</label>
-            <input id="searchInput" placeholder="이메일 또는 이름">
+            <input id="searchInput" placeholder="이메일, 이름, 전화 뒷자리">
           </div>
           <div class="field">
             <label for="productFilter">상품</label>
@@ -1389,6 +1389,10 @@
             </div>
           </div>
           <div class="toolbar toolbar--orders">
+            <div class="field">
+              <label for="orderSearchInput">검색</label>
+              <input id="orderSearchInput" placeholder="이메일, 이름, 전화 뒷자리, 상품명">
+            </div>
             <div class="field">
               <label for="orderStatusFilter">처리 상태</label>
               <select id="orderStatusFilter">
@@ -2003,13 +2007,20 @@
       if (openMenu) openMenu.open = false;
     }
 
+    // 카페24 주문에서 가져온 전화 뒷자리(원본 번호는 저장하지 않는다)
+    function userPhoneText(user) {
+      const list = Array.isArray(user?.phone_last4) ? user.phone_last4.filter(Boolean) : [];
+      if (!list.length) return "";
+      return list.map((last4) => `***-${last4}`).join(", ");
+    }
+
     function renderUsers() {
       $("#resultCount").textContent = `${state.users.length}명`;
       $("#usersBody").innerHTML = state.users.length ? state.users.map((user) => `
         <tr>
           <td>
             <strong>${escapeHtml(user.email)}</strong>
-            <div class="small muted">${escapeHtml(user.name || "-")}</div>
+            <div class="small muted">${escapeHtml(user.name || "-")}${userPhoneText(user) ? ` · ${escapeHtml(userPhoneText(user))}` : ""}</div>
             <div class="small muted">${escapeHtml(user.account_segment_label || labelForAccountSegment(user.account_segment || "paid_buyer"))}</div>
           </td>
           <td>
@@ -2909,7 +2920,11 @@
 
     async function loadCafe24Orders() {
       const params = new URLSearchParams();
+      const query = $("#orderSearchInput").value.trim();
+      // 검색은 발송 완료된 과거 구매까지 찾는 용도라 기본 필터(미발송 전체)를 전체로 올린다.
+      if (query && ($("#orderStatusFilter").value || "open") === "open") $("#orderStatusFilter").value = "all";
       params.set("status", $("#orderStatusFilter").value || "open");
+      if (query) params.set("query", query);
       const data = await api(`/api/admin/cafe24-orders?${params.toString()}`);
       state.cafe24Orders = data.orders || [];
       state.cafe24Stats = data.stats || {};
@@ -3385,6 +3400,9 @@
     $("#refreshReportsBtn").addEventListener("click", () => loadReports().catch((error) => alert(apiError(error))));
     $("#refreshCafe24OrdersBtn").addEventListener("click", () => loadCafe24Orders().catch((error) => alert(apiError(error))));
     $("#orderStatusFilter").addEventListener("change", () => loadCafe24Orders().catch((error) => alert(apiError(error))));
+    $("#orderSearchInput").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") loadCafe24Orders().catch((error) => alert(apiError(error)));
+    });
     $("#selectAllOrders").addEventListener("change", (event) => {
       $$("[data-order-select]:not(:disabled)").forEach((checkbox) => { checkbox.checked = event.currentTarget.checked; });
     });

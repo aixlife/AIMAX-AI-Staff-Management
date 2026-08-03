@@ -3851,7 +3851,7 @@ function adminProductCatalog() {
   ];
 }
 
-function adminUserRow(user, agent) {
+function adminUserRow(user, agent, phoneIndex = null) {
   const entitlement = user.entitlements || {};
   const product = primaryProductForEntitlements(entitlement);
   const emailEvents = Array.isArray(user.email_events) ? user.email_events : [];
@@ -3868,6 +3868,7 @@ function adminUserRow(user, agent) {
     expires_at: entitlement.expires_at || null,
     admin_note: user.admin_note || "",
     last_email_event: emailEvents[emailEvents.length - 1] || null,
+    phone_last4: userPhoneLast4List(user, phoneIndex).slice(0, 3),
     agent: publicAgent(agent),
   };
 }
@@ -7411,6 +7412,59 @@ function maskPhone(value) {
   const digits = String(value || "").replace(/\D/g, "");
   if (!digits) return "";
   return `***-${digits.slice(-4)}`;
+}
+
+// 마스킹된 값(***-1234)과 원본 번호 양쪽에서 뒷 4자리만 뽑는다. 원본 번호는 저장하지 않는다.
+function phoneLast4(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 4 ? digits.slice(-4) : "";
+}
+
+// 관리자 검색어가 전화번호로 보일 때만 뒷 4자리를 돌려준다. "hong123" 같은 이메일/이름 검색이
+// 전화 검색으로 새지 않도록 숫자와 구분기호로만 이뤄진 입력에서만 동작한다.
+function adminPhoneQuery(rawQuery) {
+  const text = String(rawQuery || "").trim();
+  if (!text || !/^[\d\s().+-]+$/.test(text)) return "";
+  const digits = text.replace(/\D/g, "");
+  if (digits.length < 2) return "";
+  return digits.slice(-4);
+}
+
+// 이메일 -> 전화 뒷자리 색인. 사용자 레코드에는 전화가 없어서 카페24 주문에 이미 남아 있는
+// 마스킹 값에서 만든다(과거 구매자까지 백필 없이 검색 가능). 주문 파일이 바뀔 때만 다시 만든다.
+let cafe24PhoneIndexCache = { key: "", map: new Map() };
+function cafe24PhoneIndexByEmail() {
+  let key = "missing";
+  try {
+    const stat = fs.statSync(CAFE24_ORDERS_PATH);
+    key = `${stat.mtimeMs}:${stat.size}`;
+  } catch (_error) {
+    key = "missing";
+  }
+  if (key === cafe24PhoneIndexCache.key) return cafe24PhoneIndexCache.map;
+  const map = new Map();
+  let orders = [];
+  try {
+    orders = loadCafe24Orders().orders;
+  } catch (error) {
+    console.warn("[admin-search] cafe24 phone index skipped", error?.message || error);
+    orders = [];
+  }
+  for (const order of orders) {
+    const email = normalizeEmail(order.email);
+    const last4 = phoneLast4(order.masked_phone);
+    if (!email || !last4) continue;
+    const set = map.get(email) || new Set();
+    set.add(last4);
+    map.set(email, set);
+  }
+  cafe24PhoneIndexCache = { key, map };
+  return map;
+}
+
+function userPhoneLast4List(user, phoneIndex) {
+  if (!phoneIndex) return [];
+  return [...(phoneIndex.get(normalizeEmail(user?.email)) || [])];
 }
 
 function normalizeCafe24ProductText(value) {
@@ -13818,14 +13872,26 @@ function handleAdminListCafe24Orders(req, res) {
   if (!requireAdmin(req, res)) return;
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const status = String(url.searchParams.get("status") || "open").trim();
+  const rawQuery = String(url.searchParams.get("query") || "").trim();
+  const query = rawQuery.toLowerCase();
+  const phoneQuery = adminPhoneQuery(rawQuery);
   const data = loadCafe24Orders();
   const rows = data.orders
     .filter((order) => {
+      if (query) {
+        const haystack = [order.email, order.name, order.product_name, order.external_id, order.cafe24_order_id]
+          .map((value) => String(value || "").toLowerCase())
+          .join(" ");
+        const textHit = haystack.includes(query);
+        const last4 = phoneLast4(order.masked_phone);
+        const phoneHit = Boolean(phoneQuery) && Boolean(last4) && last4.endsWith(phoneQuery);
+        if (!textHit && !phoneHit) return false;
+      }
       if (!status || status === "open") return !["sent", "ignored"].includes(String(order.status || "pending"));
       if (status === "all") return true;
       return String(order.status || "pending") === status;
     })
-    .map(adminCafe24OrderRow)
+    .map((order) => adminCafe24OrderRow(order))
     .sort((a, b) => String(b.created_at || b.received_at).localeCompare(String(a.created_at || a.received_at)))
     .slice(0, 300);
   json(req, res, 200, {
@@ -14391,16 +14457,24 @@ async function handleAdminDeleteUser(req, res) {
 function handleAdminListUsers(req, res) {
   if (!requireAdmin(req, res)) return;
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  const query = normalizeEmail(url.searchParams.get("query"));
+  const rawQuery = String(url.searchParams.get("query") || "").trim();
+  const query = normalizeEmail(rawQuery);
+  const phoneQuery = adminPhoneQuery(rawQuery);
   const product = String(url.searchParams.get("product") || "").trim();
   const status = String(url.searchParams.get("status") || "").trim();
   const segment = String(url.searchParams.get("segment") || "").trim();
   const users = loadUsers();
   const agents = loadAgents();
+  const phoneIndex = cafe24PhoneIndexByEmail();
   const agentByUserId = new Map(agents.agents.map((agent) => [agent.user_id, agent]));
   const rows = users.users
     .filter((user) => {
-      if (query && !user.email.includes(query) && !String(user.name || "").toLowerCase().includes(query)) return false;
+      if (query) {
+        const textHit = user.email.includes(query) || String(user.name || "").toLowerCase().includes(query);
+        const phoneHit = Boolean(phoneQuery)
+          && userPhoneLast4List(user, phoneIndex).some((last4) => last4.endsWith(phoneQuery));
+        if (!textHit && !phoneHit) return false;
+      }
       if (product && !entitlementProductsForMerge(user.entitlements || {}).has(product)) return false;
       if (segment && normalizeAccountSegment(user.account_segment || user.accountSegment || "", "paid_buyer") !== segment) return false;
       if (status === "must_change_password" && !user.must_change_password) return false;
@@ -14409,7 +14483,7 @@ function handleAdminListUsers(req, res) {
       if (status === "inactive" && user.status === "active") return false;
       return true;
     })
-    .map((user) => adminUserRow(user, agentByUserId.get(user.id)))
+    .map((user) => adminUserRow(user, agentByUserId.get(user.id), phoneIndex))
     .sort((a, b) => String(b.updated_at || b.created_at).localeCompare(String(a.updated_at || a.created_at)))
     .slice(0, 200);
   json(req, res, 200, { ok: true, users: rows, stats: adminStats(users.users, agents.agents) });
