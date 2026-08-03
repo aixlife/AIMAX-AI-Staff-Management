@@ -1,0 +1,10 @@
+[Unit]
+Description=Run AIMAX cafe24 order/entitlement audit every Monday 10:00 KST
+
+[Timer]
+OnCalendar=Mon *-*-* 10:00:00
+Persistent=true
+Unit=aimax-cafe24-entitlement-audit.service
+
+[Install]
+WantedBy=timers.target

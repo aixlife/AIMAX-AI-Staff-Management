@@ -1,0 +1,8 @@
+[Unit]
+Description=AIMAX cafe24 order vs entitlement audit
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management
+EnvironmentFile=/home/ubuntu/aimax-reports-api/.env
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/AIMAX-AI-Staff-Management/scripts/audit_cafe24_entitlement_gap.mjs /home/ubuntu/aimax-reports/data --telegram

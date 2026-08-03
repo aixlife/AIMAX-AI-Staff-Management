@@ -182,3 +182,48 @@ if (!notReady.length) console.log("없음");
 for (const n of notReady) {
   console.log([n.order.order_date || "", maskName(n.order.name), maskEmail(n.order.email), `미출시:${fmt(n.blocked)}`].join(" | "));
 }
+
+// --telegram: A(권한 누락) 또는 B(직원 상품 매칭 실패)가 있을 때만 알린다.
+// C(계정 없음)는 환불 삭제 건이 영구적으로 남아 매주 울리므로 알림 조건에서 제외하고 본문에만 표기한다.
+if (process.argv.includes("--telegram")) {
+  const shouldAlert = gaps.length > 0 || unmatched.length > 0;
+  if (!shouldAlert) {
+    console.log("\n[telegram] 이상 없음 — 발송 생략");
+  } else {
+    const token = String(process.env.AIMAX_TELEGRAM_BOT_TOKEN || "").trim();
+    const chatId = String(process.env.AIMAX_TELEGRAM_CHAT_ID || "").trim();
+    const threadId = String(process.env.AIMAX_TELEGRAM_MESSAGE_THREAD_ID || "").trim();
+    if (!token || !chatId) {
+      console.error("[telegram] 설정 없음 — AIMAX_TELEGRAM_BOT_TOKEN/CHAT_ID 필요");
+      process.exit(2);
+    }
+    const lines = ["[AIMAX] 카페24 주문-권한 대조 이상 감지"];
+    if (gaps.length) {
+      lines.push(`\n결제했는데 권한 누락 ${gaps.length}건`);
+      for (const g of gaps.slice(0, 10)) {
+        lines.push(`- ${g.order.order_date} ${maskName(g.order.name)} ${maskEmail(g.order.email)} / ${g.order.product_name} / ${!g.active ? "권한 비활성" : `누락 ${fmt(g.missing)}`}`);
+      }
+      if (gaps.length > 10) lines.push(`- 외 ${gaps.length - 10}건`);
+    }
+    if (unmatched.length) {
+      lines.push(`\n상품 매칭 실패(직원 상품 후보) ${unmatched.length}건`);
+      for (const u of unmatched.slice(0, 10)) {
+        lines.push(`- ${u.order.order_date} ${maskName(u.order.name)} ${maskEmail(u.order.email)} / ${u.name}`);
+      }
+      if (unmatched.length > 10) lines.push(`- 외 ${unmatched.length - 10}건`);
+    }
+    if (noAccount.length) lines.push(`\n참고: 계정 없음 ${noAccount.length}건(환불 삭제 포함)`);
+    lines.push("\n관리자 콘솔 > 카페24 주문 대기열에서 상품 지정 후 처리하세요.");
+
+    const payload = { chat_id: chatId, text: lines.join("\n"), disable_web_page_preview: true };
+    if (threadId) payload.message_thread_id = Number(threadId);
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json().catch(() => ({}));
+    console.log(`[telegram] sent=${Boolean(result.ok)}${result.ok ? "" : ` error=${String(result.description || response.status).slice(0, 120)}`}`);
+    if (!result.ok) process.exit(2);
+  }
+}
