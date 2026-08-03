@@ -7483,7 +7483,9 @@ const CAFE24_STAFF_PRODUCT_RULES = [
   { product: "maxalert", priceWon: 3000, patterns: [/맥스|maxalert|max_alert|알람앱/] },
   { product: "hyojin", priceWon: 33000, reviewIssue: "product_not_ready", patterns: [/효진|hyojin|영상제작|아나운서/] },
   // 경리 상수씨 9,900원 (2026-06-23 실주문 실측 — 0원이던 규칙이 다품목 분해를 막았음)
-  { product: "sangsu", priceWon: 9900, patterns: [/상수|sangsu|견적|견적서|quote|quotation|estimate/] },
+  // 상품명이 "경리 샘"처럼 별명만 바뀌어 들어오는 경우가 있어 직무명 "경리"도 함께 매칭한다
+  // (2026-07-29 조명훈 주문 5일 미처리 사고 — 별명 존/조지/샘은 직무명이 매칭을 담당).
+  { product: "sangsu", priceWon: 9900, patterns: [/상수|sangsu|경리|견적|견적서|quote|quotation|estimate/] },
   { product: "bundle", priceWon: 0, patterns: [/전체통합|통합권한|통합설치|bundle|올인원|allinone/] },
 ];
 
