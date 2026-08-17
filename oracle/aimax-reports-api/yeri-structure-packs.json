@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "note": "예리 글 구조 팩. 뼈대(spine)는 고정하고 후크·본문·마무리 블록은 잡마다 시드 기반으로 다르게 뽑는다. 구조를 완전히 고정하면 같은 사용자의 글이 전부 같은 모양이 되어 저품질 위험이 생기므로, '무엇을 말할지'만 고정하고 '어떻게 열고 닫을지'는 변주한다. 이 파일이 없거나 깨지면 서버는 구조 지시 없이 기존과 동일하게 동작한다.",
+  "blocks": {
+    "hook_scene": { "label": "장면으로 열기", "purpose": "독자가 겪는 상황을 한 장면처럼 두세 문장으로 그려서 시작한다. 일반론이나 사전적 정의로 시작하지 않는다." },
+    "hook_question": { "label": "질문으로 열기", "purpose": "독자가 실제로 검색했을 법한 질문을 그대로 던지고, 이 글이 그 질문에 답한다는 것을 한 문장으로 알린다." },
+    "hook_mistake": { "label": "오해 깨기로 열기", "purpose": "많은 사람이 잘못 알고 있는 통념 하나를 짚고, 실제는 다르다는 점을 예고한다. 근거 없는 단정은 쓰지 않는다." },
+    "hook_stake": { "label": "손익으로 열기", "purpose": "이걸 모르고 넘어갔을 때 생기는 구체적인 불편이나 손해를 한 가지만 짚는다. 공포 조장이나 과장은 하지 않는다." },
+
+    "core_explain": { "label": "핵심 정리", "purpose": "주제의 핵심을 어려운 용어 없이 정리한다. 독자가 이 섹션만 읽어도 기본은 이해되게 쓴다." },
+    "steps": { "label": "단계별 순서", "purpose": "실제로 하는 순서를 단계로 나눠 설명한다.", "elements": "번호 목록" },
+    "criteria": { "label": "고르는 기준", "purpose": "선택할 때 실제로 봐야 하는 기준을 3~4개로 정리하고, 각 기준이 왜 중요한지 한 줄씩 붙인다." },
+    "compare_table": { "label": "비교 정리", "purpose": "선택지들을 같은 잣대로 나란히 비교한다. 우열을 단정하지 말고 어떤 상황에 무엇이 맞는지로 쓴다.", "elements": "표" },
+    "case": { "label": "사례", "purpose": "구체적인 상황 하나를 예로 들어 앞의 설명이 실제로 어떻게 적용되는지 보여준다. 실존 인물·업체·후기를 지어내지 않는다." },
+    "mistake": { "label": "흔한 실수", "purpose": "초보가 자주 하는 실수 2~3개와 각각을 피하는 방법을 짚는다." },
+    "cost": { "label": "비용·기간 감각", "purpose": "돈이나 시간이 얼마나 드는지 현실적인 범위 감각을 준다. 확인되지 않은 정확한 금액은 쓰지 않고 범위와 변수로 설명한다." },
+    "caution": { "label": "주의할 점", "purpose": "미리 알고 있어야 하는 제약이나 예외를 짚는다. 법적·의학적 단정은 하지 않는다." },
+    "checklist": { "label": "체크리스트", "purpose": "글을 덮고 바로 확인할 수 있는 점검 목록을 만든다.", "elements": "체크 목록" },
+    "faq": { "label": "자주 묻는 질문", "purpose": "독자가 이어서 궁금해할 질문 2~3개에 짧게 답한다.", "elements": "질문/답변 쌍" },
+
+    "review_context": { "label": "쓰게 된 계기", "purpose": "어떤 상황에서 이걸 쓰게 됐는지 배경을 짧게 밝힌다." },
+    "review_before_after": { "label": "쓰기 전과 후", "purpose": "사용 전에 어땠고 사용 후에 무엇이 달라졌는지 대비해서 보여준다." },
+    "review_detail": { "label": "직접 써보니", "purpose": "설명서만 봐서는 몰랐던, 실제로 써봐야 아는 점을 구체적으로 적는다." },
+    "review_fit": { "label": "이런 사람에게", "purpose": "누구에게 맞고 누구에게는 굳이 필요 없는지 솔직하게 나눈다." },
+
+    "problem_symptom": { "label": "증상 정리", "purpose": "문제가 어떤 모습으로 나타나는지 정리해서 독자가 자기 상황과 맞는지 확인하게 한다." },
+    "problem_cause": { "label": "원인 분해", "purpose": "가능한 원인을 흔한 것부터 순서대로 나눈다. 하나로 단정하지 않는다." },
+    "problem_fix": { "label": "해결 방법", "purpose": "원인별로 대응 방법을 제시한다. 쉬운 것부터 순서대로 쓴다.", "elements": "번호 목록" },
+    "problem_verify": { "label": "해결 확인", "purpose": "제대로 해결됐는지 스스로 확인하는 방법을 알려준다." },
+
+    "close_summary": { "label": "요약으로 닫기", "purpose": "핵심을 3줄 안팎으로 다시 정리한다. 본문 문장을 그대로 반복하지 않는다." },
+    "close_next": { "label": "다음 행동으로 닫기", "purpose": "독자가 오늘 당장 할 수 있는 한 가지를 지목한다." },
+    "close_reassure": { "label": "안심시키며 닫기", "purpose": "처음이라 어렵게 느껴질 수 있다는 점을 인정하고, 어디부터 하면 되는지 짚어준다." },
+    "close_question": { "label": "되묻고 닫기", "purpose": "독자 상황마다 답이 달라지는 지점을 짚고 댓글로 물어보라고 자연스럽게 연결한다." }
+  },
+  "slots": {
+    "hook": ["hook_scene", "hook_question", "hook_mistake", "hook_stake"],
+    "close": ["close_summary", "close_next", "close_reassure", "close_question"]
+  },
+  "packs": {
+    "info": {
+      "label": "정보형",
+      "goal": "주제를 처음 찾아본 사람이 한 번 읽고 기본을 이해하게 만든다.",
+      "spine": ["@hook", "core_explain", "@body", "@close"],
+      "body": { "pool": ["steps", "criteria", "case", "mistake", "cost", "checklist", "faq", "caution"], "min": 2, "max": 3 }
+    },
+    "review": {
+      "label": "후기형",
+      "goal": "직접 써본 사람의 경험으로 판단 근거를 준다.",
+      "spine": ["@hook", "review_context", "review_before_after", "review_detail", "@body", "@close"],
+      "body": { "pool": ["review_fit", "mistake", "cost", "caution", "faq", "checklist"], "min": 1, "max": 2 }
+    },
+    "compare": {
+      "label": "비교형",
+      "goal": "선택지 사이에서 고민하는 사람이 자기 상황에 맞는 쪽을 고르게 만든다.",
+      "spine": ["@hook", "criteria", "compare_table", "@body", "@close"],
+      "body": { "pool": ["case", "cost", "mistake", "faq", "caution", "checklist"], "min": 1, "max": 2 }
+    },
+    "problem": {
+      "label": "문제해결형",
+      "goal": "지금 문제를 겪고 있는 사람이 순서대로 따라 해서 해결하게 만든다.",
+      "spine": ["@hook", "problem_symptom", "problem_cause", "problem_fix", "problem_verify", "@close"],
+      "body": { "pool": ["mistake", "caution", "faq", "checklist", "cost"], "min": 1, "max": 2 }
+    }
+  },
+  "style_default_pack": {
+    "info": "info",
+    "buy": "compare",
+    "ad": "review"
+  }
+}

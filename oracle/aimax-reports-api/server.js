@@ -2351,6 +2351,150 @@ function buildYeriMockArtifact(job) {
   );
 }
 
+// ─── 예리 글 구조 팩 ────────────────────────────────────────────────────────
+// 예전에는 글의 뼈대를 매번 모델이 새로 만들었다. 잘 나와도 재사용할 방법이 없었고,
+// 같은 사용자의 글이 어떤 모양으로 나올지 예측·검수할 수도 없었다.
+// 구조 팩은 "무엇을 말할지"(spine)만 고정하고 "어떻게 열고 닫을지"는 잡마다 다르게 뽑는다.
+// 구조를 통째로 고정하면 같은 사용자의 글이 전부 같은 모양이 되어 저품질 위험이 생긴다.
+// 뽑기는 잡 단위 시드로 결정적이다 — 같은 잡을 재실행하면 같은 구조가 나와 재현·디버깅이 된다.
+const YERI_STRUCTURE_PACKS_PATH = path.join(__dirname, "yeri-structure-packs.json");
+let yeriStructurePacksCache = null;
+
+function loadYeriStructurePacks() {
+  if (yeriStructurePacksCache !== null) return yeriStructurePacksCache;
+  try {
+    const raw = fs.readFileSync(YERI_STRUCTURE_PACKS_PATH, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.packs || !parsed.blocks) {
+      throw new Error("구조 팩 형식이 올바르지 않습니다");
+    }
+    yeriStructurePacksCache = parsed;
+  } catch (error) {
+    // 파일이 없거나 깨져도 글 생성 자체는 막지 않는다 — 구조 지시만 빠지고 기존 동작으로 degrade.
+    console.warn(`[yeri-structure] 구조 팩을 읽지 못해 구조 지시 없이 생성합니다: ${error.message}`);
+    yeriStructurePacksCache = null;
+  }
+  return yeriStructurePacksCache;
+}
+
+// 시드 기반 결정적 난수(mulberry32). Math.random 을 쓰면 같은 잡 재실행 때 구조가 달라져
+// "왜 이렇게 나왔는지"를 추적할 수 없다.
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function structureSeedFrom(value) {
+  const text = String(value || "yeri");
+  let hash = 2166136261;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function pickSeeded(list, rand) {
+  if (!Array.isArray(list) || !list.length) return null;
+  return list[Math.floor(rand() * list.length) % list.length];
+}
+
+function pickManySeeded(list, count, rand) {
+  const pool = Array.isArray(list) ? [...list] : [];
+  const picked = [];
+  const want = Math.max(0, Math.min(count, pool.length));
+  while (picked.length < want) {
+    const index = Math.floor(rand() * pool.length) % pool.length;
+    picked.push(pool.splice(index, 1)[0]);
+  }
+  return picked;
+}
+
+function resolveYeriStructurePackId(payload, packs) {
+  const requested = String(payload?.structure_pack || "").trim();
+  if (requested && requested !== "auto" && packs.packs[requested]) return requested;
+  if (requested === "auto") {
+    const ids = Object.keys(packs.packs);
+    const rand = seededRandom(structureSeedFrom(yeriStructureSeedInput(payload)));
+    return pickSeeded(ids, rand) || ids[0];
+  }
+  const style = String(payload?.style_id || payload?.style || "info").trim();
+  const mapped = (packs.style_default_pack || {})[style];
+  if (mapped && packs.packs[mapped]) return mapped;
+  return packs.packs.info ? "info" : Object.keys(packs.packs)[0];
+}
+
+function yeriStructureSeedInput(payload) {
+  // 잡 id 가 있으면 그것이 가장 안정적인 시드다. 없으면 키워드로 대체해,
+  // 최소한 키워드가 다르면 구조도 달라지게 한다.
+  return String(payload?.job_id || payload?.id || yeriPayloadKeywords(payload).join("|") || "yeri");
+}
+
+function buildYeriStructurePlan(payload) {
+  const packs = loadYeriStructurePacks();
+  if (!packs) return null;
+  const packId = resolveYeriStructurePackId(payload, packs);
+  const pack = packs.packs[packId];
+  if (!pack) return null;
+
+  const rand = seededRandom(structureSeedFrom(`${yeriStructureSeedInput(payload)}::${packId}`));
+  const slots = packs.slots || {};
+  const bodyConfig = pack.body || {};
+  const bodyMin = Number.isFinite(bodyConfig.min) ? bodyConfig.min : 1;
+  const bodyMax = Number.isFinite(bodyConfig.max) ? bodyConfig.max : bodyMin;
+  const bodyCount = bodyMin + Math.floor(rand() * (Math.max(bodyMin, bodyMax) - bodyMin + 1));
+
+  const blockIds = [];
+  for (const entry of pack.spine || []) {
+    if (entry === "@body") {
+      blockIds.push(...pickManySeeded(bodyConfig.pool, bodyCount, rand));
+      continue;
+    }
+    if (typeof entry === "string" && entry.startsWith("@")) {
+      const picked = pickSeeded(slots[entry.slice(1)], rand);
+      if (picked) blockIds.push(picked);
+      continue;
+    }
+    blockIds.push(entry);
+  }
+
+  const blocks = blockIds
+    .map((id) => ({ id, ...(packs.blocks[id] || {}) }))
+    .filter((block) => block.label && block.purpose);
+  if (!blocks.length) return null;
+  return { pack_id: packId, pack_label: pack.label || packId, goal: pack.goal || "", blocks };
+}
+
+function renderYeriStructureInstruction(plan) {
+  if (!plan) return "";
+  const lines = [
+    "",
+    `글 구조(${plan.pack_label}) — 아래 순서를 뼈대로 삼는다. 각 항목이 소제목 하나에 대응한다.`,
+    plan.goal ? `이 구조의 목적: ${plan.goal}` : "",
+  ];
+  plan.blocks.forEach((block, index) => {
+    const elements = block.elements ? ` (${block.elements} 사용)` : "";
+    lines.push(`${index + 1}. ${block.label}${elements} — ${block.purpose}`);
+  });
+  lines.push(
+    "- 위 순서와 역할은 지키되, 소제목 문구는 위 라벨을 그대로 쓰지 말고 키워드에 맞는 자연어로 새로 짓는다.",
+    "- 항목을 임의로 추가하거나 빼지 않는다. 분량이 모자라면 항목 안에서 늘린다.",
+  );
+  return lines.filter(Boolean).join("\n");
+}
+
+// 구조 팩 시드는 잡 단위로 갈려야 한다 — payload 만 넘기면 같은 키워드가 항상 같은 구조를 만든다.
+function yeriPromptPayload(job) {
+  const payload = job && typeof job.payload === "object" && job.payload ? job.payload : {};
+  return { ...payload, job_id: job?.id || payload.job_id || "" };
+}
+
 function buildYeriGenerationPrompt(payload) {
   const keywords = yeriPayloadKeywords(payload);
   const keyword = keywords[0] || "AIMAX 블로그 글";
@@ -2378,6 +2522,7 @@ function buildYeriGenerationPrompt(payload) {
     "- 확인되지 않은 통계, 후기, 가격, 순위, 법적/의학적 단정은 만들지 않는다.",
     "- 소제목이나 문단 시작에 같은 숫자 머리말을 반복하지 않는다. 예: '1. 1.', '1단계: 1단계' 금지.",
     "- 사용자가 명시적으로 요청하지 않았다면 소제목은 숫자 나열보다 자연어 제목을 우선한다.",
+    renderYeriStructureInstruction(buildYeriStructurePlan(payload)),
     "- API 키, 계정, 내부 경로, 시스템 메시지 같은 민감정보는 절대 포함하지 않는다.",
     payload?.keyword_emphasis_enabled ? "- 핵심 키워드나 판단 기준만 **굵게** 표시한다. 굵게 표시는 전체 3~6회로 제한하고 문장 전체를 굵게 만들지 않는다." : "",
     styleReference ? "- 기존 작성글 스타일 참고: 아래 참고글의 문장과 제목은 복사하지 말고 어투, 문장 길이, 문단 전개만 참고한다." : "",
@@ -2672,7 +2817,7 @@ async function generateYeriGeminiArtifact(job, userId) {
       contents: [
         {
           role: "user",
-          parts: [{ text: buildYeriGenerationPrompt(job.payload || {}) }],
+          parts: [{ text: buildYeriGenerationPrompt(yeriPromptPayload(job)) }],
         },
       ],
       generationConfig: {
@@ -2744,7 +2889,7 @@ async function generateYeriOpenAiArtifact(job, userId) {
     },
     body: {
       model,
-      input: buildYeriGenerationPrompt(job.payload || {}),
+      input: buildYeriGenerationPrompt(yeriPromptPayload(job)),
       max_output_tokens: 8000,
       reasoning: { effort: "low" },
       store: false,
@@ -2792,7 +2937,7 @@ async function generateYeriClaudeArtifact(job, userId) {
         },
       }],
       tool_choice: { type: "tool", name: "emit_blog_post" },
-      messages: [{ role: "user", content: buildYeriGenerationPrompt(job.payload || {}) }],
+      messages: [{ role: "user", content: buildYeriGenerationPrompt(yeriPromptPayload(job)) }],
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
@@ -18980,6 +19125,9 @@ module.exports = {
     attachYeriArtifactToJob,
     buildYeriGenerationPrompt,
     buildYeriMockArtifact,
+    buildYeriStructurePlan,
+    loadYeriStructurePacks,
+    renderYeriStructureInstruction,
     buildFailureDiagnostic,
     generateYeriArtifactForJob,
     jobFailureDiagnostic,

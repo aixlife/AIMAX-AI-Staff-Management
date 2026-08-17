@@ -142,6 +142,10 @@ if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
     "$REMOTE_APP_DIR/server.js" \
     "api server"
   add_file \
+    "$ROOT_DIR/oracle/aimax-reports-api/yeri-structure-packs.json" \
+    "$REMOTE_APP_DIR/yeri-structure-packs.json" \
+    "yeri structure packs"
+  add_file \
     "$ROOT_DIR/oracle/aimax-reports-api/popbill-bridge.js" \
     "$REMOTE_APP_DIR/popbill-bridge.js" \
     "popbill bridge"
