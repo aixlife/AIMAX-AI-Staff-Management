@@ -8,7 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.ui import WebDriverWait
-from constants import NAVER_LOGIN_URL, LOGIN_BUTTON
+from constants import NAVER_LOGIN_URL, LOGIN_BUTTON_SELECTORS, LOGIN_FORM
 from browser.session_manager import (
     save_session,
     load_session,
@@ -60,21 +60,84 @@ def _inject_credentials(driver, naver_id, naver_pw):
     time.sleep(random.uniform(0.8, 1.5))
 
 
+def _is_clickable(element):
+    try:
+        return bool(element.is_displayed() and element.is_enabled())
+    except Exception:
+        return False
+
+
+def _scan_login_buttons(driver):
+    """알려진 선택자가 모두 빗나갔을 때 로그인 폼 안에서 '로그인' 버튼을 직접 찾는다.
+
+    네이버가 버튼 id/class 를 또 바꿔도 라벨은 '로그인'으로 유지되므로, 선택자 하드코딩이
+    깨졌을 때의 마지막 방어선 역할을 한다. 패스키 버튼(#passkeyBtn_*)은 같은 클래스에
+    '패스키 로그인' 라벨을 달고 옆에 있어서 id 로 먼저 걸러낸다.
+    """
+    try:
+        elements = driver.find_elements(
+            By.CSS_SELECTOR,
+            f"{LOGIN_FORM} button, {LOGIN_FORM} input[type='submit']",
+        )
+    except Exception:
+        return []
+
+    found = []
+    for element in elements:
+        try:
+            element_id = (element.get_attribute("id") or "").lower()
+            if "passkey" in element_id:
+                continue
+            label = " ".join(
+                f"{element.text or ''} {element.get_attribute('value') or ''}".split()
+            )
+            if "로그인" in label or "login" in label.lower():
+                found.append(element)
+        except Exception:
+            continue
+    return found
+
+
+def _find_login_button(driver):
+    """현재 NID 페이지에서 실제로 누를 수 있는 로그인 버튼을 고른다.
+
+    새 로그인 화면은 레이아웃별 버튼(#loginBtn_column / #loginBtn_row)을 문서에 함께 두고
+    하나만 보여준다. 숨은 쪽을 JS 로 클릭하면 예외도 안 나면서 아무 일도 일어나지 않으므로
+    (= 로그인 실패를 조용히 삼킴) 보이는 후보를 우선 고른다.
+    """
+    candidates = []
+    for selector in LOGIN_BUTTON_SELECTORS:
+        try:
+            candidates.extend(driver.find_elements(By.CSS_SELECTOR, selector))
+        except Exception:
+            continue
+    if not candidates:
+        candidates = _scan_login_buttons(driver)
+
+    for element in candidates:
+        if _is_clickable(element):
+            return element
+    # 보이는 후보가 없으면 마지막 수단으로 첫 후보를 넘긴다(구 동작과 동일한 degrade).
+    return candidates[0] if candidates else None
+
+
 def _click_login_button(driver):
     """로그인 버튼 클릭을 여러 방식으로 시도한다."""
-    for selector in [LOGIN_BUTTON, "button.btn_login", "input.btn_login"]:
-        try:
-            button = driver.find_element(By.CSS_SELECTOR, selector)
-            button.click()
-            return True
-        except Exception:
-            try:
-                button = driver.find_element(By.CSS_SELECTOR, selector)
-                driver.execute_script("arguments[0].click();", button)
-                return True
-            except Exception:
-                continue
-    raise RuntimeError("로그인 버튼을 찾을 수 없습니다. 네이버 페이지 구조가 변경되었을 수 있습니다.")
+    button = _find_login_button(driver)
+    if button is None:
+        raise RuntimeError("로그인 버튼을 찾을 수 없습니다. 네이버 페이지 구조가 변경되었을 수 있습니다.")
+    try:
+        button.click()
+        return True
+    except Exception:
+        pass
+    try:
+        driver.execute_script("arguments[0].click();", button)
+        return True
+    except Exception as e:
+        raise RuntimeError(
+            f"로그인 버튼을 클릭하지 못했습니다. 네이버 페이지 구조가 변경되었을 수 있습니다. ({e})"
+        ) from e
 
 
 def _wait_until_leave_nid(driver, timeout=10):

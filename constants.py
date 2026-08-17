@@ -7,6 +7,18 @@ MOBILE_BLOG_URL = "https://m.blog.naver.com/FeedList.naver"
 LOGIN_ID = "#id"
 LOGIN_PW = "#pw"
 LOGIN_BUTTON = "#log\\.login"
+LOGIN_FORM = "#frmNIDLogin"
+# 2026-08 네이버 NID 로그인 화면 개편(V3_DESKTOP_DEFAULT) 대응.
+# 새 화면은 같은 문서에 레이아웃별 버튼(column/row)을 함께 두고 하나만 보여주므로 둘 다 후보로 둔다.
+# 구 구조(#log.login, .btn_login)는 네이버 A/B 롤백 대비로 뒤에 남긴다.
+# 주의: 바로 옆 패스키 버튼(#passkeyBtn_*)은 다른 인증 흐름이라 절대 후보에 넣지 않는다.
+LOGIN_BUTTON_SELECTORS = [
+    "#loginBtn_column",
+    "#loginBtn_row",
+    LOGIN_BUTTON,
+    "button.btn_login",
+    "input.btn_login",
+]
 
 # Editor - iframe & popups
 EDITOR_IFRAME = "mainFrame"

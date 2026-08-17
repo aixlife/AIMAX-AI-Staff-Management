@@ -3831,11 +3831,17 @@ class NaverBlogApp:
                 worker_started = True
                 target_mode = kwargs.pop("target_mode", "keyword")
                 if target_mode == "blogger_followers":
-                    self._worker_link_neighbor(**kwargs)
+                    result = self._worker_link_neighbor(**kwargs)
                 else:
-                    self._worker_neighbor(**kwargs)
+                    result = self._worker_neighbor(**kwargs)
                 status = "cancelled" if self.stop_event.is_set() else "done"
-                client.update_job(job_id, status, "로컬 실행기 작업이 종료되었습니다. 상세 결과는 앱 로그를 확인해주세요.")
+                # 2026-08-18: 예전에는 워커 결과를 버리고 무조건 done 으로 보고해서, 네이버
+                # 로그인 실패 같은 실제 실패가 서버에 성공으로 기록됐다(8/17 현주 서이추 보고에
+                # 연결된 잡 3건이 전부 done). yeri_write 와 같은 판정 경로를 쓴다.
+                if isinstance(result, dict) and not result.get("ok", True) and status != "cancelled":
+                    client.update_job(job_id, "failed", result.get("error") or "서로이웃 작업이 완료되지 않았습니다.", "error", result=result)
+                    return
+                client.update_job(job_id, status, "로컬 실행기 작업이 종료되었습니다. 상세 결과는 앱 로그를 확인해주세요.", result=result if isinstance(result, dict) else None)
             else:
                 raise ValueError(f"지원하지 않는 웹앱 작업입니다: {kind}")
         except Exception as e:
@@ -7626,6 +7632,10 @@ class NaverBlogApp:
 
     def _worker_neighbor(self, keywords, max_per_keyword, messages=None,
                         speed_mode="normal", cooldown_every=10, daily_limit=50):
+        # 2026-08-18: 원격(웹앱) 잡이 성공/실패를 판정할 수 있도록 결과 dict 를 돌려준다.
+        # 예전에는 예외를 전부 삼키고 None 을 반환해서, 네이버 로그인 실패까지 서버에
+        # "done"(성공)으로 보고됐다 — 사용자는 실패를 겪는데 서버 통계에는 성공으로 남았다.
+        outcome = {"ok": False, "stage": "neighbor_request", "error": "서로이웃 작업이 완료되지 않았습니다."}
         try:
             from browser.stealth_driver import create_stealth_driver
             from auth.naver_login import login
@@ -7639,14 +7649,16 @@ class NaverBlogApp:
             self.driver = create_stealth_driver()
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
-                return
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+                return outcome
 
             self.queue.put(("progress", 25))
             self._log("네이버 로그인 중...")
             login(self.driver, nid, npw)
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
-                return
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+                return outcome
 
             self.queue.put(("progress", 40))
             speed_label = {"safe": "안전", "normal": "보통", "fast": "빠름"}.get(speed_mode, speed_mode)
@@ -7664,10 +7676,12 @@ class NaverBlogApp:
 
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
-                return
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+                return outcome
 
             self.queue.put(("progress", 100))
             self._log(f"서로이웃 추가 완료: {total}명 신청")
+            outcome = {"ok": True, "stage": "neighbor_request", "total": total}
 
             # 완료 팝업
             try:
@@ -7689,9 +7703,14 @@ class NaverBlogApp:
         except Exception as e:
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+            elif outcome.get("ok"):
+                # 신청은 이미 끝났고 완료 팝업/집계 단계에서만 터진 경우 — 작업 자체는 성공이다.
+                self._log(f"[알림] 완료 처리 중 오류: {e}")
             else:
                 self._log(f"[오류] {e}")
                 traceback.print_exc()
+                outcome = {"ok": False, "stage": "neighbor_request", "error": str(e)}
         finally:
             if self.driver:
                 try:
@@ -7699,9 +7718,12 @@ class NaverBlogApp:
                 except Exception:
                     pass
             self.queue.put(("done", None))
+        return outcome
 
     def _worker_link_neighbor(self, blogger_url, max_requests, messages=None,
                               speed_mode="normal", cooldown_every=10, daily_limit=50):
+        # _worker_neighbor 와 같은 이유로 결과 dict 를 돌려준다(2026-08-18).
+        outcome = {"ok": False, "stage": "neighbor_request", "error": "서로이웃 작업이 완료되지 않았습니다."}
         try:
             from browser.stealth_driver import create_stealth_driver
             from auth.naver_login import login
@@ -7720,14 +7742,16 @@ class NaverBlogApp:
             self.driver = create_stealth_driver()
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
-                return
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+                return outcome
 
             self.queue.put(("progress", 25))
             self._log("네이버 로그인 중...")
             login(self.driver, nid, npw)
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
-                return
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+                return outcome
 
             self.queue.put(("progress", 40))
             scrape_limit = max(max_requests * 3, max_requests + 10)
@@ -7738,11 +7762,17 @@ class NaverBlogApp:
             )
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
-                return
+                outcome = {"ok": True, "cancelled": True, "stage": "follower_scrape"}
+                return outcome
             if not blog_ids:
                 self.queue.put(("progress", 100))
                 self._log("이웃 목록이 비공개이거나 접근 제한됨")
-                return
+                outcome = {
+                    "ok": False,
+                    "stage": "follower_scrape",
+                    "error": "기준 블로거의 이웃 목록이 비공개이거나 접근이 제한되어 후보를 한 명도 찾지 못했습니다.",
+                }
+                return outcome
 
             self.queue.put(("progress", 60))
             speed_label = {"safe": "안전", "normal": "보통", "fast": "빠름"}.get(speed_mode, speed_mode)
@@ -7761,10 +7791,12 @@ class NaverBlogApp:
 
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
-                return
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+                return outcome
 
             self.queue.put(("progress", 100))
             self._log(f"특정 블로거 링크 작업 완료: 후보 {len(blog_ids)}명 중 {total}명 신청")
+            outcome = {"ok": True, "stage": "neighbor_request", "total": total, "candidates": len(blog_ids)}
 
             try:
                 from engagement.neighbor_quota import get_today_count
@@ -7785,9 +7817,13 @@ class NaverBlogApp:
         except Exception as e:
             if self.stop_event.is_set():
                 self._log("사용자에 의해 중지됨")
+                outcome = {"ok": True, "cancelled": True, "stage": "neighbor_request"}
+            elif outcome.get("ok"):
+                self._log(f"[알림] 완료 처리 중 오류: {e}")
             else:
                 self._log(f"[오류] {e}")
                 traceback.print_exc()
+                outcome = {"ok": False, "stage": outcome.get("stage") or "neighbor_request", "error": str(e)}
         finally:
             if self.driver:
                 try:
@@ -7795,6 +7831,7 @@ class NaverBlogApp:
                 except Exception:
                     pass
             self.queue.put(("done", None))
+        return outcome
 
     def _run_scraper(self):
         keyword = self.scraper_keyword_var.get().strip()

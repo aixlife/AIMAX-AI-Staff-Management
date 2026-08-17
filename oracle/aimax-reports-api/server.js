@@ -2857,6 +2857,12 @@ function yeriGenerationFailureMessage(error) {
   return "AI 글 생성 오류가 발생했습니다. 모델, API 키, 사용량 한도를 확인해주세요.";
 }
 
+// 실행기가 코드로 찍는 고정 문구다(auth/naver_login.py). 네이버 로그인 화면 선택자가
+// 깨졌다는 신호이며, 사용자 재로그인으로는 절대 해소되지 않는다.
+// buildFailureDiagnostic 과 보고 자동안내 분류가 같은 정의를 공유한다.
+const NAVER_LOGIN_PAGE_CHANGED_PATTERN =
+  /로그인 버튼을 찾을 수 없|로그인 버튼을 클릭하지 못했|로그인 폼 요소.*찾을 수 없|naver_login_button_not_found/;
+
 function buildFailureDiagnostic(input = {}) {
   if (input && typeof input === "object" && input.code && input.title && input.message) {
     return {
@@ -2998,6 +3004,16 @@ function buildFailureDiagnostic(input = {}) {
       "실행기 업데이트 필요",
       "현재 실행기 버전이 웹 작업을 안정적으로 받을 수 없는 상태입니다.",
       ["실행기 업데이트", "오류 보고 보내기"],
+    );
+  }
+  // 2026-08-18: naver_login_required 앞에 둔다. 로그인 화면 선택자가 깨진 건이라
+  // 사용자가 몇 번을 재로그인해도 같은 실패로 돌아온다(7/21 model_not_found 와 같은 교훈).
+  if (NAVER_LOGIN_PAGE_CHANGED_PATTERN.test(text)) {
+    return admin(
+      "naver_login_page_changed",
+      "AIMAX 관리자 조치 필요",
+      "네이버 로그인 화면 구조가 바뀌어 실행기가 로그인 버튼을 찾지 못했습니다. 재로그인으로는 해결되지 않아 AIMAX 수정이 필요합니다.",
+      ["오류 보고 보내기"],
     );
   }
   if (/naver_login|네이버 로그인|login|captcha|인증 화면|로그인/.test(text)) {
@@ -11015,6 +11031,16 @@ const REPORT_AUTO_GUIDANCE = {
     public_message: "네이버 글쓰기 화면의 입력 영역을 실행기가 찾지 못해 작업이 중단됐습니다. 사용자 설정 문제가 아니라 AIMAX 쪽 확인이 필요한 오류입니다.",
     next_update_message: "운영팀이 네이버 에디터 화면 인식 부분을 확인하고 있습니다. 그 전까지는 같은 작업을 반복 실행하지 않으셔도 됩니다. 확인이 끝나면 이 화면으로 안내드립니다.",
   },
+  // 2026-08: 네이버가 NID 로그인 화면을 개편해 실행기가 로그인 버튼을 못 찾는 케이스.
+  // 문구에 "로그인"이 들어가서 naver_login_required(사용자가 직접 로그인하라)로 잡히는데,
+  // 실제로는 사용자가 아무리 로그인해도 실행기 선택자가 고쳐지기 전엔 같은 실패가 반복된다.
+  // → 반드시 naver_login_required 앞에서 걸러 운영팀 조치 건으로 잡는다.
+  naver_login_page_changed: {
+    status: "reviewing",
+    status_label: "확인 중",
+    public_message: "네이버 로그인 화면 구조가 바뀌어 실행기가 로그인 버튼을 찾지 못한 상태입니다. 네이버 계정이나 비밀번호 문제가 아니라 AIMAX 쪽 수정이 필요한 오류입니다.",
+    next_update_message: "운영팀이 네이버 로그인 화면 인식 부분을 수정하고 있습니다. 그 전까지는 같은 작업을 반복 실행하지 않으셔도 됩니다. 수정된 실행기가 준비되면 이 화면으로 안내드립니다.",
+  },
   api_key_invalid: {
     status: "waiting_user",
     status_label: "사용자 확인 필요",
@@ -11143,6 +11169,8 @@ const REPORT_STRUCTURED_JOB_GUIDANCE_RULES = [
   ["organization_verification_required", /organization_verification_required|verify your organization|must be verified/],
   ["image_paid_required", /image_paid_required|image_paid_reauired/],
   ["image_generation_failed", /image_generation_failed|image_upload_failed|image_uploaded_but_not_inserted|이미지 생성 실패|이미지 생성용 로컬 api 키가 없어/],
+  // 선택자 파손은 사용자가 손댈 수 없다 — naver_login_required 앞에 둔다.
+  ["naver_login_page_changed", NAVER_LOGIN_PAGE_CHANGED_PATTERN],
   ["naver_login_required", /naver_login|captcha|nid 로그인|로그인 실패: 아이디 또는 비밀번호|2단계 인증|인증 화면|로그인 페이지에 머무/],
   ["runner_update_required", /update_required|runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_worker_not_started_after_claim|local_ui_queue_not_processed_after_claim|local_worker_progress_stalled/],
   ["provider_transient", /server_generation_provider_transient|provider_transient|server_generation_timeout|server_generation_interrupted|overloaded|unavailable|temporar/],
@@ -11234,6 +11262,7 @@ function classifyReportAutoGuidance(report) {
     ["browser_driver_policy_blocked", /browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551/],
     ["runner_update_required", /update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트/],
     ["web_login_failed", /로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지/],
+    ["naver_login_page_changed", NAVER_LOGIN_PAGE_CHANGED_PATTERN],
     ["naver_login_required", /네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리/],
     ["mac_gatekeeper", /개인정보 보호 및 보안|그래도 열기|open anyway|다시실행 하면 아무 반응|확인되지 않은 개발자|손상되었기 때문에 열 수 없/],
     ["image_paid_required", /image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델/],
@@ -11573,7 +11602,8 @@ function automationTicketCategory(summary, report) {
   if (/model_not_found/.test(autoGuidanceCategory)) return "aimax_model_catalog";
   if (/api_key|quota|rate_limit|provider_transient|image_paid_required/.test(autoGuidanceCategory)) return "user_ai_provider";
   if (/runner_update_required|bundle_integrity_mismatch/.test(autoGuidanceCategory)) return "local_runner";
-  if (/naver_login_required/.test(autoGuidanceCategory)) return "naver_editor";
+  // naver_login_page_changed 는 우리 코드(실행기 선택자) 작업이라 naver_editor 로 묶는다.
+  if (/naver_login_required|naver_login_page_changed/.test(autoGuidanceCategory)) return "naver_editor";
   const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
   const diagnosticCode = sanitizeFailedStage(diagnostic?.code || "");
   const stage = sanitizeFailedStage(summary.job_stage || "");

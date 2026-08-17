@@ -101,6 +101,16 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="네이버 글쓰기 화면의 입력 영역을 실행기가 찾지 못해 작업이 중단됐습니다. 사용자 설정 문제가 아니라 AIMAX 쪽 확인이 필요한 오류입니다.",
         next_update_message="운영팀이 네이버 에디터 화면 인식 부분을 확인하고 있습니다. 그 전까지는 같은 작업을 반복 실행하지 않으셔도 됩니다. 확인이 끝나면 이 화면으로 안내드립니다.",
     ),
+    # 2026-08: 네이버 NID 로그인 화면 개편으로 실행기가 로그인 버튼을 못 찾는 케이스.
+    # 문구에 "로그인"이 있어 naver_login_required(사용자가 직접 로그인)로 잡히지만, 실제로는
+    # 사용자가 몇 번을 재로그인해도 실행기 선택자를 고치기 전엔 같은 실패로 돌아온다.
+    "naver_login_page_changed": Guidance(
+        category="naver_login_page_changed",
+        status="reviewing",
+        status_label="확인 중",
+        public_message="네이버 로그인 화면 구조가 바뀌어 실행기가 로그인 버튼을 찾지 못한 상태입니다. 네이버 계정이나 비밀번호 문제가 아니라 AIMAX 쪽 수정이 필요한 오류입니다.",
+        next_update_message="운영팀이 네이버 로그인 화면 인식 부분을 수정하고 있습니다. 그 전까지는 같은 작업을 반복 실행하지 않으셔도 됩니다. 수정된 실행기가 준비되면 이 화면으로 안내드립니다.",
+    ),
     "image_local_key_missing": Guidance(
         category="image_local_key_missing",
         status="waiting_user",
@@ -382,6 +392,13 @@ def report_recent_jobs(detail: dict[str, Any] | None) -> list[dict[str, Any]]:
     return []
 
 
+# 실행기가 코드로 찍는 고정 문구(auth/naver_login.py). 네이버 로그인 화면 선택자가 깨졌다는
+# 신호이며 사용자 재로그인으로는 해소되지 않는다. server.js 의 동명 상수와 같은 정의를 쓴다.
+NAVER_LOGIN_PAGE_CHANGED_PATTERN = (
+    r"로그인 버튼을 찾을 수 없|로그인 버튼을 클릭하지 못했|로그인 폼 요소.*찾을 수 없|naver_login_button_not_found"
+)
+
+
 # 연결 잡의 정형 신호(머신 코드 + 서버/러너 고정 문구) 1순위 룰. server.js 의
 # REPORT_STRUCTURED_JOB_GUIDANCE_RULES 와 의미를 맞춘다. 여기 매칭되면 자유 텍스트 룰은 건너뛴다.
 STRUCTURED_JOB_RULES: list[tuple[str, str]] = [
@@ -399,6 +416,8 @@ STRUCTURED_JOB_RULES: list[tuple[str, str]] = [
     ("organization_verification_required", r"organization_verification_required|verify your organization|must be verified"),
     ("image_paid_required", r"image_paid_required|image_paid_reauired"),
     ("image_generation_failed", r"image_generation_failed|image_upload_failed|image_uploaded_but_not_inserted|이미지 생성 실패|이미지 생성용 로컬 api 키가 없어"),
+    # 선택자 파손은 사용자가 손댈 수 없다 — naver_login_required 앞에 둔다.
+    ("naver_login_page_changed", NAVER_LOGIN_PAGE_CHANGED_PATTERN),
     ("naver_login_required", r"naver_login|captcha|nid 로그인|로그인 실패: 아이디 또는 비밀번호|2단계 인증|인증 화면|로그인 페이지에 머무"),
     ("runner_update_required", r"update_required|runner_start_timeout|runner_start_not_reported|runner_stopped_heartbeating|local_worker_not_started_after_claim|local_ui_queue_not_processed_after_claim|local_worker_progress_stalled"),
     ("provider_transient", r"server_generation_provider_transient|provider_transient|server_generation_timeout|server_generation_interrupted|overloaded|unavailable|temporar"),
@@ -600,6 +619,10 @@ def still_failing_guidance(row: dict[str, Any]) -> Guidance | None:
         return GUIDANCE["browser_driver_policy_blocked"]
     if category == "web_login_failed" or re.search(r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지", text, re.I):
         return GUIDANCE["web_login_failed_still_failing"]
+    # 로그인 화면 선택자 파손 건은 AIMAX 수정 대기 상태다. "다시 로그인해보라"는
+    # 사용자 조치 안내로 되돌리면 사용자만 헛돈다 — 여기서 끊는다.
+    if category == "naver_login_page_changed" or re.search(NAVER_LOGIN_PAGE_CHANGED_PATTERN, text, re.I):
+        return None
     if category == "naver_login_required" or re.search(r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리", text, re.I):
         return GUIDANCE["naver_login_required_still_failing"]
     return None
@@ -650,6 +673,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dic
         ("browser_driver_policy_blocked", r"browser_start|브라우저 시작|chromedriver|undetected_chromedriver|애플리케이션 제어 정책|application control policy|winerror 4551"),
         ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
         ("web_login_failed", r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지"),
+        ("naver_login_page_changed", NAVER_LOGIN_PAGE_CHANGED_PATTERN),
         ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
         ("mac_gatekeeper", MAC_GATEKEEPER_PATTERN),
         ("image_paid_required", r"image_paid_reauired|image_paid_required|이미지.*유료|이미지.*사용불가|이미지 모델"),
@@ -679,6 +703,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dic
         ("provider_transient", r"provider_transient|temporar|unavailable|overloaded|일시적 오류|잠시 후"),
         ("web_login_failed", r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지"),
         ("runner_update_required", r"update_required|필수 업데이트|최신.*설치|구버전|실행기.*업데이트"),
+        ("naver_login_page_changed", NAVER_LOGIN_PAGE_CHANGED_PATTERN),
         ("naver_login_required", r"네이버.*로그인|2단계 인증|새 기기|내프로필|보안설정|이력관리"),
         ("mac_gatekeeper", MAC_GATEKEEPER_PATTERN),
     ]
