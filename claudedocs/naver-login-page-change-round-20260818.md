@@ -109,7 +109,7 @@ hyunju_find  → 결과를 읽지 않고 항상 done                  (결함)
 |---|---|
 | 실제 네이버 로그인 페이지 HTML 대조 | PASS — 구 선택자 3종 부재, 신규 2종 존재 확인 |
 | `verify_naver_login_button_live.py` (실사이트 렌더링) | PASS — 아래 별도 항목 참조 |
-| `smoke_naver_login_button.py` (신규 15건) | PASS — 신·구 화면, 숨은 버튼 회피, 패스키 회피, 폴백, 스윕 분류 동기화 |
+| `smoke_naver_login_button.py` (신규 19건) | PASS — 신·구 화면, 숨은 버튼 회피, 패스키 회피, 폴백, 스윕 분류 동기화, AIMAX 조치 건 강등 차단 |
 | `smoke_naver_login_page_changed_guidance.mjs` (신규 11건) | PASS — 정형·자유텍스트·감싸인 문구 분류, 2단계 인증 회귀, 앱 진단, 티켓 분류 |
 | `smoke_hyunju_remote_job_outcome.py` (신규 11건) | PASS — 실패→failed, 성공→done, 결과 없음→done(회귀) |
 | `smoke_report_auto_guidance_structured.mjs` | 18/19 — FAIL 1건은 **내 변경 전에도 동일**(기존 결함) |
@@ -169,10 +169,41 @@ hyunju_find  → 결과를 읽지 않고 항상 done                  (결함)
    배포 후 열려 있는 보고에 스윕을 돌려 안내를 교체한다.
 2. **맥스 릴리스** — `fix/notion-timed-dates-and-character-toggle` → master 병합 → 태그 → 릴리스 게시.
    두 피드백 보고에 완료 안내 발송.
-3. **실행기 v1.0.60** — Windows/Mac 빌드 → 실계정 로그인 실기 검증 → 카탈로그 등록.
+3. **실행기 v1.0.62** — Windows/Mac 빌드 → 실계정 로그인 실기 검증 → 카탈로그 등록.
    이게 끝나야 예리·현주 실패가 실제로 멈춘다.
 
-## 7. 배포 후 관찰
+## 7. 배포 실행 기록 (2026-08-18)
+
+| 단계 | 상태 | 근거 |
+|---|---|---|
+| 1. 서버 자동안내 배포 | **완료·검증** | `server.js` 원격 sha256 `c08b6330…` = main 로컬과 일치, 서비스 active, 공개 `/api/version` 200 |
+| 1-a. 배포 전 드리프트 확인 | 통과 | 배포 직전 원격 `server.js` 가 직전 커밋과 바이트 일치 — 서버에 미커밋 핫픽스 없음 |
+| 1-b. 운영 스윕 체크아웃 동기화 | 완료 | `.openclaw/workspace` 체크아웃을 main 최신으로 pull (자동안내 스윕이 여기서 돈다) |
+| 1-c. 열린 보고 재분류 | 무변경 | 운영 창(14일) dry-run 결과 대상 0건 — 안전 |
+| 2. 맥스 v0.2.4 빌드 | **완료 · 게시 대기** | cargo test 21/21 → master 병합 → 태그 → CI 성공 → `maxalert-releases` 에 **드래프트** 생성 |
+| 3. 실행기 v1.0.62 빌드 | **완료 · 카탈로그 미등록** | mac dmg 49MB + win exe 39.5MB 산출, 태그 `v1.0.62` = 커밋 `23c0cdd` |
+
+### 배포 중에 잡은 잠복 결함 1건
+
+운영 스윕을 30일 창으로 넓혀 dry-run 하다가, 7/24 에디터 구조 변경 보고가
+`browser_driver_policy_blocked`("보안 프로그램 차단을 허용하세요")로 강등되려는 것을 발견했다.
+selenium 로그에 섞인 `driver` 문자열 때문이다. 사용자가 보안 설정을 아무리 만져도
+`.se-section-documentTitle` 선택자는 고쳐지지 않는다.
+
+`AIMAX_ACTION_CATEGORIES`(editor_structure_changed · naver_login_page_changed · model_not_found)에
+걸리면 강등 경로 진입 전에 끊도록 고쳤다(커밋 `d27b19c`).
+운영 창은 14일이라 실제 강등은 일어나지 않았다 — 터지기 전에 잡았다.
+
+### 남은 사람 클릭 2개
+
+1. **맥스 v0.2.4 Publish** — `makefriendscoltd-design/maxalert-releases` 의 드래프트를 Publish.
+   누르는 순간 전 플릿 자동 업데이트가 시작된다.
+   게시 후 `scripts/close_maxalert_feedback_reports_20260818.sh` 를 돌리면 피드백 2건에 완료 안내가 붙는다.
+   (게시 전에 돌리면 "업데이트하세요"라고 해놓고 받을 게 없다.)
+2. **실행기 v1.0.62 카탈로그 등록** — 서버 다운로드 파일 교체 + `.env` LATEST 상향.
+   등록 전에 실계정 네이버 로그인 1건을 통과시키는 것을 권한다.
+
+## 8. 배포 후 관찰
 
 - 예리 `로그인 버튼을 찾을 수 없` 실패가 0으로 떨어지는지 (현재 주당 7건)
 - 현주 실패율 — 수정 전엔 측정 자체가 안 됐다. 새 baseline을 1주일 잡는다
