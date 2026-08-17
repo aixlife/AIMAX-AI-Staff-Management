@@ -392,6 +392,17 @@ def report_recent_jobs(detail: dict[str, Any] | None) -> list[dict[str, Any]]:
     return []
 
 
+# 사용자가 설정·재시도로 해소할 수 없고 AIMAX 코드/카탈로그 수정이 필요한 분류.
+# 이 카테고리가 붙은 보고는 재응답이 와도 사용자 조치 안내로 되돌리지 않는다.
+AIMAX_ACTION_CATEGORIES = frozenset(
+    {
+        "editor_structure_changed",
+        "naver_login_page_changed",
+        "model_not_found",
+    }
+)
+
+
 # 실행기가 코드로 찍는 고정 문구(auth/naver_login.py). 네이버 로그인 화면 선택자가 깨졌다는
 # 신호이며 사용자 재로그인으로는 해소되지 않는다. server.js 의 동명 상수와 같은 정의를 쓴다.
 NAVER_LOGIN_PAGE_CHANGED_PATTERN = (
@@ -614,6 +625,12 @@ def still_failing_guidance(row: dict[str, Any]) -> Guidance | None:
     if str(row.get("user_response") or "") != "still_failing":
         return None
     category = str(row.get("auto_guidance_category") or "")
+    # 이미 "AIMAX가 고쳐야 하는 건"으로 분류된 보고는 사용자 조치 안내로 강등하지 않는다.
+    # 강등하면 사용자는 자기가 고칠 수 없는 것을 계속 시도하게 되고 보고는 방치된다.
+    # (2026-08-18 실측: 7/24 에디터 구조 변경 건이 selenium 로그의 'driver' 문자열 때문에
+    #  browser_driver_policy_blocked = "보안 프로그램 차단 허용하세요" 로 넘어가려 했다.)
+    if category in AIMAX_ACTION_CATEGORIES:
+        return None
     text = report_issue_text(row)
     if is_browser_driver_policy_blocked(text):
         return GUIDANCE["browser_driver_policy_blocked"]

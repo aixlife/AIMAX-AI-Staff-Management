@@ -176,6 +176,38 @@ check("2단계 인증은 기존 분류 유지", getattr(sweep.classify(real_logi
 still = dict(row, status="reviewing", user_response="still_failing", auto_guidance_category="naver_login_page_changed")
 check("still_failing → 사용자 조치로 강등 안 함", sweep.still_failing_guidance(still), None)
 
+# 7/24 실측 재현: 에디터 구조 변경 건이 selenium 로그의 'driver' 문자열 때문에
+# browser_driver_policy_blocked("보안 프로그램 차단 허용하세요")로 넘어가려 했다.
+editor_still = {
+    "report_kind": "error",
+    "status": "reviewing",
+    "user_response": "still_failing",
+    "auto_guidance_category": "editor_structure_changed",
+    "work_context": "블로그 작업중이였습니다.",
+    "visible_error": (
+        "AIMAX 관리자 조치 필요 단계: smart_editor_title "
+        "Message: no such element: Unable to locate element: "
+        '{"method":"css selector","selector":".se-section-documentTitle"} '
+        "(Session info: chrome=139) driver info: chromedriver"
+    ),
+}
+check("에디터 구조 건은 드라이버 차단으로 강등 안 함", sweep.still_failing_guidance(editor_still), None)
+
+# 진짜 네이버 보안 확인 건은 still_failing 승급 경로가 그대로 살아 있어야 한다(회귀).
+naver_still = {
+    "report_kind": "error",
+    "status": "reviewing",
+    "user_response": "still_failing",
+    "auto_guidance_category": "naver_login_required",
+    "work_context": "예리 글쓰기",
+    "visible_error": "네이버 로그인 2단계 인증 화면에서 계속 멈춥니다",
+}
+check(
+    "2단계 인증 still_failing 승급 유지",
+    getattr(sweep.still_failing_guidance(naver_still), "category", None),
+    "naver_login_required_still_failing",
+)
+
 print()
 if FAILURES:
     print(f"FAIL {len(FAILURES)}건")
