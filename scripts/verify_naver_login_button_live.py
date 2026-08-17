@@ -5,14 +5,20 @@
 알 수 없다. 여기서는 프로덕션과 같은 셀레니움 스택으로 페이지를 실제 렌더링한 뒤
 `_find_login_button` 이 고르는 요소가 보이고 누를 수 있는지까지 확인한다.
 
-로그인하지 않는다. 계정 정보를 입력하지도, 제출하지도 않는다 — DOM 조회만 한다.
+기본 모드는 DOM 조회만 한다 — 실계정 정보를 입력하지도, 제출하지도 않는다.
 
-실행: .venv/bin/python scripts/verify_naver_login_button_live.py
+`--submit-probe` 를 주면 한 걸음 더 간다. **존재하지 않는 가짜 계정**으로 로그인 버튼을
+한 번만 눌러, 네이버가 "아이디/비밀번호 확인" 화면으로 응답하는지 본다.
+버튼을 못 눌렀다면 폼에 그대로 머물기 때문에, 이 응답이 곧 "클릭이 제출까지 이어졌다"는 증거다.
+실계정은 절대 쓰지 않으며 재시도도 하지 않는다(반복 실패는 IP 단위 캡차를 부른다).
+
+실행: .venv/bin/python scripts/verify_naver_login_button_live.py [--submit-probe]
 """
 
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +28,12 @@ from selenium import webdriver  # noqa: E402
 from selenium.webdriver.chrome.options import Options  # noqa: E402
 from selenium.webdriver.common.by import By  # noqa: E402
 
-from auth.naver_login import _find_login_button, _is_clickable  # noqa: E402
+from auth.naver_login import (  # noqa: E402
+    _click_login_button,
+    _find_login_button,
+    _inject_credentials,
+    _is_clickable,
+)
 from constants import LOGIN_BUTTON_SELECTORS, NAVER_LOGIN_URL  # noqa: E402
 
 FAILURES: list[str] = []
@@ -84,6 +95,45 @@ def main() -> int:
             narrow_id = narrow.get_attribute("id") or ""
             print(f"  선택된 요소: id={narrow_id!r}")
             check("좁은 창에서도 누를 수 있음", _is_clickable(narrow), True)
+
+        if "--submit-probe" in sys.argv:
+            print("[5] 클릭이 실제 폼 제출까지 이어지는가 (존재하지 않는 가짜 계정, 1회만)")
+            driver.set_window_size(1440, 900)
+            driver.get(NAVER_LOGIN_URL)
+            # 실계정 아님. 로그인 성공을 기대하지 않는다 — 네이버가 "확인" 화면으로
+            # 응답하는지만 본다. 버튼을 못 눌렀다면 폼에 그대로 머문다.
+            before_url = driver.current_url or ""
+            _inject_credentials(driver, "aimax-qa-no-such-account-8f21c", "not-a-real-password-8f21c")
+            clicked = _click_login_button(driver)
+            check("클릭 자체는 성공", clicked, True)
+
+            # 제출 증거는 두 가지 중 하나다.
+            #  (a) URL 이 폼 주소(?mode=form)에서 POST 대상으로 바뀐다
+            #  (b) 폼 안에 오류 메시지 요소(.form_message.error)가 나타난다
+            # 버튼을 못 눌렀다면 둘 다 일어나지 않는다.
+            deadline = time.monotonic() + 12
+            error_text = ""
+            while time.monotonic() < deadline:
+                if (driver.current_url or "") != before_url:
+                    break
+                for node in driver.find_elements(By.CSS_SELECTOR, ".form_message.error"):
+                    text = " ".join((node.text or "").split())
+                    if text:
+                        error_text = text
+                        break
+                if error_text:
+                    break
+                time.sleep(0.5)
+
+            url = driver.current_url or ""
+            print(f"  제출 전 URL: {before_url[:80]}")
+            print(f"  제출 후 URL: {url[:80]}")
+            if error_text:
+                print(f"  폼 오류 메시지: {error_text[:120]}")
+            submitted = url != before_url or bool(error_text)
+            check("폼이 실제로 제출됨(네이버가 응답)", submitted, True)
+            if "captcha" in url.lower():
+                print("  참고: 캡차 화면 — 제출은 됐다는 뜻이다. 재시도하지 않는다.")
     finally:
         try:
             driver.quit()

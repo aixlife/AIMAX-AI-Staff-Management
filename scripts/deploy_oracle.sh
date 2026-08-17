@@ -321,6 +321,35 @@ for index in "${!SOURCES[@]}"; do
   ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; mkdir -p '$(dirname "$remote_path")'; install -m 0644 '$REMOTE_TMP/$remote_tmp_name' '$remote_path'"
 done
 
+# 번들을 올렸으면 "지금 어떤 버전이 실제로 서빙 중인지" 도장을 남긴다.
+# 2026-08-18 사고: v1.0.60·61 은 태그·빌드·카탈로그 상향까지 됐는데 설치 파일 업로드만
+# 빠져서, 4주 동안 전 사용자가 v1.0.59 를 받아 v1.0.59 에 머물렀다(플릿 111대 중 60/61 0대).
+# 이 도장과 카탈로그 LATEST 를 대조하면 같은 사고를 즉시 잡을 수 있다.
+# 확인: scripts/verify_agent_catalog_consistency.py
+if [[ "$MODE" == "macos-bundle" || "$MODE" == "windows-bundle" || "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
+  BUNDLE_VERSION="$(python3 -c "import re,pathlib;print(re.search(r'APP_VERSION\s*=\s*\"([^\"]+)\"', pathlib.Path('$ROOT_DIR/aimax_compliance.py').read_text(encoding='utf-8')).group(1))" 2>/dev/null || echo "")"
+  if [[ -n "$BUNDLE_VERSION" ]]; then
+    echo "[STAMP] 서빙 번들 버전 기록: $BUNDLE_VERSION"
+    ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; cd '$REMOTE_DOWNLOAD_DIR'; python3 - <<'STAMPEOF'
+import hashlib, json, pathlib, datetime
+out = {'stamped_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'version': '$BUNDLE_VERSION', 'files': {}}
+for name in ('aimax-bundle-macos.dmg', 'aimax-bundle-windows.exe'):
+    p = pathlib.Path(name)
+    if not p.exists():
+        continue
+    h = hashlib.sha256()
+    with p.open('rb') as f:
+        for chunk in iter(lambda: f.read(1 << 20), b''):
+            h.update(chunk)
+    out['files'][name] = {'sha256': h.hexdigest(), 'size': p.stat().st_size}
+pathlib.Path('aimax-bundle-versions.json').write_text(json.dumps(out, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+print(json.dumps(out, ensure_ascii=False))
+STAMPEOF"
+  else
+    echo "[STAMP][WARN] aimax_compliance.py 에서 APP_VERSION 을 읽지 못해 도장을 남기지 못했습니다." >&2
+  fi
+fi
+
 echo "[SERVICE] restarting $REMOTE_SERVICE"
 ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; systemctl --user restart '$REMOTE_SERVICE'; sleep 2; systemctl --user is-active '$REMOTE_SERVICE'"
 
