@@ -99,6 +99,8 @@ assert.equal(yunmi.status, "pending");
 assert.equal(yunmi.product, "yunmi");
 assert.equal(__cafe24Test.shouldAutoProcessCafe24Order(yunmi), true);
 
+// 2026-08-18 정책 변경: 등록가와 결제 금액이 어긋나도 주문을 막지 않고 경고만 남긴다.
+// (판매가 개편 33,000 -> 30,000 이 반영 안 돼 유료 주문이 12일 묶였던 사고)
 const wrongAmount = __cafe24Test.buildCafe24Order({
   order: {
     email: "wrong-amount@example.com",
@@ -108,9 +110,24 @@ const wrongAmount = __cafe24Test.buildCafe24Order({
   },
 }, now);
 
-assert.equal(wrongAmount.status, "needs_review");
+assert.equal(wrongAmount.status, "pending");
 assert.equal(wrongAmount.product, "songi");
-assert.equal(wrongAmount.issue, "amount_mismatch");
+assert.equal(wrongAmount.issue, "");
+assert.equal(wrongAmount.price_warnings.length, 1);
+assert.equal(__cafe24Test.shouldAutoProcessCafe24Order(wrongAmount), true);
+
+// 등록가의 3배를 넘는 금액은 오매칭 위험이 커서 그대로 사람 검토로 남는다.
+const wayOffAmount = __cafe24Test.buildCafe24Order({
+  order: {
+    email: "way-off@example.com",
+    name: "금액 과다",
+    product_name: "자료조사원 송이씨",
+    amount: "1,990,000",
+  },
+}, now);
+
+assert.equal(wayOffAmount.status, "needs_review");
+assert.equal(wayOffAmount.issue, "amount_mismatch");
 
 const hyojin = __cafe24Test.buildCafe24Order({
   order: {
