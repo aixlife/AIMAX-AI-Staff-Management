@@ -11725,6 +11725,10 @@ function summaryFor(report, storedAt, dateKey) {
     user_response: support.user_response || "",
     user_response_note: support.user_response_note || "",
     user_response_updated_at: support.user_response_updated_at || "",
+    // 반복 보고 억제용 — 서명이 인덱스에 있어야 다음 접수에서 중복을 판정할 수 있다.
+    duplicate_signature: support.duplicate_signature || "",
+    repeat_count: safeInt(support.repeat_count),
+    last_repeated_at: support.last_repeated_at || "",
     automation_ticket_id: support.automation_ticket_id || "",
     // 자동 안내가 부여한 분류 카테고리를 인덱스에도 남긴다. 이게 없으면 재분류 스윕
     // (aimax_report_auto_guidance)의 '운영자 수동설정 보호' 가드가 handleReport 로 자동
@@ -18145,6 +18149,68 @@ async function handleAgentJobUpdate(req, res) {
   json(req, res, 200, { ok: true, job: publicJob(job) });
 }
 
+// ─── 반복 오류 보고 억제 ─────────────────────────────────────────────────────
+// 사용자에게는 "같은 오류를 다시 보내지 않아도 됩니다"라고 안내해 왔지만, 접수 쪽에는
+// 그걸 강제하는 장치가 없었다. 같은 사람이 같은 오류로 5번 누르면 리포트 5건 + 자동화 티켓
+// 5건 + 텔레그램 5건이 생긴다. 실측(2026-08-18): 전체 162건 중 11건(7%)이 24시간 내 반복이고,
+// 최다는 같은 오류 3회였다. 이 중복이 열린 티켓 수를 부풀려 감시·수리 에이전트 노이즈까지 키운다.
+//
+// 억제하되 삼키지는 않는다 — 원본에 repeat_count 를 쌓아 "또 났다"는 신호는 남긴다.
+// 이미 종결된(done/cancelled) 건과 같은 증상이면 재발이므로 새 보고로 받는다.
+const REPORT_DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const REPORT_DUPLICATE_OPEN_STATUSES = new Set(["new", "reviewing", "working", "waiting_user"]);
+
+function reportDuplicateSignature(report) {
+  const parts = [
+    String(report?.account?.user_id || "").trim(),
+    String(report?.report_kind || "").trim(),
+    compactText(report?.user_input?.visible_error || report?.feedback?.improve || "", 200),
+    compactText(report?.user_input?.work_context || "", 120),
+    String(reportPrimaryJob(report)?.id || ""),
+  ];
+  return crypto.createHash("sha256").update(parts.join("\u0000").toLowerCase()).digest("hex");
+}
+
+// 같은 서명의 열린 보고가 창 안에 있으면 그 행을 돌려준다. 없으면 null.
+function findOpenDuplicateReport(report, receivedAtMs) {
+  const signature = reportDuplicateSignature(report);
+  const userId = String(report?.account?.user_id || "").trim();
+  if (!userId) return null;
+  let rows = [];
+  try {
+    rows = loadReportIndexRows(400);
+  } catch (_error) {
+    return null;
+  }
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (String(row.account_user_id || "") !== userId) continue;
+    if (!REPORT_DUPLICATE_OPEN_STATUSES.has(String(row.status || ""))) continue;
+    const storedMs = Date.parse(String(row.stored_at || ""));
+    if (!Number.isFinite(storedMs) || receivedAtMs - storedMs > REPORT_DUPLICATE_WINDOW_MS) continue;
+    if (String(row.duplicate_signature || "") === signature) return row;
+  }
+  return null;
+}
+
+// 원본에 반복 횟수를 쌓는다. 트리아지에서 "몇 번이나 다시 눌렀는지"가 곧 심각도 신호다.
+function recordReportRepeat(row, receivedAt) {
+  const cleanId = cleanReportId(row.report_id);
+  const nextCount = safeInt(row.repeat_count) + 1;
+  const patch = { repeat_count: nextCount, last_repeated_at: receivedAt };
+  const detailPath = reportPathFromSummary(row);
+  if (detailPath && fs.existsSync(detailPath)) {
+    try {
+      const detail = JSON.parse(fs.readFileSync(detailPath, "utf8"));
+      detail.support = { ...(detail.support || {}), repeat_count: nextCount, last_repeated_at: receivedAt };
+      writeJsonAtomic(detailPath, detail);
+    } catch (error) {
+      console.warn(`[report dedup] 상세 갱신 실패 ${cleanId}: ${error.message}`);
+    }
+  }
+  return updateReportIndexSummary(cleanId, patch) || { ...row, ...patch };
+}
+
 async function handleReport(req, res) {
   const reportSession = lookupSession(req);
   const hasActiveSession = Boolean(reportSession && reportSession.user.status === "active");
@@ -18168,6 +18234,29 @@ async function handleReport(req, res) {
   const storedAt = nowIso();
   report.server_received_at = storedAt;
   report.server_redacted = true;
+
+  // 같은 사람이 같은 오류로 다시 누른 경우 — 새 보고/티켓/텔레그램을 만들지 않고
+  // 원본에 반복 횟수만 쌓은 뒤 그 보고의 현재 상태를 그대로 돌려준다.
+  const duplicateOf = findOpenDuplicateReport(report, Date.parse(storedAt));
+  if (duplicateOf) {
+    const updated = recordReportRepeat(duplicateOf, storedAt);
+    json(req, res, 200, {
+      ok: true,
+      duplicate_of: updated.report_id,
+      report_id: updated.report_id,
+      stored_at: updated.stored_at,
+      status: updated.status,
+      status_label: updated.status_label,
+      public_message: updated.public_message,
+      next_update_message: updated.next_update_message,
+      status_updated_at: updated.status_updated_at || updated.stored_at,
+      automation_ticket_id: updated.automation_ticket_id || "",
+      auto_guidance_category: updated.auto_guidance_category || "",
+      repeat_count: safeInt(updated.repeat_count),
+      already_received: true,
+    });
+    return;
+  }
   const supportMeta = reportSupportMeta(report, "new");
   report.support = {
     status: "new",
@@ -18178,6 +18267,8 @@ async function handleReport(req, res) {
   };
   attachServerJobSnapshot(report);
   applyReportAutoGuidance(report, storedAt);
+  // 다음 중복 판정을 위해 서명을 인덱스에 남긴다.
+  report.support.duplicate_signature = reportDuplicateSignature(report);
 
   const dateKey = storedAt.slice(0, 10);
   const dayDir = path.join(REPORTS_DIR, dateKey);
@@ -19097,6 +19188,10 @@ module.exports = {
   __automationTest: {
     AUTOMATION_TICKETS_PATH,
     applyReportAutoGuidance,
+    findOpenDuplicateReport,
+    recordReportRepeat,
+    reportDuplicateSignature,
+    summaryFor,
     classifyReportAutoGuidance,
     classifyStructuredJobGuidance,
     reportStructuredJobSignal,
