@@ -119,6 +119,8 @@ check("구조 섹션 포함", prompt.includes("글 구조("), true);
 check("라벨 그대로 쓰지 말라는 지시 포함", prompt.includes("소제목 문구는 위 라벨을 그대로 쓰지 말고"), true);
 check("항목 임의 증감 금지 포함", prompt.includes("항목을 임의로 추가하거나 빼지 않는다"), true);
 check("기존 규칙 유지(이미지 배치)", prompt.includes("[이미지] 줄을 연속으로 몰아서 쓰지 않는다"), true);
+check("글자 주인공 이미지 금지 규칙 포함", prompt.includes("글자가 주인공인 소재를 넣지 않는다"), true);
+check("대체 묘사 지침 포함", prompt.includes("글자 없이 전달되는 장면"), true);
 
 console.log("[7] 팩 파일이 없으면 구조 지시만 빠지고 생성은 계속된다 (안전 degrade)");
 const packPath = path.join(repoRoot, "oracle/aimax-reports-api/yeri-structure-packs.json");
