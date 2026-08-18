@@ -2308,18 +2308,53 @@ function normalizeYeriDuplicateNumberPrefixes(markdown) {
   }).join("\n");
 }
 
+// ─── 이미지 안의 글자 ────────────────────────────────────────────────────────
+// 2026-08-18 실측: 이미지 모델 중 한글을 제대로 그리는 건 gpt-image-2 뿐이다.
+// 나머지 모델에 "주문 양식 화면", "안내 카드" 같은 글자 주인공 프롬프트를 주면
+// 깨진 한글이 그려져 블로그에 그대로 올라간다("디져트 에약", "앤딩머세오 라담젼뎍가").
+// 그래서 금지가 아니라 **모델에 따라 다르게** 지시한다.
+const YERI_TEXT_CAPABLE_IMAGE_MODELS = new Set(["gpt-image-2"]);
+
+function yeriImageModelRendersText(payload) {
+  return YERI_TEXT_CAPABLE_IMAGE_MODELS.has(String(payload?.image_model || "").trim().toLowerCase());
+}
+
+// 글자를 읽어야 의미가 생기는 소재를 요구하는 [이미지] 줄을 찾는다.
+// 모델이 글자를 못 그리는데 이런 프롬프트가 나오면 결과가 깨지므로 경고로 남긴다.
+const YERI_IMAGE_TEXT_SUBJECT_PATTERN =
+  /(화면|스크린|앱\s*화면|웹\s*페이지|양식|주문서|신청서|서류|문서|안내판|간판|현수막|메뉴판|표지판|채팅|메시지|카카오톡|로고|명함|영수증|라벨|포스터|배너|자막|카드|태그|스티커|칠판|화이트보드|쪽지|글자|문구|텍스트|적힌|쓰여|씌어)/;
+
+function yeriImageTextRiskLines(markdown) {
+  return String(markdown || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\[이미지\]/.test(line))
+    .filter((line) => YERI_IMAGE_TEXT_SUBJECT_PATTERN.test(line));
+}
+
 function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
   const title = compactText(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle, 180);
   const markdown = cleanMultilineText(restoreEscapedNewlines(source.content_markdown || source.markdown || source.content || ""), 100000);
   const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(markdown)));
+  // 모델이 글자를 못 그리는데 글자 주인공 프롬프트가 나왔으면 조용히 넘기지 않는다.
+  // 이미지가 깨진 채로 발행되는 것이 지금까지 아무 신호 없이 일어나던 일이다.
+  const imageTextWarnings = yeriImageModelRendersText(payload)
+    ? []
+    : yeriImageTextRiskLines(normalized.content_markdown).map((line) => compactText(line, 160));
   return {
     title: normalized.title,
     content_markdown: normalized.content_markdown,
     generated_at: nowIso(),
     text_model: String(model || "").slice(0, 80),
     usage: sanitizeUsage(usage),
+    image_text_risk: {
+      image_model: String(payload?.image_model || ""),
+      renders_text: yeriImageModelRendersText(payload),
+      count: imageTextWarnings.length,
+      lines: imageTextWarnings.slice(0, 5),
+    },
   };
 }
 
@@ -2517,11 +2552,16 @@ function buildYeriGenerationPrompt(payload) {
     `- 목표 노출 글자 수: ${yeriPayloadWordCount(payload)}자`,
     `- [이미지] 줄은 정확히 ${imageCount}개만 작성한다. 이미지가 0개면 만들지 않는다.`,
     "- [이미지] 줄을 연속으로 몰아서 쓰지 않는다. 각 이미지는 관련 본문 문단 뒤에 하나씩 분산 배치한다.",
-    // 2026-08-18 실측: 이미지 모델이 한글을 제대로 못 쓴다. "주문 양식 화면", "안내 카드" 같은
-    // 글자가 주인공인 프롬프트를 주면 깨진 한글이 그려져 블로그에 그대로 올라간다
-    // (실측 사례: "디져트 에약", "앤딩머세오 라담젼뎍가"). 글자 없는 장면으로 유도한다.
-    "- [이미지] 프롬프트에는 글자가 주인공인 소재를 넣지 않는다. 앱/웹 화면, 주문서·양식, 안내판, 간판, 문서, 채팅창, 로고처럼 글자를 읽어야 의미가 생기는 대상은 금지한다.",
-    "- 대신 사람의 행동, 사물, 재료, 공간, 분위기처럼 글자 없이 전달되는 장면으로 묘사한다. 예: '주문서 화면' 대신 '노트에 주문 내용을 적는 손'.",
+    // 2026-08-18 실측: 한글을 제대로 그리는 이미지 모델은 gpt-image-2 뿐이다.
+    // 그 외 모델에 글자 주인공 프롬프트를 주면 깨진 한글이 그대로 발행된다.
+    ...(yeriImageModelRendersText(payload)
+      ? [
+        "- [이미지]에 글자를 넣어야 한다면 한국어로 짧고 정확하게 쓴다(단어 몇 개 수준). 화면 가득한 문장, 긴 목록, 채팅 로그처럼 글자가 많은 구도는 피한다.",
+      ]
+      : [
+        "- [이미지] 프롬프트에는 글자가 주인공인 소재를 넣지 않는다. 앱/웹 화면, 주문서·양식, 안내판, 간판, 문서, 채팅창, 로고처럼 글자를 읽어야 의미가 생기는 대상은 금지한다.",
+        "- 대신 사람의 행동, 사물, 재료, 공간, 분위기처럼 글자 없이 전달되는 장면으로 묘사한다. 예: '주문서 화면' 대신 '노트에 주문 내용을 적는 손'.",
+      ]),
     "- 특히 이미지가 2개 이상이면 서론/본문/결론 사이가 아니라 본문 섹션들 사이에 나누어 넣는다.",
     "- 제목은 content_markdown의 첫 줄에도 '# 제목' 형식으로 넣는다.",
     "- 확인되지 않은 통계, 후기, 가격, 순위, 법적/의학적 단정은 만들지 않는다.",
@@ -7639,21 +7679,27 @@ function normalizeCafe24ProductText(value) {
   return String(value || "").toLowerCase().replace(/\s+/g, "");
 }
 
+// 2026-08-18 실측 갱신: 스토어프론트 판매가가 직원 전 상품 30,000원으로 개편됐다
+// (product_no 104/116/118/120/122/124 예리, 111 나경, 112 상수, 114 윤미, 126 송이, 129 지은, 243 맥스).
+// 아래 표가 옛 가격(33,000/9,900/3,000)에 머물러 있던 탓에 유료 단품 주문이 amount_mismatch 로 막혀
+// 안내 메일이 12일간 안 나갔다(최민희 8/6, 문고은 8/18). 가격은 또 바뀌므로 표는 참고값으로만 쓰고,
+// 어긋나면 주문을 막지 말고 경고만 남긴다 — 차단은 CAFE24_PRICE_MISMATCH_BLOCK_RATIO 배수를 넘을 때만.
 const CAFE24_STAFF_PRODUCT_RULES = [
-  { product: "blog_team", priceWon: 66000, patterns: [/블로그마케팅팀|블로그마케팅.*예리.*현주|예리.*현주|현주.*예리|blogteam|blog_team/] },
-  { product: "yeri", priceWon: 33000, patterns: [/예리|yeri|블로그마케터/] },
-  { product: "hyunju", priceWon: 33000, patterns: [/현주|hyunju|영업사원/] },
-  { product: "songi", priceWon: 3300, patterns: [/송이|songi|자료조사|자료조사원|리서치|research/] },
-  { product: "yunmi", priceWon: 9900, patterns: [/윤미|yunmi|스크립트작가|스크립트/] },
-  { product: "jieun", priceWon: 5500, patterns: [/지은|jieun|오피스매니저|오피스지원|office/] },
-  { product: "nakyung", priceWon: 9900, patterns: [/나경|nakyung|판서쌤|판서|pencil/] },
-  // 카페24 상품번호 243 "PC 알람앱 맥스" 3,000원 (2026-07-08 실조회). 넓은 패턴이어도 priceWon 게이트가 오매칭을 needs_review로 막는다.
-  { product: "maxalert", priceWon: 3000, patterns: [/맥스|maxalert|max_alert|알람앱/] },
-  { product: "hyojin", priceWon: 33000, reviewIssue: "product_not_ready", patterns: [/효진|hyojin|영상제작|아나운서/] },
-  // 경리 상수씨 9,900원 (2026-06-23 실주문 실측 — 0원이던 규칙이 다품목 분해를 막았음)
+  { product: "blog_team", priceWon: 60000, patterns: [/블로그마케팅팀|블로그마케팅.*예리.*현주|예리.*현주|현주.*예리|blogteam|blog_team/] },
+  { product: "yeri", priceWon: 30000, patterns: [/예리|yeri|블로그마케터/] },
+  { product: "hyunju", priceWon: 30000, patterns: [/현주|hyunju|영업사원/] },
+  { product: "songi", priceWon: 30000, patterns: [/송이|songi|자료조사|자료조사원|리서치|research/] },
+  { product: "yunmi", priceWon: 30000, patterns: [/윤미|yunmi|스크립트작가|스크립트/] },
+  { product: "jieun", priceWon: 30000, patterns: [/지은|jieun|오피스매니저|오피스지원|office/] },
+  { product: "nakyung", priceWon: 30000, patterns: [/나경|nakyung|판서쌤|판서|pencil/] },
+  // 카페24 상품번호 243 "PC 알람앱 맥스" 30,000원 (2026-08-18 실조회 — 7/8 3,000원에서 인상됐다).
+  // 패턴이 넓어 오매칭 위험이 있는 상품이므로, 배수 초과 금액은 아래 게이트가 계속 needs_review로 막는다.
+  { product: "maxalert", priceWon: 30000, patterns: [/맥스|maxalert|max_alert|알람앱/] },
+  { product: "hyojin", priceWon: 30000, reviewIssue: "product_not_ready", patterns: [/효진|hyojin|영상제작|아나운서/] },
+  // 경리 상수씨 30,000원 (2026-08-18 스토어프론트 실측, 2026-06-23 실주문 시점에는 9,900원)
   // 상품명이 "경리 샘"처럼 별명만 바뀌어 들어오는 경우가 있어 직무명 "경리"도 함께 매칭한다
   // (2026-07-29 조명훈 주문 5일 미처리 사고 — 별명 존/조지/샘은 직무명이 매칭을 담당).
-  { product: "sangsu", priceWon: 9900, patterns: [/상수|sangsu|경리|견적|견적서|quote|quotation|estimate/] },
+  { product: "sangsu", priceWon: 30000, patterns: [/상수|sangsu|경리|견적|견적서|quote|quotation|estimate/] },
   { product: "bundle", priceWon: 0, patterns: [/전체통합|통합권한|통합설치|bundle|올인원|allinone/] },
 ];
 
@@ -7673,6 +7719,15 @@ const CAFE24_NON_STAFF_PRODUCT_PATTERNS = [
 // 카페24 주문 메일은 다품목 주문도 대표 상품명 1개 + 주문 총액으로 합쳐져 들어온다.
 // 총액을 단품가 조합(상품당 1개, 최대 4개)으로 분해해 다품목 주문을 복원한다.
 const CAFE24_MULTI_PRODUCT_MAX_ITEMS = 4;
+
+// 등록가와 실제 결제 금액이 어긋나도 상품명이 매칭되면 주문을 막지 않는다(판매가 개편이 훨씬 잦다).
+// 다만 등록가의 이 배수를 넘는 금액은 강의/멤버십이 직원 패턴에 잘못 걸렸을 가능성이 커서 사람 검토로 보낸다.
+const CAFE24_PRICE_MISMATCH_BLOCK_RATIO = 3;
+
+function cafe24PriceWarningLine(label, paid, registered) {
+  const won = (value) => `${Number(value || 0).toLocaleString("ko-KR")}원`;
+  return compactText(`${label}: 결제 ${won(paid)} / 등록가 ${won(registered)}`, 200);
+}
 
 function cafe24AmountCombos(amount, rules = CAFE24_STAFF_PRODUCT_RULES) {
   const priced = rules.filter((rule) => Number(rule.priceWon) > 0);
@@ -7720,7 +7775,15 @@ function inferCafe24Product(productName, amountValue) {
           products_candidates: combos.map((combo) => combo.map((item) => item.product)),
         };
       }
-      return { product: rule.product, confidence: "needs_review", issue: "amount_mismatch" };
+      if (amount > rule.priceWon * CAFE24_PRICE_MISMATCH_BLOCK_RATIO) {
+        return { product: rule.product, confidence: "needs_review", issue: "amount_mismatch" };
+      }
+      return {
+        product: rule.product,
+        confidence: "auto",
+        issue: rule.reviewIssue || "",
+        price_warnings: [cafe24PriceWarningLine(productName || rule.product, amount, rule.priceWon)],
+      };
     }
     if (rule.reviewIssue) {
       return { product: rule.product, confidence: "needs_review", issue: rule.reviewIssue };
@@ -8234,7 +8297,7 @@ async function resolveCafe24PartnerAttribution(input) {
 // 품목 배열 기반 판정 — n8n 파서가 주문 메일의 상품 테이블 전체(items[])를 넘길 때 사용.
 // 품목별 이름 매칭 + 단가 검증이므로 금액 분해(추정)가 필요 없다. items가 없으면 기존 분해 경로 폴백.
 function inferCafe24ProductsFromItems(items) {
-  const result = { products: [], unknown: [], mismatched: [], ignored: [], reviewIssue: "" };
+  const result = { products: [], unknown: [], mismatched: [], priceWarnings: [], ignored: [], reviewIssue: "" };
   for (const item of Array.isArray(items) ? items : []) {
     const itemName = String(item?.name || "").trim();
     if (!itemName) continue;
@@ -8249,7 +8312,11 @@ function inferCafe24ProductsFromItems(items) {
       continue;
     }
     const price = parseCafe24Amount(item.price != null ? item.price : item.line_total);
-    if (rule.priceWon && price && price !== rule.priceWon) result.mismatched.push(itemName);
+    if (rule.priceWon && price && price !== rule.priceWon) {
+      const line = cafe24PriceWarningLine(itemName, price, rule.priceWon);
+      if (price > rule.priceWon * CAFE24_PRICE_MISMATCH_BLOCK_RATIO) result.mismatched.push(line);
+      else result.priceWarnings.push(line);
+    }
     if (rule.reviewIssue && !result.reviewIssue) result.reviewIssue = rule.reviewIssue;
     if (!result.products.includes(rule.product)) result.products.push(rule.product);
   }
@@ -8276,6 +8343,7 @@ function buildCafe24Order(body, now) {
       products: itemsInfo.products,
       confidence: issueFromItems ? "needs_review" : "auto",
       issue: issueFromItems,
+      price_warnings: itemsInfo.priceWarnings,
     };
   } else if (itemsInfo && itemsInfo.ignored.length && !itemsInfo.products.length) {
     inferred = { product: "", confidence: "ignored", issue: "non_staff_product", status: "ignored" };
@@ -8313,6 +8381,7 @@ function buildCafe24Order(body, now) {
       line_total: parseCafe24Amount(item?.line_total),
     })),
     items_unknown: itemsInfo ? itemsInfo.unknown.slice(0, 10) : [],
+    price_warnings: Array.isArray(inferred.price_warnings) ? inferred.price_warnings.slice(0, 10) : [],
     product,
     products,
     products_candidates: Array.isArray(inferred.products_candidates) ? inferred.products_candidates : [],
@@ -8328,6 +8397,9 @@ function buildCafe24Order(body, now) {
     review_alert_sent_at: null,
     review_alert_error: "",
     review_alert_error_at: null,
+    price_alert_sent_at: null,
+    price_alert_error: "",
+    price_alert_error_at: null,
     auto_process_started_at: null,
     auto_process_stage: "",
     auto_process_attempts: 0,
@@ -8355,7 +8427,13 @@ function mergeCafe24Order(existing, incoming, now) {
   existing.product_confidence = incoming.product ? incoming.product_confidence : existing.product_confidence || incoming.product_confidence;
   existing.issue = incoming.issue || "";
   if (!terminal && existing.status !== "provisioned") existing.status = incoming.status;
+  existing.price_warnings = Array.isArray(incoming.price_warnings) && incoming.price_warnings.length
+    ? incoming.price_warnings
+    : Array.isArray(existing.price_warnings) ? existing.price_warnings : [];
   existing.review_alert_sent_at = existing.review_alert_sent_at || incoming.review_alert_sent_at || null;
+  existing.price_alert_sent_at = existing.price_alert_sent_at || null;
+  existing.price_alert_error = existing.price_alert_error || "";
+  existing.price_alert_error_at = existing.price_alert_error_at || null;
   existing.review_alert_error = existing.review_alert_error || "";
   existing.review_alert_error_at = existing.review_alert_error_at || null;
   existing.auto_process_started_at = existing.auto_process_started_at || null;
@@ -8400,6 +8478,7 @@ function adminCafe24OrderRow(order) {
     cafe24_order_id: order.cafe24_order_id || "",
     items: Array.isArray(order.items) ? order.items : [],
     items_unknown: Array.isArray(order.items_unknown) ? order.items_unknown : [],
+    price_warnings: Array.isArray(order.price_warnings) ? order.price_warnings : [],
     product_confidence: order.product_confidence || "",
     issue: order.issue || "",
     status: order.status || "pending",
@@ -13072,6 +13151,63 @@ function queueCafe24ReviewAlert(order) {
   return true;
 }
 
+// 등록가와 결제 금액이 어긋났지만 자동 처리는 그대로 진행한 건 — 판매가가 바뀌었는지 사람이 확인하라는 경고.
+// 주문을 막지 않으므로 고객은 기다리지 않고, 가격표 갱신은 이 알림을 보고 하면 된다 (2026-08-18).
+function telegramCafe24PriceWarningText(order) {
+  const amount = Number(order?.amount || 0);
+  const amountText = amount ? `${amount.toLocaleString("ko-KR")}원` : "-";
+  return [
+    "[AIMAX 카페24 판매가 확인 필요]",
+    "회사 비서 알림: 주문은 자동 처리했고 안내 메일도 나갔습니다",
+    ...(Array.isArray(order?.price_warnings) ? order.price_warnings : []).slice(0, 5).map((line) => `- ${compactTelegramLine(line, 200)}`),
+    `구매자: ${compactTelegramLine([order?.email || "-", order?.name || ""].filter(Boolean).join(" / "), 240)}`,
+    `AIMAX 상품: ${productLabels(cafe24OrderProducts(order)) || productLabel(order?.product || "")}`,
+    `카페24 상품명: ${compactTelegramLine(order?.product_name || "-", 260)}`,
+    `결제 금액: ${amountText}`,
+    `주문 ID: ${compactTelegramLine(order?.external_id || order?.id || "-", 280)}`,
+    "조치: 판매가가 바뀐 것이면 server.js CAFE24_STAFF_PRODUCT_RULES 등록가를 갱신하세요.",
+    `관리: ${PUBLIC_BASE_URL}/admin#orders`,
+  ].join("\n");
+}
+
+function shouldSendCafe24PriceAlert(order) {
+  if (!CAFE24_REVIEW_ALERTS_ENABLED) return false;
+  if (!Array.isArray(order?.price_warnings) || !order.price_warnings.length) return false;
+  if (String(order?.status || "") === "ignored") return false;
+  if (order?.price_alert_sent_at) return false;
+  return true;
+}
+
+async function sendCafe24PriceAlert(order) {
+  if (!shouldSendCafe24PriceAlert(order)) return null;
+  if (!telegramAlertsConfigured()) return null;
+  return sendTelegramMessage(telegramCafe24PriceWarningText(order), {
+    messageThreadId: CAFE24_TELEGRAM_MESSAGE_THREAD_ID,
+  });
+}
+
+function queueCafe24PriceAlert(order) {
+  if (!shouldSendCafe24PriceAlert(order)) return false;
+  const snapshot = { ...order };
+  sendCafe24PriceAlert(snapshot)
+    .then((result) => {
+      if (!result) return;
+      patchCafe24OrderAlertStatus(snapshot.id, {
+        price_alert_sent_at: nowIso(),
+        price_alert_error: "",
+        price_alert_error_at: null,
+      });
+    })
+    .catch((error) => {
+      patchCafe24OrderAlertStatus(snapshot.id, {
+        price_alert_error: String(error.code || error.message || "telegram_send_failed").slice(0, 160),
+        price_alert_error_at: nowIso(),
+      });
+      console.warn("[telegram alert] cafe24 price warning send failed", error.code || error.message || "telegram_send_failed");
+    });
+  return true;
+}
+
 async function sendCafe24AutoFailureAlert(order, error) {
   if (!order || !telegramAlertsConfigured()) return null;
   return sendTelegramMessage(telegramCafe24AutoFailureAlertText(order, error), {
@@ -13977,6 +14113,7 @@ async function handleCafe24OrderWebhook(req, res) {
   if (!existing) data.orders.push(order);
   saveCafe24Orders(data);
   const reviewAlertQueued = queueCafe24ReviewAlert(order);
+  const priceAlertQueued = queueCafe24PriceAlert(order);
   const autoProcessQueued = queueCafe24AutoProcess(order);
 
   json(req, res, existing ? 200 : 201, {
@@ -13984,6 +14121,7 @@ async function handleCafe24OrderWebhook(req, res) {
     created: !existing,
     order: adminCafe24OrderRow(order),
     review_alert_queued: reviewAlertQueued,
+    price_alert_queued: priceAlertQueued,
     auto_process_queued: autoProcessQueued,
   });
 }
@@ -19226,6 +19364,8 @@ module.exports = {
     buildYeriGenerationPrompt,
     buildYeriMockArtifact,
     buildYeriStructurePlan,
+    yeriImageModelRendersText,
+    yeriImageTextRiskLines,
     loadYeriStructurePacks,
     renderYeriStructureInstruction,
     buildFailureDiagnostic,

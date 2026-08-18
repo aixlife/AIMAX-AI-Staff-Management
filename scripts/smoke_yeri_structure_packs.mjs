@@ -122,6 +122,27 @@ check("기존 규칙 유지(이미지 배치)", prompt.includes("[이미지] 줄
 check("글자 주인공 이미지 금지 규칙 포함", prompt.includes("글자가 주인공인 소재를 넣지 않는다"), true);
 check("대체 묘사 지침 포함", prompt.includes("글자 없이 전달되는 장면"), true);
 
+console.log("[6-1] 이미지 모델에 따라 글자 규칙이 갈린다 (gpt-image-2 만 한글 렌더 가능)");
+const { yeriImageModelRendersText, yeriImageTextRiskLines } = server.__yeriHybridTest;
+check("gpt-image-2 → 글자 가능", yeriImageModelRendersText({ image_model: "gpt-image-2" }), true);
+check("gpt-image-1 → 글자 불가", yeriImageModelRendersText({ image_model: "gpt-image-1" }), false);
+check("gemini image → 글자 불가", yeriImageModelRendersText({ image_model: "gemini-3.1-flash-image" }), false);
+check("미지정 → 글자 불가(보수적)", yeriImageModelRendersText({}), false);
+
+const promptText2 = buildYeriGenerationPrompt({ job_id: "p2", style: "info", keywords: ["홈베이킹"], image_model: "gpt-image-2", image_count: 2 });
+check("gpt-image-2 는 금지 대신 허용 지시", promptText2.includes("글자가 주인공인 소재를 넣지 않는다"), false);
+check("gpt-image-2 는 짧게 쓰라고 지시", promptText2.includes("한국어로 짧고 정확하게"), true);
+
+console.log("[6-2] 글자 주인공 프롬프트를 탐지한다 (실측 사례 재현)");
+const risky = [
+  "[이미지] 스마트폰 화면에 띄워진 디저트 주문 예약 양식과 카카오톡 오픈채팅 상담창",
+  "[이미지] 정갈하게 진열된 수제 쿠키 상자와 주문 안내 카드가 놓인 작업대",
+  "[이미지] 리본으로 예쁘게 포장된 디저트 선물 상자",
+].join("\n\n");
+const risks = yeriImageTextRiskLines(risky);
+check("위험 줄 2건 탐지", risks.length, 2);
+check("글자 없는 줄은 통과", risks.some((line) => line.includes("리본으로")), false);
+
 console.log("[7] 팩 파일이 없으면 구조 지시만 빠지고 생성은 계속된다 (안전 degrade)");
 const packPath = path.join(repoRoot, "oracle/aimax-reports-api/yeri-structure-packs.json");
 const backup = fs.readFileSync(packPath, "utf8");
