@@ -28,7 +28,7 @@ process.env.AIMAX_USER_SECRET_ENCRYPTION_KEY = `base64:${crypto.randomBytes(32).
 
 const require = createRequire(import.meta.url);
 const server = require(path.join(repoRoot, "oracle/aimax-reports-api/server.js"));
-const { buildYeriGenerationPrompt, buildYeriStructurePlan } = server.__yeriHybridTest;
+const { buildYeriGenerationPrompt, buildYeriStructurePlan, yeriImageTextRiskLines, yeriImageModelRendersText } = server.__yeriHybridTest;
 
 const readKeychain = (service, account) => {
   try {
@@ -54,7 +54,7 @@ const TEXT_PRICE = { input: 1.5, output: 7.5 };   // USD / 1M tokens
 const IMAGE_PRICE = 0.042;                        // USD / image
 
 const payload = {
-  job_id: "live-full-article-1",
+  job_id: process.env.AIMAX_LIVE_JOB_ID || "live-full-article-1",
   style: "info",
   keywords: ["홈베이킹 주문 받는 법"],
   word_count: 1500,
@@ -125,6 +125,13 @@ const sectionOf = (idx) => headingIdx.filter((h) => h.i < idx).length;
 const sections = imageLines.map(({ i }) => sectionOf(i));
 const distributed = new Set(sections).size === sections.length;
 console.log(`이미지가 놓인 섹션 번호: ${sections.join(", ")} → ${distributed ? "분산됨" : "몰림"}`);
+
+// 글자 주인공 프롬프트가 남아 있는지 — 수정된 규칙의 핵심 판정
+const riskLines = yeriImageTextRiskLines(markdown);
+console.log(`이미지 모델 한글 렌더: ${yeriImageModelRendersText(payload) ? "가능" : "불가"}`);
+console.log(`글자 주인공 프롬프트: ${riskLines.length}건 ${riskLines.length ? "(문제)" : "(없음)"}`);
+riskLines.forEach((line) => console.log(`  - ${line.slice(0, 90)}`));
+imageLines.forEach(({ line }, i) => console.log(`  이미지${i + 1} 프롬프트: ${line.replace(/^\[이미지\]\s*/, "").slice(0, 80)}`));
 
 // ── 2) 이미지 생성 ────────────────────────────────────────────────────────
 const outDir = path.join(repoRoot, "claudedocs", ".live", "full-article");
@@ -210,4 +217,4 @@ console.log(`실비용: $${total.toFixed(4)} (텍스트 $${textCost.toFixed(4)} 
 console.log(`제목: ${article.title}`);
 console.log(`완성 글: ${htmlPath}`);
 fs.rmSync(tmpDir, { recursive: true, force: true });
-process.exit(distributed && headingIdx.length === plan.blocks.length ? 0 : 1);
+process.exit(distributed && headingIdx.length === plan.blocks.length && riskLines.length === 0 ? 0 : 1);

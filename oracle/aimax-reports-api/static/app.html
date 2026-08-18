@@ -4981,6 +4981,15 @@
       ["gemini-3.1-flash-image", "Gemini Nano Banana 2"],
       ["gemini-3-pro-image", "Gemini Nano Banana Pro"],
     ];
+    // 2026-08-18 실측: 이미지 안의 한글을 제대로 그리는 모델은 gpt-image-2 뿐이다.
+    // 나머지로 글자 있는 그림을 만들면 "디져트 에약" 처럼 깨져서 블로그에 그대로 올라간다.
+    // 고른 뒤에 경고하면 늦으므로 고르는 화면에서 바로 보이게 한다.
+    const IMAGE_MODELS_WITH_KOREAN_TEXT = new Set(["gpt-image-2"]);
+    function imageModelKoreanTextNote(id) {
+      return IMAGE_MODELS_WITH_KOREAN_TEXT.has(id)
+        ? "그림 안 한글 가능"
+        : "그림 안 한글 깨짐";
+    }
     const IMAGE_MODEL_PRICES = {
       "gpt-image-1": { provider: "OpenAI", label: "OpenAI gpt-image-1", perImageUsd: 0.042 },
       "gpt-image-2": { provider: "OpenAI", label: "OpenAI gpt-image-2", perImageUsd: 0.053 },
@@ -7011,9 +7020,33 @@
       for (const [id, label] of IMAGE_MODEL_OPTIONS) {
         const option = document.createElement("option");
         option.value = id;
-        option.textContent = label;
+        option.textContent = `${label} — ${imageModelKoreanTextNote(id)}`;
         option.selected = id === current;
         select.appendChild(option);
+      }
+      renderImageModelKoreanHint(select, current);
+      if (!select.dataset.koreanHintBound) {
+        select.dataset.koreanHintBound = "1";
+        select.addEventListener("change", () => renderImageModelKoreanHint(select, select.value));
+      }
+    }
+
+    // 셀렉트 바로 아래에 한 줄 안내. 글자 깨지는 모델을 고른 사람에게만 왜 그런지 알려준다.
+    function renderImageModelKoreanHint(select, modelId) {
+      if (!select || !select.parentElement) return;
+      let hint = select.parentElement.querySelector(".image-model-korean-hint");
+      if (!hint) {
+        hint = document.createElement("div");
+        hint.className = "image-model-korean-hint";
+        hint.style.cssText = "margin-top:6px;font-size:12px;line-height:1.5;";
+        select.parentElement.appendChild(hint);
+      }
+      if (IMAGE_MODELS_WITH_KOREAN_TEXT.has(normalizeImageModel(modelId))) {
+        hint.style.color = "#6b7280";
+        hint.textContent = "이 모델은 그림 안에 한글을 넣어도 글자가 제대로 나옵니다. 간판·메모처럼 짧은 문구까지만 권장합니다.";
+      } else {
+        hint.style.color = "#b45309";
+        hint.textContent = "이 모델은 그림 안 한글이 깨집니다. 그래서 글자가 들어가는 그림(주문서 화면, 안내판 등)은 만들지 않고 사물·장면 위주로 그립니다. 그림에 한글이 꼭 필요하면 gpt-image-2를 골라주세요.";
       }
     }
 
