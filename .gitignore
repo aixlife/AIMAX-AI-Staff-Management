@@ -68,3 +68,9 @@ docs/windows_handoffs/
 docs/handoffs/**/*.zip
 docs/handoffs/**/source-bundle/
 AIMAX 오류.txt
+
+# 로컬 작업 산출물 — 커밋 대상 아님 (2026-08-18)
+# .preview/ : md-preview.py 가 md 에서 렌더한 HTML (원본 md 로 언제든 재생성)
+# .live/    : 유료 실측 증거 이미지·HTML (24MB 바이너리, 보고서 md 가 내용을 담고 있다)
+claudedocs/.preview/
+claudedocs/.live/
