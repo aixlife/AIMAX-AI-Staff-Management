@@ -312,6 +312,10 @@ def main(argv: list[str]) -> int:
         "send_allowed": send_allowed,
         "stale_report_count": len(reports),
         "open_ticket_count": len(tickets),
+        # 안정 서명: 리포트/티켓 id 로만 만든다. message 는 현재 시각과 경과시간("3h 42m")을
+        # 포함해 매 실행마다 달라지므로, 소비자가 message 를 해시해 중복을 판정하면 억제가
+        # 절대 발동하지 않는다(2026-07-03 수리 에이전트 알림 폭주의 원인).
+        "signature": signature,
         "message": message,
     }
     if args.send and send_allowed:

@@ -49,7 +49,15 @@ if [[ "$stale_count" -eq 0 && "$ticket_count" -eq 0 ]]; then
   exit 0
 fi
 
-signature="$(printf '%s' "$WATCHDOG_JSON" | jq -r '.message' | sha256sum | awk '{print $1}')"
+# 서명은 watchdog 이 리포트/티켓 id 로 만든 안정 서명을 그대로 쓴다.
+# 2026-07-03 사고: 여기서 .message 를 해시했는데 그 메시지에는 현재 시각(분 단위)과
+# 경과시간이 들어 있어 15분마다 서명이 달라졌다. 결과적으로 24시간 재알림 억제가 한 번도
+# 발동하지 못하고 하루 91~92회 실행 + 텔레그램 발송이 반복됐고, 그날 타이머가 꺼졌다.
+# (구버전 watchdog 은 .signature 를 내주지 않으므로 없으면 메시지 해시로 폴백한다.)
+signature="$(printf '%s' "$WATCHDOG_JSON" | jq -r '.signature // ""')"
+if [[ -z "$signature" || "$signature" == "null" ]]; then
+  signature="$(printf '%s' "$WATCHDOG_JSON" | jq -r '.message' | sha256sum | awk '{print $1}')"
+fi
 now_epoch="$(date +%s)"
 if [[ -f "$STATE_FILE" ]]; then
   last_signature="$(jq -r '.last_signature // ""' "$STATE_FILE" 2>/dev/null || true)"
