@@ -131,7 +131,10 @@ check("미지정 → 글자 불가(보수적)", yeriImageModelRendersText({}), f
 
 const promptText2 = buildYeriGenerationPrompt({ job_id: "p2", style: "info", keywords: ["홈베이킹"], image_model: "gpt-image-2", image_count: 2 });
 check("gpt-image-2 는 금지 대신 허용 지시", promptText2.includes("글자가 주인공인 소재를 넣지 않는다"), false);
-check("gpt-image-2 는 짧게 쓰라고 지시", promptText2.includes("한국어로 짧고 정확하게"), true);
+check("gpt-image-2 는 넣으라고 유도", promptText2.includes("짧은 한글 문구가 내용 전달에 도움이 되는 장면이면 넣는다"), true);
+check("길이·개수 상한 명시", promptText2.includes("한 줄, 10자 안팎으로 짧게"), true);
+check("억지로 넣지 말라는 제동", promptText2.includes("억지로 넣지 않는다"), true);
+check("글자 많은 구도는 여전히 금지", promptText2.includes("채팅 로그, 앱 화면 전체처럼 글자가 많은 구도는 여전히 피한다"), true);
 
 console.log("[6-2] 글자 주인공 프롬프트를 탐지한다 (실측 사례 재현)");
 const risky = [

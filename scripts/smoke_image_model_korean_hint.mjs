@@ -48,6 +48,7 @@ check("gemini pro → 한글 깨짐", ctx.result.note("gemini-3-pro-image"), "�
 
 console.log("[3] 깨지는 모델에는 대안까지 알려준다");
 check("gpt-image-2 로 바꾸라는 안내 포함", html.includes("그림에 한글이 꼭 필요하면 gpt-image-2를 골라주세요"), true);
+check("gpt-image-2 안내는 실제로 넣는다고 말함", html.includes("짧은 한글 문구(한 줄, 10자 안팎)를 넣어 그립니다"), true);
 check("왜 글자 그림을 안 만드는지 설명", html.includes("글자가 들어가는 그림(주문서 화면, 안내판 등)은 만들지 않고"), true);
 
 console.log(`\n결과: PASS ${passed} / FAIL ${failed}`);

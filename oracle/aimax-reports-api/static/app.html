@@ -7043,7 +7043,7 @@
       }
       if (IMAGE_MODELS_WITH_KOREAN_TEXT.has(normalizeImageModel(modelId))) {
         hint.style.color = "#6b7280";
-        hint.textContent = "이 모델은 그림 안에 한글을 넣어도 글자가 제대로 나옵니다. 간판·메모처럼 짧은 문구까지만 권장합니다.";
+        hint.textContent = "이 모델은 그림 안 한글이 제대로 나옵니다. 도움이 되는 장면에는 간판·메모 같은 짧은 한글 문구(한 줄, 10자 안팎)를 넣어 그립니다.";
       } else {
         hint.style.color = "#b45309";
         hint.textContent = "이 모델은 그림 안 한글이 깨집니다. 그래서 글자가 들어가는 그림(주문서 화면, 안내판 등)은 만들지 않고 사물·장면 위주로 그립니다. 그림에 한글이 꼭 필요하면 gpt-image-2를 골라주세요.";
