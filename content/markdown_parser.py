@@ -11,6 +11,9 @@ def parse_markdown(content):
       ('heading', '소제목 텍스트')
       ('quote', '인용구 텍스트')
       ('image', '이미지 프롬프트')
+      ('caption', '사진 설명')            # image 바로 뒤에만 온다
+      ('list', ('bullet'|'decimal', ['항목', ...]))
+      ('table', [['머리1','머리2','머리3'], ['a','b','c'], ...])
       ('text', [('text', '일반텍스트'), ('bold', '볼드텍스트'), ('text', '\\n'), ...])
     """
     lines = content.split('\n')
@@ -31,6 +34,25 @@ def parse_markdown(content):
 
     content_list = []
     current_section = []
+    # 목록·표는 여러 줄이 모여 한 블록이 된다. 이어지는 동안 모았다가 구간이 끝나면 비운다.
+    list_items = []
+    list_style = ''
+    table_rows = []
+
+    def flush_blocks():
+        """모으던 목록·표를 블록으로 확정한다."""
+        nonlocal list_items, list_style, table_rows
+        if list_items:
+            content_list.append(('list', (list_style or 'bullet', list_items)))
+            list_items = []
+            list_style = ''
+        if table_rows:
+            if len(table_rows) >= 2:
+                content_list.append(('table', table_rows))
+            else:
+                # 한 줄짜리 표는 표가 아니다. 일반 문장으로 되돌린다.
+                content_list.append(('text', [('text', ' '.join(table_rows[0]))]))
+            table_rows = []
 
     for line in lines[start_idx:]:
         stripped = line.strip()
@@ -40,6 +62,7 @@ def parse_markdown(content):
         # 하나도 없었고 모든 글이 "인용구-문단-이미지" 반복으로 똑같이 보였다.
         # 소제목은 소제목으로 넣고, 인용구는 아래 `>` 문법에만 쓴다.
         if stripped.startswith('##'):
+            flush_blocks()
             if current_section:
                 content_list.append(('text', current_section))
                 current_section = []
@@ -50,6 +73,7 @@ def parse_markdown(content):
 
         # > 인용구 — 실제 인용이나 핵심 결론에만 쓴다.
         if stripped.startswith('>'):
+            flush_blocks()
             if current_section:
                 content_list.append(('text', current_section))
                 current_section = []
@@ -60,20 +84,55 @@ def parse_markdown(content):
 
         # [이미지] 프롬프트
         if stripped.startswith('[이미지]'):
+            flush_blocks()
             if current_section:
                 content_list.append(('text', current_section))
                 current_section = []
             prompt = stripped.replace('[이미지]', '').strip()
+            # `[이미지] 프롬프트 || 사진 설명` 형식. 설명은 이미지 바로 뒤 블록으로 넣는다.
+            caption = ''
+            if '||' in prompt:
+                prompt, _, caption = prompt.partition('||')
+                prompt = prompt.strip()
+                caption = caption.strip()
             if '프롬프트:' in prompt:
                 prompt = prompt.split('프롬프트:')[1].strip().strip('"')
             content_list.append(('image', prompt))
+            if caption:
+                content_list.append(('caption', caption))
             continue
 
         # 빈 줄 → 문단 구분 (Enter 2번 = 한 줄 띄기)
         if not stripped:
+            flush_blocks()
             if current_section and current_section[-1] != ('text', '\n\n'):
                 current_section.append(('text', '\n\n'))
             continue
+
+        # 표: | a | b | c | 형식이 이어지는 구간
+        if stripped.startswith('|') and stripped.endswith('|') and stripped.count('|') >= 3:
+            if current_section:
+                content_list.append(('text', current_section))
+                current_section = []
+            row = _parse_table_row(stripped)
+            if row:  # 구분선(---)은 건너뛴다
+                table_rows.append(row)
+            continue
+
+        # 목록: -, *, 1. 로 시작하는 줄이 이어지는 구간
+        list_kind, list_text = _match_list_line(stripped)
+        if list_kind:
+            if current_section:
+                content_list.append(('text', current_section))
+                current_section = []
+            if list_items and list_style != list_kind:
+                content_list.append(('list', (list_style, list_items)))
+                list_items = []
+            list_style = list_kind
+            list_items.append(list_text)
+            continue
+
+        flush_blocks()
 
         # 리스트 마커 제거: - 또는 * 로 시작하는 줄 → 일반 텍스트로 변환
         cleaned = _strip_list_marker(stripped)
@@ -83,6 +142,8 @@ def parse_markdown(content):
         parts = _parse_links(parts)
         current_section.extend(parts)
         current_section.append(('text', '\n'))
+
+    flush_blocks()
 
     if current_section:
         # 마지막 불필요한 줄바꿈 제거
@@ -138,6 +199,25 @@ def rebalance_image_blocks(content_list):
         rebalanced.append(item)
         rebalanced.extend(buckets.get(index, []))
     return rebalanced, len(tail_images)
+
+
+def _match_list_line(line):
+    """목록 줄이면 ('bullet'|'decimal', 내용) 을, 아니면 ('', '') 을 돌려준다."""
+    m = re.match(r'^[-*]\s+(.+)$', line)
+    if m:
+        return 'bullet', m.group(1).strip()
+    m = re.match(r'^\d+[.)]\s+(.+)$', line)
+    if m:
+        return 'decimal', m.group(1).strip()
+    return '', ''
+
+
+def _parse_table_row(line):
+    """| a | b | c | → ['a', 'b', 'c']. 구분선(---)은 빈 행으로 걸러진다."""
+    cells = [c.strip() for c in line.strip().strip('|').split('|')]
+    if all(re.fullmatch(r':?-{2,}:?', c or '') for c in cells if c != ''):
+        return []
+    return cells
 
 
 def _strip_list_marker(line):

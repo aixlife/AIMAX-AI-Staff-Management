@@ -13,6 +13,7 @@ from constants import (
     BLOG_WRITE_URL, EDITOR_IFRAME, POPUP_CANCEL, HELP_CLOSE,
     TITLE_AREA, QUOTATION_OPEN, QUOTATION_STYLE,
     TEXT_FORMAT_DROPDOWN, TEXT_FORMAT_SECTION_TITLE, TEXT_FORMAT_BODY,
+    LIST_DROPDOWN, LIST_BULLET, LIST_DECIMAL, LIST_RESET, TABLE_BUTTON,
     IMAGE_BUTTON, BOLD_BUTTON,
     FONT_DROPDOWN, FONT_OPTIONS,
 )
@@ -1017,6 +1018,12 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
             _input_text_block(driver, content_data)
         elif content_type == 'heading':
             _input_heading(driver, content_data)
+        elif content_type == 'list':
+            _input_list(driver, content_data)
+        elif content_type == 'table':
+            _input_table(driver, content_data)
+        elif content_type == 'caption':
+            _input_image_caption(driver, content_data)
         elif content_type == 'quote':
             _input_quotation(driver, content_data)
         elif content_type == 'image':
@@ -1187,6 +1194,152 @@ def _input_heading(driver, text):
     wait_short()
     if not _set_text_format(driver, TEXT_FORMAT_BODY, "본문"):
         logger.warning("본문 서식 복귀에 실패했습니다. 다음 문단이 소제목 서식일 수 있습니다.")
+
+
+def _open_list_option(driver, option_selector, label):
+    """목록 드롭다운을 열어 한 항목을 고른다."""
+    try:
+        dropdown = driver.find_element(By.CSS_SELECTOR, LIST_DROPDOWN)
+        driver.execute_script("arguments[0].click();", dropdown)
+        wait_short()
+        option = driver.find_element(By.CSS_SELECTOR, option_selector)
+        driver.execute_script("arguments[0].click();", option)
+        wait_short()
+        return True
+    except Exception as e:
+        logger.debug(f"목록 '{label}' 적용 실패: {e}")
+        try:
+            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+        except Exception:
+            pass
+        return False
+
+
+def _input_list(driver, payload):
+    """목록 입력.
+
+    payload = ('bullet'|'decimal', ['항목', ...])
+    목록을 켜고 항목마다 Enter 로 줄을 넘긴 뒤 "목록해제"로 빠져나온다.
+    해제하지 않으면 이어지는 문단이 계속 목록으로 들어간다.
+    적용에 실패하면 항목을 그냥 문장으로 넣는다 — 목록이 아니어도 내용은 남아야 한다.
+    """
+    style, items = payload if isinstance(payload, (tuple, list)) and len(payload) == 2 else ("bullet", [])
+    items = [str(t).strip() for t in (items or []) if str(t).strip()]
+    if not items:
+        return
+    logger.info(f"목록 입력: {style} {len(items)}개")
+
+    selector = LIST_DECIMAL if style == "decimal" else LIST_BULLET
+    if not _open_list_option(driver, selector, style):
+        logger.warning("목록 서식을 적용하지 못해 일반 문장으로 넣습니다.")
+        for index, text in enumerate(items):
+            human_type(driver, text)
+            if index < len(items) - 1:
+                send_keys_action(driver, Keys.ENTER)
+            wait_short()
+        return
+
+    for index, text in enumerate(items):
+        human_type(driver, text)
+        wait_short()
+        send_keys_action(driver, Keys.ENTER)
+        wait_short()
+
+    # 마지막 Enter 로 생긴 빈 항목에서 목록을 끈다.
+    if not _open_list_option(driver, LIST_RESET, "목록해제"):
+        logger.warning("목록 해제에 실패했습니다. 다음 문단이 목록으로 들어갈 수 있습니다.")
+
+
+def _input_table(driver, rows):
+    """표 입력.
+
+    스마트에디터 표 버튼은 3행 3열을 바로 만든다(2026-08-25 실측). 크기 조절 UI 가 없어
+    3x3 만 채우고, 그보다 큰 표는 넘치는 부분을 잘라낸다. 서버 쪽에서 3열·3행으로
+    만들도록 지시하므로 정상 경로에서는 잘릴 일이 없다.
+    표를 만들지 못하면 각 행을 한 줄 문장으로 넣는다 — 내용은 남아야 한다.
+    """
+    rows = [[str(c).strip() for c in r] for r in (rows or []) if r]
+    if not rows:
+        return
+    logger.info(f"표 입력: {len(rows)}행")
+
+    def _fallback():
+        for row in rows:
+            human_type(driver, " · ".join([c for c in row if c]))
+            wait_short()
+            send_keys_action(driver, Keys.ENTER)
+            wait_short()
+
+    try:
+        button = driver.find_element(By.CSS_SELECTOR, TABLE_BUTTON)
+        driver.execute_script("arguments[0].click();", button)
+        wait_medium()
+    except Exception as e:
+        logger.warning(f"표 삽입 버튼을 찾지 못해 문장으로 넣습니다: {e}")
+        _fallback()
+        return
+
+    cells = driver.find_elements(By.CSS_SELECTOR, ".se-component.se-table td, .se-component.se-table th")
+    if not cells:
+        logger.warning("표가 만들어지지 않아 문장으로 넣습니다.")
+        _fallback()
+        return
+
+    # 첫 칸부터 Tab 으로 옮겨가며 채운다.
+    flat = []
+    for row in rows[:3]:
+        padded = (row + ["", "", ""])[:3]
+        flat.extend(padded)
+    try:
+        ActionChains(driver).move_to_element(cells[0]).click().perform()
+        wait_short()
+    except Exception:
+        driver.execute_script("arguments[0].click();", cells[0])
+        wait_short()
+    for index, text in enumerate(flat[:9]):
+        if text:
+            human_type(driver, text)
+        if index < 8:
+            send_keys_action(driver, Keys.TAB)
+        wait_short()
+
+    # 표 밖으로 빠져나온다.
+    send_keys_action(driver, Keys.ARROW_DOWN, Keys.ARROW_DOWN)
+    wait_short()
+
+
+def _input_image_caption(driver, text):
+    """방금 넣은 이미지에 사진 설명을 단다.
+
+    2026-08-25 실측: 캡션 칸은 비어 있을 때 크기가 0이라 바로 클릭할 수 없다.
+    이미지를 먼저 클릭하면 캡션이 열리고(se-is-on), 그때 캡션을 클릭해야 글자가 들어간다.
+    설명이 없어도 글은 정상이므로 실패해도 조용히 넘어간다.
+    """
+    text = str(text or "").strip()
+    if not text:
+        return
+    try:
+        images = [e for e in driver.find_elements(By.CSS_SELECTOR, ".se-component.se-image") if e.is_displayed()]
+        if not images:
+            logger.debug("사진 설명을 달 이미지를 찾지 못했습니다.")
+            return
+        target = images[-1]
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'});", target)
+        wait_short()
+        ActionChains(driver).move_to_element(target).click().perform()
+        wait_short()
+
+        captions = [e for e in driver.find_elements(By.CSS_SELECTOR, ".se-component.se-image .se-caption") if e.is_displayed()]
+        if not captions:
+            logger.debug("사진 설명 칸이 열리지 않았습니다.")
+            return
+        ActionChains(driver).move_to_element(captions[-1]).click().perform()
+        wait_short()
+        human_type(driver, text)
+        wait_short()
+        logger.info(f"사진 설명 입력: {text[:24]}")
+    except Exception as e:
+        logger.debug(f"사진 설명 입력 실패(건너뜀): {e}")
 
 
 def _input_quotation(driver, text):

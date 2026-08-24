@@ -36,6 +36,15 @@ TEXT_FORMAT_DROPDOWN = ".se-text-format-toolbar-button"
 TEXT_FORMAT_SECTION_TITLE = ".se-toolbar-option-text-format-sectionTitle-button"
 TEXT_FORMAT_BODY = ".se-toolbar-option-text-format-text-button"
 
+# 목록·표 — 2026-08-25 실측.
+# 목록은 드롭다운을 열어 기호/숫자를 고르고, 다시 열어 "목록해제"로 빠져나온다.
+# 표는 버튼 한 번에 3행 3열이 바로 삽입된다(별도 입력창 없음).
+LIST_DROPDOWN = "[class*='se-list-bullet-toolbar']"
+LIST_BULLET = "[class*='se-toolbar-option-list-bullet']"
+LIST_DECIMAL = "[class*='se-toolbar-option-list-decimal']"
+LIST_RESET = "[class*='se-toolbar-option-list-reset']"
+TABLE_BUTTON = ".se-table-toolbar-button"
+
 IMAGE_BUTTON = ".se-toolbar-item-image"
 BOLD_BUTTON = ".se-bold-toolbar-button"
 MAP_BUTTON = ".se-toolbar-item-map"
@@ -113,6 +122,11 @@ try:
         TEXT_FORMAT_DROPDOWN = _ov("text_format_dropdown", TEXT_FORMAT_DROPDOWN)
         TEXT_FORMAT_SECTION_TITLE = _ov("text_format_section_title", TEXT_FORMAT_SECTION_TITLE)
         TEXT_FORMAT_BODY = _ov("text_format_body", TEXT_FORMAT_BODY)
+        LIST_DROPDOWN  = _ov("list_dropdown",  LIST_DROPDOWN)
+        LIST_BULLET    = _ov("list_bullet",    LIST_BULLET)
+        LIST_DECIMAL   = _ov("list_decimal",   LIST_DECIMAL)
+        LIST_RESET     = _ov("list_reset",     LIST_RESET)
+        TABLE_BUTTON   = _ov("table_button",   TABLE_BUTTON)
         SAVE_BUTTON    = _ov("save_button",    SAVE_BUTTON)
         PUBLISH_BUTTON = _ov("publish_button", PUBLISH_BUTTON)
         CONFIRM_BUTTON = _ov("confirm_button", CONFIRM_BUTTON)
