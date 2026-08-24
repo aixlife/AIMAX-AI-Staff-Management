@@ -8,6 +8,7 @@ def parse_markdown(content):
     """마크다운 텍스트를 파싱하여 (title, content_list) 반환
 
     content_list 항목 형식:
+      ('heading', '소제목 텍스트')
       ('quote', '인용구 텍스트')
       ('image', '이미지 프롬프트')
       ('text', [('text', '일반텍스트'), ('bold', '볼드텍스트'), ('text', '\\n'), ...])
@@ -34,13 +35,27 @@ def parse_markdown(content):
     for line in lines[start_idx:]:
         stripped = line.strip()
 
-        # ## 인용구
+        # ## 소제목
+        # 2026-08-25 이전에는 이 줄을 인용구로 바꿔 넣었다. 그래서 네이버 글에 소제목이
+        # 하나도 없었고 모든 글이 "인용구-문단-이미지" 반복으로 똑같이 보였다.
+        # 소제목은 소제목으로 넣고, 인용구는 아래 `>` 문법에만 쓴다.
         if stripped.startswith('##'):
             if current_section:
                 content_list.append(('text', current_section))
                 current_section = []
-            quote_text = stripped.lstrip('# ').strip()
-            content_list.append(('quote', quote_text))
+            heading_text = stripped.lstrip('# ').strip()
+            if heading_text:
+                content_list.append(('heading', heading_text))
+            continue
+
+        # > 인용구 — 실제 인용이나 핵심 결론에만 쓴다.
+        if stripped.startswith('>'):
+            if current_section:
+                content_list.append(('text', current_section))
+                current_section = []
+            quote_text = stripped.lstrip('> ').strip()
+            if quote_text:
+                content_list.append(('quote', quote_text))
             continue
 
         # [이미지] 프롬프트
@@ -104,6 +119,7 @@ def rebalance_image_blocks(content_list):
     if len(tail_images) < 2:
         return content_list, 0
 
+    # 소제목은 대상에서 뺀다 — 소제목과 첫 설명 문단 사이에 이미지가 끼면 흐름이 끊긴다.
     target_indexes = [
         index for index, item in enumerate(items)
         if item and item[0] in {"text", "quote"}

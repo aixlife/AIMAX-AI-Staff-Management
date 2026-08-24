@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from constants import (
     BLOG_WRITE_URL, EDITOR_IFRAME, POPUP_CANCEL, HELP_CLOSE,
     TITLE_AREA, QUOTATION_OPEN, QUOTATION_STYLE,
+    TEXT_FORMAT_DROPDOWN, TEXT_FORMAT_SECTION_TITLE, TEXT_FORMAT_BODY,
     IMAGE_BUTTON, BOLD_BUTTON,
     FONT_DROPDOWN, FONT_OPTIONS,
 )
@@ -1014,6 +1015,8 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
             break
         if content_type == 'text':
             _input_text_block(driver, content_data)
+        elif content_type == 'heading':
+            _input_heading(driver, content_data)
         elif content_type == 'quote':
             _input_quotation(driver, content_data)
         elif content_type == 'image':
@@ -1134,6 +1137,56 @@ def _input_text_block(driver, parts):
             else:
                 human_type(driver, part_text)
                 wait_short()
+
+
+def _set_text_format(driver, option_selector, label):
+    """문단 서식 드롭다운에서 한 항목을 고른다. 성공하면 True."""
+    try:
+        dropdown = driver.find_element(By.CSS_SELECTOR, TEXT_FORMAT_DROPDOWN)
+        driver.execute_script("arguments[0].click();", dropdown)
+        wait_short()
+        option = driver.find_element(By.CSS_SELECTOR, option_selector)
+        if not option.is_displayed():
+            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+            return False
+        driver.execute_script("arguments[0].click();", option)
+        wait_short()
+        return True
+    except Exception as e:
+        logger.debug(f"문단 서식 '{label}' 적용 실패: {e}")
+        try:
+            ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+        except Exception:
+            pass
+        return False
+
+
+def _input_heading(driver, text):
+    """소제목 입력.
+
+    2026-08-25 이전에는 `## 소제목` 이 인용구로 들어가서 네이버 글에 소제목이
+    하나도 없었다. 스마트에디터 ONE 은 문단 서식 드롭다운(본문/소제목/인용구)에서만
+    소제목을 줄 수 있어서, 드롭다운을 열어 소제목을 고르고 입력한 뒤 본문으로 되돌린다.
+
+    소제목 적용에 실패하면 예전처럼 인용구로 넣는다 — 서식이 없어 글이 뭉개지는 것보다
+    이전 동작으로 떨어지는 편이 낫다.
+    """
+    logger.info(f"소제목 입력: {text[:30]}...")
+
+    if not _set_text_format(driver, TEXT_FORMAT_SECTION_TITLE, "소제목"):
+        logger.warning("소제목 서식을 적용하지 못해 인용구로 대체합니다.")
+        _input_quotation(driver, text)
+        return
+
+    human_type(driver, text)
+    wait_short()
+
+    # 다음 줄로 내려간 뒤 본문 서식으로 되돌린다.
+    # 되돌리지 않으면 이어지는 본문이 통째로 소제목 크기로 들어간다.
+    send_keys_action(driver, Keys.ENTER)
+    wait_short()
+    if not _set_text_format(driver, TEXT_FORMAT_BODY, "본문"):
+        logger.warning("본문 서식 복귀에 실패했습니다. 다음 문단이 소제목 서식일 수 있습니다.")
 
 
 def _input_quotation(driver, text):

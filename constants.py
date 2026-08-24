@@ -29,6 +29,13 @@ HELP_CLOSE = ".se-help-panel-close-button"
 TITLE_AREA = ".se-section-documentTitle"
 QUOTATION_OPEN = ".se-toolbar-item-insert-quotation .se-document-toolbar-select-option-button"
 QUOTATION_STYLE = ".se-toolbar-option-insert-quotation-quotation_underline-button"
+# 문단 서식(본문/소제목/인용구) — 2026-08-25 실측. 스마트에디터 ONE 은 이 드롭다운에서만
+# 소제목을 줄 수 있다. 그전까지 파서가 `## 소제목` 을 인용구로 바꿔 넣어서
+# 모든 글이 "인용구-문단-이미지" 반복으로 나왔다.
+TEXT_FORMAT_DROPDOWN = ".se-text-format-toolbar-button"
+TEXT_FORMAT_SECTION_TITLE = ".se-toolbar-option-text-format-sectionTitle-button"
+TEXT_FORMAT_BODY = ".se-toolbar-option-text-format-text-button"
+
 IMAGE_BUTTON = ".se-toolbar-item-image"
 BOLD_BUTTON = ".se-bold-toolbar-button"
 MAP_BUTTON = ".se-toolbar-item-map"
@@ -103,6 +110,9 @@ try:
             return v if v else default
         TITLE_AREA     = _ov("title_area",     TITLE_AREA)
         BOLD_BUTTON    = _ov("bold_button",    BOLD_BUTTON)
+        TEXT_FORMAT_DROPDOWN = _ov("text_format_dropdown", TEXT_FORMAT_DROPDOWN)
+        TEXT_FORMAT_SECTION_TITLE = _ov("text_format_section_title", TEXT_FORMAT_SECTION_TITLE)
+        TEXT_FORMAT_BODY = _ov("text_format_body", TEXT_FORMAT_BODY)
         SAVE_BUTTON    = _ov("save_button",    SAVE_BUTTON)
         PUBLISH_BUTTON = _ov("publish_button", PUBLISH_BUTTON)
         CONFIRM_BUTTON = _ov("confirm_button", CONFIRM_BUTTON)
