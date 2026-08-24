@@ -2011,6 +2011,44 @@ function yeriPayloadWordCount(payload) {
   return safeInt(payload?.word_count ?? payload?.wordcount ?? 1500, 300, 6000);
 }
 
+// ─── 예리 분량 보정 ──────────────────────────────────────────────────────────
+// 로컬 생성 경로(content/ai_text.py `_enforce_character_count`)에는 원래 이 단계가 있었다.
+// 서버 생성이 기본 경로가 되면서 빠졌고, 실측(2026-08-25, 산출물 275건)에서
+// 요청 분량 ±5% 준수율이 로컬 91% 대 서버 8%로 갈렸다(서버 평균 1.21배 초과).
+// 같은 규칙을 서버에도 둔다. 계산식은 로컬 `measure_visible_char_count` 와 맞춘다 —
+// 두 경로가 다른 숫자를 세면 사용자가 보는 글자 수와 판정이 어긋난다.
+const YERI_LENGTH_TOLERANCE = 0.05;
+// 로컬은 4회까지 재작성한다. 서버는 사용자 API 키로 과금되므로 2회로 시작하고 관측한다.
+const YERI_LENGTH_MAX_REWRITES = 2;
+
+function yeriVisibleCharCount(text) {
+  const lines = [];
+  for (const rawLine of String(text || "").split("\n")) {
+    let line = rawLine.trim();
+    if (!line || line.startsWith("[이미지]")) continue;
+    line = line.replace(/^#{1,6}\s*/, "").trim();
+    line = line.replace(/^[\s]*[-*]\s+/, "").trim();
+    line = line.split("**").join("").split("`").join("");
+    lines.push(line);
+  }
+  return lines.join(" ").replace(/\s+/g, " ").trim().length;
+}
+
+function yeriTargetCharRange(targetChars, tolerance = YERI_LENGTH_TOLERANCE) {
+  const target = safeInt(targetChars, 300, 6000);
+  return {
+    target,
+    min: Math.max(1, Math.round(target * (1 - tolerance))),
+    max: Math.max(1, Math.round(target * (1 + tolerance))),
+  };
+}
+
+function yeriLengthReport(markdown, targetChars) {
+  const range = yeriTargetCharRange(targetChars);
+  const count = yeriVisibleCharCount(markdown);
+  return { ...range, count, in_range: count >= range.min && count <= range.max };
+}
+
 function yeriPayloadStyle(payload) {
   const style = String(payload?.style_id || payload?.style || "info").trim();
   if (style === "buy") return "구매 전환형";
@@ -2530,8 +2568,48 @@ function yeriPromptPayload(job) {
   return { ...payload, job_id: job?.id || payload.job_id || "" };
 }
 
+function buildYeriLengthRevisionPrompt(payload) {
+  const revision = payload.__length_revision || {};
+  const keywords = yeriPayloadKeywords(payload);
+  const keyword = keywords[0] || "AIMAX 블로그 글";
+  const imageCount = yeriPayloadImageCount(payload);
+  const ctaLink = compactText(payload?.cta_link || "", 500);
+  const report = yeriLengthReport(revision.markdown || "", yeriPayloadWordCount(payload));
+  const delta = report.target - report.count;
+  const direction = report.count > report.max ? "줄인다" : "보강한다";
+  const adjustment = delta < 0
+    ? `현재보다 약 ${Math.abs(delta)}자 줄이고, 반복되는 문장부터 정리한다.`
+    : `현재보다 약 ${Math.abs(delta)}자 늘리고, 실제 예시나 확인 항목을 한 단락 이상 추가한다.`;
+  return [
+    "너는 AIMAX 블로그 글쓰기 직원 예리다. 아래 원고는 요청 분량을 벗어났다.",
+    "내용의 핵심과 검색 의도, 소제목 구성은 유지하고 분량만 맞춰 최종 원고를 다시 작성한다.",
+    "출력은 반드시 JSON 객체 하나만 작성한다. 마크다운 코드블록을 쓰지 않는다.",
+    "JSON 스키마: {\"title\":\"...\",\"content_markdown\":\"# 제목\\n\\n## 소제목\\n본문\\n\\n[이미지] 이미지 프롬프트\"}",
+    "",
+    "분량 기준:",
+    `- 목표 노출 글자 수: 공백 포함 ${report.target}자`,
+    `- 허용 범위: ${report.min}자 이상 ${report.max}자 이하`,
+    `- 현재 글자 수: ${report.count}자`,
+    "- 제목과 본문을 합산하되 마크다운 기호(#, ##, **)와 [이미지] 줄은 세지 않는다.",
+    "",
+    "수정 기준:",
+    `- 문단 수와 설명 밀도를 조절해 ${direction}.`,
+    `- ${adjustment}`,
+    `- 최종 결과는 반드시 ${report.min}자 이상 ${report.max}자 이하로 끝낸다. 이 범위를 벗어난 원고는 실패다.`,
+    `- [이미지] 줄은 정확히 ${imageCount}개만 유지하고 위치도 그대로 둔다.`,
+    `- 핵심 키워드 "${keyword}"의 사용 빈도를 원문보다 늘리지 않는다.`,
+    "- 제목은 content_markdown 첫 줄에도 '# 제목' 형식으로 유지한다.",
+    "- 확인되지 않은 통계, 후기, 가격, 순위, 법적/의학적 단정은 새로 만들지 않는다.",
+    ctaLink ? `- 기존 CTA URL ${ctaLink} 는 삭제하지 말고 마지막 문장에만 자연스럽게 유지한다.` : "",
+    "",
+    "원문:",
+    String(revision.markdown || ""),
+  ].filter(Boolean).join("\n");
+}
+
 function buildYeriGenerationPrompt(payload) {
   const keywords = yeriPayloadKeywords(payload);
+  if (payload && payload.__length_revision) return buildYeriLengthRevisionPrompt(payload);
   const keyword = keywords[0] || "AIMAX 블로그 글";
   const imageCount = yeriPayloadImageCount(payload);
   const ctaLink = compactText(payload?.cta_link || "", 500);
@@ -3020,6 +3098,66 @@ async function generateYeriSelectedModelArtifact(job, userId) {
   return generateYeriGeminiArtifact(job, userId);
 }
 
+// 생성된 원고가 요청 분량을 벗어나면 같은 모델로 다시 다듬는다.
+// 재작성도 사용자 키로 과금되므로 상한을 둔다. 상한 안에서 못 맞추면 마지막 결과를 그대로 쓰되
+// 로그를 남겨 사용자와 운영이 "분량이 안 맞았다"는 사실을 볼 수 있게 한다.
+async function enforceYeriArtifactLength(artifact, job, userId) {
+  const payload = job?.payload || {};
+  const target = yeriPayloadWordCount(payload);
+  let current = artifact;
+  let report = yeriLengthReport(current?.content_markdown || "", target);
+  if (report.in_range) return current;
+
+  for (let attempt = 1; attempt <= YERI_LENGTH_MAX_REWRITES; attempt += 1) {
+    const revisionJob = {
+      ...job,
+      payload: { ...payload, __length_revision: { markdown: current.content_markdown, attempt } },
+    };
+    let revised;
+    try {
+      revised = await generateYeriSelectedModelArtifact(revisionJob, userId);
+    } catch (error) {
+      // 재작성 실패는 잡 실패로 올리지 않는다 — 본문은 이미 있고, 분량만 못 맞춘 상태다.
+      console.warn("[yeri-length] rewrite failed", { job_id: job?.id, attempt, code: String(error?.code || error?.message || "") });
+      appendJobLogById(job?.id, userId, "warn", `분량 보정 재작성에 실패해 직전 원고를 사용합니다. (${report.count}자 / 목표 ${report.target}자)`);
+      return current;
+    }
+    const revisedReport = yeriLengthReport(revised?.content_markdown || "", target);
+    // 재작성이 오히려 더 벗어나면 채택하지 않는다.
+    const better = Math.abs(revisedReport.count - target) < Math.abs(report.count - target);
+    if (better) {
+      current = { ...revised, usage: mergeYeriUsage(current.usage, revised.usage) };
+      report = revisedReport;
+    } else {
+      current = { ...current, usage: mergeYeriUsage(current.usage, revised.usage) };
+    }
+    appendJobLogById(
+      job?.id,
+      userId,
+      "info",
+      `분량 보정 ${attempt}회차: ${revisedReport.count}자 (목표 ${report.target}자, 허용 ${report.min}~${report.max}자)`,
+    );
+    if (report.in_range) return current;
+  }
+
+  appendJobLogById(
+    job?.id,
+    userId,
+    "warn",
+    `분량을 목표 범위에 맞추지 못했습니다. 최종 ${report.count}자 (목표 ${report.target}자, 허용 ${report.min}~${report.max}자)`,
+  );
+  return current;
+}
+
+function mergeYeriUsage(a, b) {
+  const left = a && typeof a === "object" ? a : {};
+  const right = b && typeof b === "object" ? b : {};
+  const keys = ["input_tokens", "output_tokens", "thinking_tokens", "billable_output_tokens", "total_tokens"];
+  const out = { ...left };
+  for (const key of keys) out[key] = safeInt(left[key]) + safeInt(right[key]);
+  return out;
+}
+
 function yeriGenerationFailureCode(error) {
   const rawCode = error?.code || error?.message || "server_generation_failed";
   const code = sanitizeFailedStage(rawCode) || "server_generation_failed";
@@ -3258,7 +3396,7 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
   try {
     const artifact = mode === "mock"
       ? buildYeriMockArtifact(job)
-      : await generateYeriSelectedModelArtifact(job, userId);
+      : await enforceYeriArtifactLength(await generateYeriSelectedModelArtifact(job, userId), job, userId);
     // 긴 await 동안 다른 핸들러/스윕이 jobs.json 을 바꿨을 수 있으므로, 저장 직전 재로드해
     // 해당 잡만 in-place 패치한다(전체 스냅샷 덮어쓰기로 동시 변경을 잃거나 좀비를 되살리는 것 방지).
     const fresh = loadJobs();
