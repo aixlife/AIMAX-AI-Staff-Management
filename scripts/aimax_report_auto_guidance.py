@@ -217,6 +217,24 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
         next_update_message="웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
     ),
+    "core_exe_missing": Guidance(
+        category="core_exe_missing",
+        status="waiting_user",
+        status_label="사용자 확인 필요",
+        public_message=(
+            "실행기 런처는 켜졌지만 같은 폴더에 있어야 할 AIMAX 본체 파일(AIMAX.exe)이 없어서 시작되지 못한 상태입니다. "
+            "재설치를 해도 같은 창이 뜬다면 설치 직후 백신·보안 프로그램이 그 파일을 격리했을 가능성이 큽니다. "
+            "계정이나 AI 키 문제가 아닙니다."
+        ),
+        next_update_message=(
+            "1) 파일 탐색기 주소창에 %LOCALAPPDATA%\\Programs\\AIMAX 를 붙여넣고 AIMAX.exe 가 있는지 봐주세요. "
+            "2) 없으면 Windows 보안 > 바이러스 및 위협 방지 > 보호 기록에서 AIMAX 격리·차단 항목을 '허용'으로 복원하고, "
+            "같은 화면의 제외 항목에 그 폴더를 추가한 뒤 설치 파일을 다시 실행해주세요"
+            "(V3·알약 등 다른 백신을 쓰면 그 프로그램의 격리함도 같이 확인). "
+            "3) 그래도 같으면 %APPDATA%\\AIMAX\\launcher_diagnostics 폴더의 가장 최근 launcher_날짜.jsonl 파일을 "
+            "이 접수에 첨부해주세요 — 런처가 어느 폴더를 봤는지 그 파일에 남습니다."
+        ),
+    ),
     "bundle_integrity_mismatch": Guidance(
         category="bundle_integrity_mismatch",
         status="waiting_user",
@@ -408,6 +426,11 @@ AIMAX_ACTION_CATEGORIES = frozenset(
 NAVER_LOGIN_PAGE_CHANGED_PATTERN = (
     r"로그인 버튼을 찾을 수 없|로그인 버튼을 클릭하지 못했|로그인 폼 요소.*찾을 수 없|naver_login_button_not_found"
 )
+
+
+# Windows 런처(packaging/windows/aimax_agent_launcher.go)가 코어 exe 를 못 찾았을 때 띄우는
+# 고정 문구. server.js 의 CORE_EXE_MISSING_PATTERN 과 같은 정의를 쓴다.
+CORE_EXE_MISSING_PATTERN = r"본체\s*실행\s*파일을?\s*찾지\s*못|aimax core executable not found"
 
 
 # 연결 잡의 정형 신호(머신 코드 + 서버/러너 고정 문구) 1순위 룰. server.js 의
@@ -632,6 +655,9 @@ def still_failing_guidance(row: dict[str, Any]) -> Guidance | None:
     if category in AIMAX_ACTION_CATEGORIES:
         return None
     text = report_issue_text(row)
+    # "재설치했는데도 본체를 못 찾는다" = 안내가 틀렸던 것이다. 백신 격리 점검으로 바꿔준다.
+    if category == "core_exe_missing" or re.search(CORE_EXE_MISSING_PATTERN, text, re.I):
+        return GUIDANCE["core_exe_missing"]
     if is_browser_driver_policy_blocked(text):
         return GUIDANCE["browser_driver_policy_blocked"]
     if category == "web_login_failed" or re.search(r"로그인 실패.*웹앱|웹앱 이메일|비밀번호가 맞지", text, re.I):
@@ -677,6 +703,12 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dic
         if str(row.get("status") or "") == "new":
             return GUIDANCE["staff_feedback_reviewing"]
         return None
+
+    # 런처 고정 문구는 잡 신호보다 구체적이다. runner_stopped 만 보면 "최신 설치 파일로 다시
+    # 설치" 안내가 나가는데, 그 창은 재설치를 하고 난 뒤에 뜬 것이라 사용자만 같은 일을 반복한다
+    # (2026-08-23 실측: AIMAX-RPT-20260823131857 — 안내대로 재설치 후 still_failing).
+    if re.search(CORE_EXE_MISSING_PATTERN, row_text, re.I):
+        return GUIDANCE["core_exe_missing"]
 
     structured = classify_structured_job(row, detail, jobs_by_id or {})
     if structured:

@@ -3215,6 +3215,13 @@ function yeriGenerationFailureMessage(error) {
 const NAVER_LOGIN_PAGE_CHANGED_PATTERN =
   /로그인 버튼을 찾을 수 없|로그인 버튼을 클릭하지 못했|로그인 폼 요소.*찾을 수 없|naver_login_button_not_found/;
 
+// Windows 런처(packaging/windows/aimax_agent_launcher.go)가 코어 exe 를 못 찾았을 때 직접
+// 띄우는 고정 문구다. 사용자가 그대로 옮겨 적으므로 띄어쓰기 변형을 허용한다.
+// 잡 신호는 이 경우 runner_stopped 로만 올라와 "업데이트 후 재설치" 안내로 분류되는데,
+// 사용자는 이미 재설치를 하고 나서 이 창을 본 것이라 같은 안내를 다시 받으면 무한 루프다.
+const CORE_EXE_MISSING_PATTERN =
+  /본체\s*실행\s*파일을?\s*찾지\s*못|aimax core executable not found/i;
+
 function buildFailureDiagnostic(input = {}) {
   if (input && typeof input === "object" && input.code && input.title && input.message) {
     return {
@@ -11287,6 +11294,16 @@ function reportActionChecklist(row) {
   const status = normalizeReportStatus(row?.status || "new");
   if (isFeedbackReport(row)) return [];
   if (status !== "waiting_user") return [];
+  // 코어 exe 누락은 "재설치" 체크리스트를 주면 안 된다 — 그 창은 재설치 뒤에 뜬 것이고,
+  // 백신이 격리한 상태라면 다시 설치해도 같은 자리로 돌아온다(8/23 실측).
+  if (String(row?.auto_guidance_category || "") === "core_exe_missing") {
+    return [
+      "파일 탐색기 주소창에 %LOCALAPPDATA%\\Programs\\AIMAX 를 붙여넣고 AIMAX.exe 파일이 있는지 확인합니다.",
+      "파일이 없으면 Windows 보안 > 바이러스 및 위협 방지 > 보호 기록에서 AIMAX 격리·차단 항목을 '허용'으로 복원합니다(V3·알약 등을 쓰면 그 프로그램의 격리함도 확인).",
+      "같은 화면의 제외 항목에 그 폴더를 추가한 뒤 설치 파일을 한 번만 다시 실행하고, 바탕화면 AIMAX 아이콘으로 실행합니다.",
+      "그래도 같은 창이 뜨면 %APPDATA%\\AIMAX\\launcher_diagnostics 폴더의 최신 launcher_날짜.jsonl 파일을 첨부해 '아직 안 돼요'로 알려주세요.",
+    ];
+  }
   const desktopWorker = waitingUserMailDesktopWorker(row);
   if (desktopWorker) {
     return [
@@ -11512,6 +11529,12 @@ const REPORT_AUTO_GUIDANCE = {
     public_message: "로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
     next_update_message: "웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
   },
+  core_exe_missing: {
+    status: "waiting_user",
+    status_label: "사용자 확인 필요",
+    public_message: "실행기 런처는 켜졌지만 같은 폴더에 있어야 할 AIMAX 본체 파일(AIMAX.exe)이 없어서 시작되지 못한 상태입니다. 재설치를 해도 같은 창이 뜬다면 설치 직후 백신·보안 프로그램이 그 파일을 격리했을 가능성이 큽니다. 계정이나 AI 키 문제가 아닙니다.",
+    next_update_message: "1) 파일 탐색기 주소창에 %LOCALAPPDATA%\\Programs\\AIMAX 를 붙여넣고 AIMAX.exe 가 있는지 봐주세요. 2) 없으면 Windows 보안 > 바이러스 및 위협 방지 > 보호 기록에서 AIMAX 격리·차단 항목을 '허용'으로 복원하고, 같은 화면의 제외 항목에 그 폴더를 추가한 뒤 설치 파일을 다시 실행해주세요(V3·알약 등 다른 백신을 쓰면 그 프로그램의 격리함도 같이 확인). 3) 그래도 같으면 %APPDATA%\\AIMAX\\launcher_diagnostics 폴더의 가장 최근 launcher_날짜.jsonl 파일을 이 접수에 첨부해주세요 — 런처가 어느 폴더를 봤는지 그 파일에 남습니다.",
+  },
   bundle_integrity_mismatch: {
     status: "waiting_user",
     status_label: "사용자 확인 필요",
@@ -11654,6 +11677,11 @@ function classifyStructuredJobGuidance(report) {
 
 function classifyReportAutoGuidance(report) {
   if (isFeedbackReport(report)) return REPORT_AUTO_GUIDANCE.staff_feedback_reviewing;
+  // 런처가 직접 띄운 고정 문구는 잡 신호보다 구체적이다. runner_stopped 로만 보면
+  // "최신 설치 파일로 다시 설치" 안내가 나가는데, 그 창은 재설치 뒤에 뜬 것이다(8/23 실측).
+  if (CORE_EXE_MISSING_PATTERN.test(reportAutoGuidanceText(report))) {
+    return { key: "core_exe_missing", signal_tier: "launcher_message", ...REPORT_AUTO_GUIDANCE.core_exe_missing };
+  }
   const structured = classifyStructuredJobGuidance(report);
   if (structured) return structured;
   const text = reportAutoGuidanceText(report);
@@ -12007,7 +12035,7 @@ function automationTicketCategory(summary, report) {
   // 모델 목록이 낡아서 생긴 우리 쪽 작업이므로 별도 카테고리로 분리한다.
   if (/model_not_found/.test(autoGuidanceCategory)) return "aimax_model_catalog";
   if (/api_key|quota|rate_limit|provider_transient|image_paid_required/.test(autoGuidanceCategory)) return "user_ai_provider";
-  if (/runner_update_required|bundle_integrity_mismatch/.test(autoGuidanceCategory)) return "local_runner";
+  if (/runner_update_required|bundle_integrity_mismatch|core_exe_missing/.test(autoGuidanceCategory)) return "local_runner";
   // naver_login_page_changed 는 우리 코드(실행기 선택자) 작업이라 naver_editor 로 묶는다.
   if (/naver_login_required|naver_login_page_changed/.test(autoGuidanceCategory)) return "naver_editor";
   const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
@@ -12721,7 +12749,11 @@ function buildWaitingUserReportMail(row) {
   if (isAimaxOwnedReviewingReport(row)) return buildAimaxOwnedReportMail(row);
   const jobKind = String(row?.job_kind || "").trim();
   const kindLabel = (JOB_KINDS[jobKind] && JOB_KINDS[jobKind].label) || "작업";
-  const desktopWorker = waitingUserMailDesktopWorker(row);
+  // 코어 exe 누락 건에는 "최신 설치 파일을 다시 설치" 문단을 붙이지 않는다.
+  // 사용자는 그 안내대로 이미 재설치했고 그 뒤에 이 창을 봤다(8/23 실측).
+  const desktopWorker = String(row?.auto_guidance_category || "") === "core_exe_missing"
+    ? null
+    : waitingUserMailDesktopWorker(row);
   const contextLabel = desktopWorker?.label || kindLabel;
   const subject = `[AIMAX] 오류 보고에 확인이 필요합니다 — ${contextLabel}`;
   const storedAtKst = waitingUserMailKstTimestamp(row?.stored_at || row?.status_updated_at || "");
