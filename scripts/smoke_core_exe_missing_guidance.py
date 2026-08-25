@@ -102,8 +102,9 @@ result = guidance.classify(row(), detail, {})
 check("category", getattr(result, "category", None), "core_exe_missing")
 check("status", getattr(result, "status", None), "waiting_user")
 check("재설치 안내로 새지 않음", getattr(result, "category", None) == "runner_update_required", False)
-check("백신 격리 점검 안내 포함", "보호 기록" in getattr(result, "next_update_message", ""), True)
-check("런처 진단 파일 경로 안내 포함", "launcher_diagnostics" in getattr(result, "next_update_message", ""), True)
+check("백신 점검 안내 포함", "백신" in getattr(result, "next_update_message", ""), True)
+check("설치 폴더 확인 안내 포함", "%LOCALAPPDATA%" in getattr(result, "next_update_message", ""), True)
+check("어려운 말 안 씀(격리·런처·진단파일)", any(w in getattr(result, "next_update_message", "") for w in ("격리", "런처", "jsonl")), False)
 
 print("[2] '안내대로 했는데 아직 안 돼요' 재응답도 같은 분류로 교정")
 still = guidance.still_failing_guidance(
@@ -148,7 +149,8 @@ const row5 = {
   auto_guidance_category: "core_exe_missing",
   work_context: input.report.user_input.work_context,
   visible_error: input.report.user_input.visible_error,
-  public_message: "실행기 런처는 켜졌지만 같은 폴더에 있어야 할 AIMAX 본체 파일(AIMAX.exe)이 없어서 시작되지 못한 상태입니다.",
+  // 카탈로그에 실린 실제 안내문을 그대로 쓴다 — 하드코딩하면 문구를 바꿔도 검사에 안 걸린다.
+  public_message: guidance ? guidance.public_message : "",
 };
 const plain = classifyReportAutoGuidance(input.plain_report);
 console.log(JSON.stringify({
@@ -226,9 +228,11 @@ else:
     checklist = " ".join(out["checklist"])
     check("체크리스트: 재설치 반복 지시 없음", "최신 설치 파일을 다운로드" in checklist, False)
     check("체크리스트: 설치 폴더 확인 지시", "%LOCALAPPDATA%" in checklist, True)
-    check("체크리스트: 백신 격리 복원 지시", "보호 기록" in checklist, True)
+    check("체크리스트: 백신 복원 지시", "백신" in checklist, True)
+    check("체크리스트: 어려운 말 안 씀", any(w in checklist for w in ("격리", "런처", "jsonl")), False)
     check("안내 메일도 재설치 루프를 반복하지 않음", "최신 설치 파일을 다운로드" in out["mail_text"], False)
-    check("안내 메일에 격리 복원 안내 포함", "보호 기록" in out["mail_text"], True)
+    check("안내 메일에 백신 복원 안내 포함", "백신" in out["mail_text"], True)
+    check("안내 메일에 어려운 말 없음", any(w in out["mail_text"] for w in ("격리", "런처", "jsonl")), False)
 
 print(f"\n결과: PASS {passed} / FAIL {failed}")
 sys.exit(1 if failed else 0)
