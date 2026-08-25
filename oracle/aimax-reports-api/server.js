@@ -12764,6 +12764,8 @@ const WAITING_USER_MAIL_PER_SWEEP = safeInt(process.env.AIMAX_WAITING_USER_MAIL_
 const WAITING_USER_MAIL_INTERVAL_MS = safeInt(process.env.AIMAX_WAITING_USER_MAIL_INTERVAL_MS || "300000", 1000, 24 * 60 * 60 * 1000);
 const WAITING_USER_MAIL_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const WAITING_USER_MAIL_MAX_ATTEMPTS = 3;
+// 안내 분류가 교정됐을 때만 다시 보낸다. 같은 보고에 최대 2회까지(최초 1회 + 재발송 2회).
+const WAITING_USER_MAIL_MAX_RESEND = 2;
 const WAITING_USER_MAIL_INITIAL_DELAY_MS = Math.min(60 * 1000, WAITING_USER_MAIL_INTERVAL_MS);
 let waitingUserMailSweepBusy = false;
 let waitingUserMailNotConfiguredWarned = false;
@@ -12839,6 +12841,15 @@ function shouldNotifyReportByMail(row) {
   return isAimaxOwnedReviewingReport(row);
 }
 
+// 앞서 나간 안내와 분류가 달라진 재발송인지. 재발송이면 "정정"임을 먼저 밝힌다 —
+// 사용자는 이미 틀린 안내대로 한 번 움직였다.
+function isCorrectedGuidanceMail(row) {
+  if (!row?.user_notified_at) return false;
+  const notified = String(row?.user_notified_category || "");
+  const current = String(row?.auto_guidance_category || "");
+  return Boolean(notified) && Boolean(current) && notified !== current;
+}
+
 // 메일 본문 구성 — 이모지 금지, redactText 적용 필드만 사용, 시크릿/원문 로그 인용 금지.
 function buildWaitingUserReportMail(row) {
   // AIMAX 조치 건은 "확인이 필요합니다"로 보내면 안 된다. 사용자가 설정을 뒤지게 만들 뿐이고,
@@ -12852,7 +12863,10 @@ function buildWaitingUserReportMail(row) {
     ? null
     : waitingUserMailDesktopWorker(row);
   const contextLabel = desktopWorker?.label || kindLabel;
-  const subject = `[AIMAX] 오류 보고에 확인이 필요합니다 — ${contextLabel}`;
+  const corrected = isCorrectedGuidanceMail(row);
+  const subject = corrected
+    ? `[AIMAX] 앞서 보낸 안내를 정정합니다 — ${contextLabel}`
+    : `[AIMAX] 오류 보고에 확인이 필요합니다 — ${contextLabel}`;
   const storedAtKst = waitingUserMailKstTimestamp(row?.stored_at || row?.status_updated_at || "");
   const publicMessage = redactText(String(row?.public_message || "")).trim();
   const checklist = reportActionChecklist(row);
@@ -12862,7 +12876,12 @@ function buildWaitingUserReportMail(row) {
   if (storedAtKst) lines.push(`접수 시각: ${storedAtKst}`);
   lines.push(`작업: ${kindLabel}`);
   lines.push("");
-  lines.push("진행 중이던 작업에 확인이 필요한 오류가 접수되었습니다.");
+  if (corrected) {
+    lines.push("앞서 보내드린 안내는 이 증상과 맞지 않았습니다. 다시 확인한 내용으로 정정해 보내드립니다.");
+    lines.push("먼저 안내대로 해보셨는데 해결되지 않았다면, 그 안내가 원인을 잘못 짚은 것입니다. 번거롭게 해드려 죄송합니다.");
+  } else {
+    lines.push("진행 중이던 작업에 확인이 필요한 오류가 접수되었습니다.");
+  }
   if (publicMessage) {
     lines.push("");
     lines.push(publicMessage);
@@ -13000,10 +13019,22 @@ async function sweepWaitingUserReportMail() {
       if (sent >= WAITING_USER_MAIL_PER_SWEEP) break;
       if (!shouldNotifyReportByMail(row)) continue;
       if (isFeedbackReport(row)) continue; // 오류보고만 (피드백 리포트 제외)
-      // 발송 완료(user_notified_at)/실패 확정(user_notify_failed_at) 행은 영구 스킵한다.
+      // 실패 확정(user_notify_failed_at) 행은 영구 스킵한다.
       // user_notify_skipped 만 있는 행은 매 스윕 재평가한다: 이제 검증을 통과하면 이 스윕에서 발송하며
       // 스킵 마커를 지우고, 여전히 같은 이유로 실패하면 마커를 다시 쓰지 않고 조용히 건너뛴다(5분마다 파일 churn 방지).
-      if (row?.user_notified_at || row?.user_notify_failed_at) continue;
+      if (row?.user_notify_failed_at) continue;
+      // 이미 보낸 행: 안내 분류가 바뀌었을 때만 1회 다시 보낸다.
+      // 자동 안내는 나중에 교정될 수 있는데(정형 신호 → 더 구체적인 분류), 예전 규칙은
+      // user_notified_at 이 있으면 영구 스킵이라 교정된 안내가 사용자에게 도달하지 못했다.
+      // (2026-08-23 AIMAX-RPT-20260823131857: 틀린 재설치 안내를 받은 뒤 5일간 방치)
+      // 분류 기록이 없는 행은 무엇을 보냈는지 알 수 없으므로 보내지 않는다 —
+      // 백필(scripts/backfill_report_notified_category.py) 전 과거 보고 전체 재발송을 막는 안전판.
+      if (row?.user_notified_at) {
+        const notifiedCategory = String(row?.user_notified_category || "");
+        const currentCategory = String(row?.auto_guidance_category || "");
+        if (!notifiedCategory || !currentCategory || notifiedCategory === currentCategory) continue;
+        if (safeInt(row?.user_notify_resend_count, 0, 100) >= WAITING_USER_MAIL_MAX_RESEND) continue;
+      }
       const priorSkip = String(row?.user_notify_skipped || "");
       // 스킵 마커를 남기되, 같은 이유로 이미 마킹돼 있으면 재기록하지 않는다(파일 churn 방지). 이유가 바뀌면 갱신한다.
       const applySkip = (reason) => {
@@ -13081,7 +13112,13 @@ async function sweepWaitingUserReportMail() {
         user_notified_at: notifiedAt,
         user_notified_channel: "email",
         user_notified_id: String(result?.id || "").slice(0, 160),
+        // 다음 스윕이 "무엇을 보냈는지" 알아야 분류 교정 시 1회 재발송을 판정할 수 있다.
+        user_notified_category: String(row?.auto_guidance_category || ""),
       };
+      if (row?.user_notified_at) {
+        notifiedPatch.user_notify_resend_count = safeInt(row?.user_notify_resend_count, 0, 100) + 1;
+        notifiedPatch.user_notify_resent_at = notifiedAt;
+      }
       // 이전 스윕에서 스킵 마커가 있던 행이 재평가로 통과했다면, 발송 마커와 같은 패치에서 스킵 필드를 지운다.
       if (priorSkip) {
         notifiedPatch.user_notify_skipped = "";

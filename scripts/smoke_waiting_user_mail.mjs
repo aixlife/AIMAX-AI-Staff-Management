@@ -429,6 +429,77 @@ async function scenarioSkipReeval() {
   }
 }
 
+// 12) 안내 분류가 교정되면 1회 재발송한다. 분류 기록이 없거나 같으면 재발송하지 않는다.
+//     (2026-08-23 AIMAX-RPT-20260823131857: 틀린 재설치 안내를 받은 뒤 교정된 안내가
+//      user_notified_at 영구 스킵에 막혀 5일간 사용자에게 도달하지 못했다.)
+async function scenarioResendOnCategoryChange() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-resend-"));
+  const email = "resend@example.test";
+  const already = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 쿨다운(6h) 밖
+  seedUsers(tmpDir, [email]);
+  seedIndex(tmpDir, [
+    // 분류가 바뀐 행 → 재발송 대상
+    reportRow({
+      report_id: "rep-resend-changed",
+      account_email: email,
+      user_notified_at: already,
+      user_notified_category: "runner_update_required",
+      auto_guidance_category: "core_exe_missing",
+      public_message: "런처는 켜졌지만 본체 파일이 없어 시작되지 못했습니다.",
+    }),
+    // 분류가 그대로인 행 → 재발송 없음
+    reportRow({
+      report_id: "rep-resend-same",
+      account_email: email,
+      user_notified_at: already,
+      user_notified_category: "runner_update_required",
+      auto_guidance_category: "runner_update_required",
+    }),
+    // 무엇을 보냈는지 기록이 없는 행(백필 전 과거 보고) → 재발송 없음
+    reportRow({
+      report_id: "rep-resend-unknown",
+      account_email: email,
+      user_notified_at: already,
+      auto_guidance_category: "core_exe_missing",
+    }),
+    // 재발송 상한에 도달한 행 → 재발송 없음
+    reportRow({
+      report_id: "rep-resend-capped",
+      account_email: email,
+      user_notified_at: already,
+      user_notified_category: "runner_update_required",
+      auto_guidance_category: "core_exe_missing",
+      user_notify_resend_count: 2,
+    }),
+  ]);
+  const stub = await startMailStub({ status: 200 });
+  const port = nextPort();
+  const { child, logs } = bootServer(tmpDir, port, { AIMAX_MAIL_WEBHOOK_URL: stub.url });
+  try {
+    await waitForServer(port, logs);
+    const row = await waitFor(
+      () => readIndexRows(tmpDir).find((r) => r.report_id === "rep-resend-changed" && r.user_notify_resent_at),
+      "resend_sent",
+    );
+    await sleep(2500); // 다음 스윕까지 기다려 추가 발송이 없는지 확인
+    const rows = readIndexRows(tmpDir);
+    assert(stub.received.length === 1, `expected_single_resend:${stub.received.length}`);
+    assert(row.user_notified_category === "core_exe_missing", `category_marker:${row.user_notified_category}`);
+    assert(Number(row.user_notify_resend_count) === 1, `resend_count:${row.user_notify_resend_count}`);
+    const same = rows.find((r) => r.report_id === "rep-resend-same");
+    assert(same.user_notified_at === already, `same_category_must_not_resend:${same.user_notified_at}`);
+    const unknown = rows.find((r) => r.report_id === "rep-resend-unknown");
+    assert(unknown.user_notified_at === already, `unknown_category_must_not_resend:${unknown.user_notified_at}`);
+    const capped = rows.find((r) => r.report_id === "rep-resend-capped");
+    assert(capped.user_notified_at === already, `capped_must_not_resend:${capped.user_notified_at}`);
+    console.log("PASS 12) 분류 교정 시 1회 재발송 · 동일/미기록/상한 행은 재발송 없음");
+  } finally {
+    child.kill("SIGTERM");
+    await stub.close();
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
 try {
   await scenarioSendAndDedup();
   await scenarioSkips();
@@ -438,6 +509,7 @@ try {
   await scenarioGarbageReportId();
   await scenarioMaskedEmailSends();
   await scenarioSkipReeval();
+  await scenarioResendOnCategoryChange();
   console.log("WAITING_USER_MAIL_SMOKE_OK");
 } catch (error) {
   console.error("WAITING_USER_MAIL_SMOKE_FAILED");
