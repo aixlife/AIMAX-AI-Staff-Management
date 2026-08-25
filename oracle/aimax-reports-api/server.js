@@ -2049,11 +2049,67 @@ function yeriLengthReport(markdown, targetChars) {
   return { ...range, count, in_range: count >= range.min && count <= range.max };
 }
 
+// ─── 예리 글쓰기 스타일 ──────────────────────────────────────────────────────
+// 2026-08-25 실사용 키워드 1,085개를 보고 정했다. 지역+업종 조합이 19%로 가장 많고
+// (중고차 56·부동산 52·장기렌트·인테리어·정책자금), 그다음이 추천·비교 5%,
+// 방법·가이드 5% 였다. 그래서 세 갈래로 나눈다.
+//
+// 스타일은 사용자 계정에 한 번 저장하고 글마다 다시 고르게 하지 않는다.
+// 기존 옵션 실사용률이 카테고리 44% → CTA 42% → SEO 26% → 문체참고 8% 로
+// 손이 더 갈수록 떨어졌기 때문이다.
+const YERI_STYLE_PACKS = {
+  consult: {
+    label: "상담 유도형",
+    hint: "중고차·부동산·인테리어·정책자금처럼 지역에서 문의를 받으려는 글",
+    lines: [
+      "- 이 글의 목적은 읽는 사람이 문의하고 싶게 만드는 것이다. 다만 광고 문구를 늘어놓지 말고, 판단에 필요한 기준을 먼저 준다.",
+      "- 무엇을 확인해야 하는지, 어떤 조건에서 어떤 선택이 맞는지를 목록으로 정리한다.",
+      "- 선택지가 둘 이상이면 표로 비교한다.",
+      "- 확인되지 않은 가격·기간·보장은 쓰지 않는다. 대신 '무엇에 따라 달라지는지'를 쓴다.",
+      "- 마무리는 다음에 무엇을 하면 되는지 한 문장으로 알려주고 끝낸다. 재촉하지 않는다.",
+    ],
+  },
+  info: {
+    label: "정보 정리형",
+    hint: "방법·가이드처럼 검색해서 들어온 질문에 답하는 글",
+    lines: [
+      "- 이 글의 목적은 검색해서 들어온 질문에 끝까지 답하는 것이다.",
+      "- 순서가 있는 일은 번호 목록으로, 확인할 것들은 기호 목록으로 쓴다.",
+      "- 흔한 오해가 있으면 먼저 짚고 실제는 어떤지 설명한다.",
+      "- 상황에 따라 답이 갈리면 어떤 조건에서 어떻게 다른지 밝힌다.",
+      "- 마무리는 요약하거나 다음에 볼 것을 알려주고 끝낸다.",
+    ],
+  },
+  review: {
+    label: "후기·추천형",
+    hint: "고를 때 판단을 돕는 비교·추천 글",
+    lines: [
+      "- 이 글의 목적은 고르려는 사람의 판단을 돕는 것이다.",
+      "- 비교 대상이 둘 이상이면 표로 정리하고, 각각 어떤 사람에게 맞는지 쓴다.",
+      "- 좋은 점만 쓰지 않는다. 아쉬운 점이나 맞지 않는 경우를 반드시 함께 쓴다.",
+      "- 겪어보지 않은 것을 겪은 것처럼 쓰지 않는다. 확인된 사실과 일반적인 기준만 쓴다.",
+      "- 마무리는 어떤 기준으로 고르면 되는지 한 문장으로 정리한다.",
+    ],
+  },
+};
+
+// 예전 값(buy/ad/info)도 그대로 들어올 수 있어 새 3종으로 옮겨 받는다.
+const YERI_STYLE_ALIASES = { buy: "consult", ad: "consult", info: "info", sell: "consult" };
+
+function yeriStyleKey(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (YERI_STYLE_PACKS[raw]) return raw;
+  return YERI_STYLE_ALIASES[raw] || "";
+}
+
+function yeriStylePack(payload) {
+  const key = yeriStyleKey(payload?.style_id || payload?.style) || "info";
+  return YERI_STYLE_PACKS[key] || YERI_STYLE_PACKS.info;
+}
+
 function yeriPayloadStyle(payload) {
-  const style = String(payload?.style_id || payload?.style || "info").trim();
-  if (style === "buy") return "구매 전환형";
-  if (style === "ad") return "광고/홍보형";
-  return "정보성";
+  return yeriStylePack(payload).label;
 }
 
 function yeriSeoResearchEnabled(payload = {}) {
@@ -2627,6 +2683,7 @@ function buildYeriGenerationPrompt(payload) {
     `- 핵심 키워드: ${keyword}`,
     keywords.length > 1 ? `- 보조 키워드: ${keywords.slice(1).join(", ")}` : "",
     `- 글 스타일: ${yeriPayloadStyle(payload)}`,
+    ...yeriStylePack(payload).lines,
     `- 목표 노출 글자 수: ${yeriPayloadWordCount(payload)}자`,
     `- [이미지] 줄은 정확히 ${imageCount}개만 작성한다. 이미지가 0개면 만들지 않는다.`,
     // 2026-08-25 이전에는 "관련 문단 뒤에 분산 배치"만 지시했다. 그 결과 이미지가 글자 수를
@@ -4087,6 +4144,45 @@ function saveResearch(data) {
   }
 }
 
+// 글쓰기 스타일은 계정에 한 번 저장하고 글마다 다시 고르게 하지 않는다.
+function handleGetWritingStyle(req, res) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  json(req, res, 200, {
+    ok: true,
+    style: yeriStyleKey(auth.user.yeri_style) || "",
+    options: Object.entries(YERI_STYLE_PACKS).map(([key, pack]) => ({
+      key,
+      label: pack.label,
+      hint: pack.hint,
+    })),
+  });
+}
+
+async function handleSetWritingStyle(req, res) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  const body = await readJsonBody(req, res);
+  if (!body) return;
+  const raw = String(body.style || "").trim();
+  // 빈 값은 "지정 안 함"으로 둔다 — 그때는 정보 정리형으로 쓴다.
+  const style = raw ? yeriStyleKey(raw) : "";
+  if (raw && !style) {
+    json(req, res, 400, { ok: false, error: "unknown_style", allowed: Object.keys(YERI_STYLE_PACKS) });
+    return;
+  }
+  const users = loadUsers();
+  const target = users.users.find((item) => item.id === auth.user.id);
+  if (!target) {
+    json(req, res, 404, { ok: false, error: "user_not_found" });
+    return;
+  }
+  target.yeri_style = style;
+  target.updated_at = nowIso();
+  saveUsers(users);
+  json(req, res, 200, { ok: true, style });
+}
+
 function publicUser(user) {
   return {
     id: user.id,
@@ -4100,6 +4196,7 @@ function publicUser(user) {
     created_at: user.created_at,
     updated_at: user.updated_at,
     last_login_at: user.last_login_at || null,
+    yeri_style: yeriStyleKey(user.yeri_style) || "",
   };
 }
 
@@ -17892,6 +17989,11 @@ async function handleCreateJob(req, res) {
   const jobPayload = body.payload && typeof body.payload === "object" && !Array.isArray(body.payload)
     ? { ...body.payload }
     : {};
+  // 글마다 고르게 하지 않는다. 계정에 저장해 둔 글쓰기 스타일을 기본으로 쓴다.
+  if (kind === "yeri_write" && !yeriStyleKey(jobPayload.style_id || jobPayload.style)) {
+    const savedStyle = yeriStyleKey(auth.user.yeri_style);
+    if (savedStyle) jobPayload.style_id = savedStyle;
+  }
   if (!isJobAllowed(auth.user, kind)) {
     json(req, res, 403, { ok: false, error: "job_not_allowed" });
     return;
@@ -19060,6 +19162,14 @@ function route(req, res) {
   }
   if (req.method === "GET" && url.pathname === "/api/workers") {
     handleWorkers(req, res);
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/api/user/writing-style") {
+    handleGetWritingStyle(req, res);
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/api/user/writing-style") {
+    handleSetWritingStyle(req, res);
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/user/secrets") {

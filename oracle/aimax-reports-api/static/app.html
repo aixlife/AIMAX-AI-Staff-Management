@@ -3436,6 +3436,50 @@
         animation: none;
       }
     }
+    /* 글쓰기 스타일 선택 — 이름만 보고는 무엇이 다른지 알 수 없어서
+       각 카드에 글이 어떤 모양으로 나오는지 축소해서 보여준다. */
+    .writing-style-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .writing-style-card {
+      border: 1px solid var(--line, #2a3142);
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      background: transparent;
+      text-align: left;
+      transition: border-color .15s, background .15s;
+    }
+    .writing-style-card:hover { border-color: var(--accent, #4c8dff); }
+    .writing-style-card.is-selected {
+      border-color: var(--accent, #4c8dff);
+      background: rgba(76, 141, 255, .08);
+    }
+    .writing-style-card h3 { margin: 0 0 4px; font-size: 15px; }
+    .writing-style-card .style-hint { margin: 0 0 12px; font-size: 12px; opacity: .7; line-height: 1.5; }
+    .writing-style-preview {
+      border-radius: 8px;
+      background: rgba(127, 127, 127, .08);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .wsp-title { height: 8px; border-radius: 3px; background: currentColor; opacity: .55; width: 62%; }
+    .wsp-line { height: 4px; border-radius: 2px; background: currentColor; opacity: .2; }
+    .wsp-line.short { width: 70%; }
+    .wsp-list { display: flex; flex-direction: column; gap: 3px; padding-left: 8px; }
+    .wsp-list .wsp-line { opacity: .28; }
+    .wsp-table { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+    .wsp-table span { height: 6px; border-radius: 2px; background: currentColor; opacity: .22; }
+    .wsp-table span.head { opacity: .45; }
+    .wsp-photo { height: 22px; border-radius: 4px; background: currentColor; opacity: .16; }
+    .wsp-caption { height: 3px; border-radius: 2px; background: currentColor; opacity: .3; width: 55%; margin: 0 auto; }
+    .writing-style-card .style-mark { margin-top: 10px; font-size: 12px; opacity: .75; }
+
   </style>
 </head>
 <body>
@@ -4360,6 +4404,14 @@
             </div>
             <button id="openLocalSettingsBtn" class="btn" type="button">로컬 설정 열기</button>
           </div>
+        </section>
+        <section class="panel span-12">
+          <div class="panel-title">
+            <h2>글쓰기 스타일</h2>
+            <span id="writingStyleStatus" class="pill">확인 중</span>
+          </div>
+          <p class="small muted">한 번만 고르면 예리가 쓰는 모든 글에 적용됩니다. 글을 맡길 때마다 다시 고르지 않아도 됩니다.</p>
+          <div id="writingStyleCards" class="writing-style-list"></div>
         </section>
         <section class="panel span-12">
           <div class="panel-title">
@@ -12185,6 +12237,99 @@
       }
     }
 
+    // 글쓰기 스타일 — 이름만으로는 무엇이 다른지 알 수 없어서 글 모양을 함께 보여준다.
+    const WRITING_STYLE_PREVIEWS = {
+      consult: [
+        '<div class="wsp-title"></div>',
+        '<div class="wsp-line"></div>',
+        '<div class="wsp-line short"></div>',
+        '<div class="wsp-list"><div class="wsp-line"></div><div class="wsp-line"></div><div class="wsp-line short"></div></div>',
+        '<div class="wsp-table"><span class="head"></span><span class="head"></span><span class="head"></span><span></span><span></span><span></span></div>',
+        '<div class="wsp-photo"></div>',
+        '<div class="wsp-caption"></div>',
+      ],
+      info: [
+        '<div class="wsp-title"></div>',
+        '<div class="wsp-line"></div>',
+        '<div class="wsp-list"><div class="wsp-line"></div><div class="wsp-line"></div><div class="wsp-line"></div><div class="wsp-line short"></div></div>',
+        '<div class="wsp-photo"></div>',
+        '<div class="wsp-caption"></div>',
+        '<div class="wsp-title" style="width:48%"></div>',
+        '<div class="wsp-line short"></div>',
+      ],
+      review: [
+        '<div class="wsp-title"></div>',
+        '<div class="wsp-line short"></div>',
+        '<div class="wsp-table"><span class="head"></span><span class="head"></span><span class="head"></span><span></span><span></span><span></span><span></span><span></span><span></span></div>',
+        '<div class="wsp-photo"></div>',
+        '<div class="wsp-caption"></div>',
+        '<div class="wsp-list"><div class="wsp-line"></div><div class="wsp-line short"></div></div>',
+      ],
+    };
+    const WRITING_STYLE_MARKS = {
+      consult: "소제목 · 확인 목록 · 비교표 · 사진 설명",
+      info: "소제목 · 단계 목록 · 과정 사진 · 요약",
+      review: "소제목 · 비교표 · 장단점 · 사진 설명",
+    };
+
+    let writingStyleSelected = "";
+
+    function renderWritingStyleCards(options) {
+      const host = document.getElementById("writingStyleCards");
+      if (!host) return;
+      host.innerHTML = "";
+      (options || []).forEach((option) => {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "writing-style-card" + (writingStyleSelected === option.key ? " is-selected" : "");
+        card.dataset.style = option.key;
+        const preview = (WRITING_STYLE_PREVIEWS[option.key] || []).join("");
+        card.innerHTML =
+          "<h3>" + escapeHtml(option.label) + "</h3>" +
+          '<p class="style-hint">' + escapeHtml(option.hint || "") + "</p>" +
+          '<div class="writing-style-preview">' + preview + "</div>" +
+          '<div class="style-mark">' + escapeHtml(WRITING_STYLE_MARKS[option.key] || "") + "</div>";
+        card.addEventListener("click", () => saveWritingStyle(option.key, options));
+        host.appendChild(card);
+      });
+    }
+
+    function setWritingStyleStatus(text) {
+      const pill = document.getElementById("writingStyleStatus");
+      if (pill) pill.textContent = text;
+    }
+
+    async function saveWritingStyle(styleKey, options) {
+      const previous = writingStyleSelected;
+      writingStyleSelected = styleKey;
+      renderWritingStyleCards(options);
+      setWritingStyleStatus("저장 중");
+      try {
+        await api("/api/user/writing-style", {
+          method: "POST",
+          body: JSON.stringify({ style: styleKey }),
+        });
+        setWritingStyleStatus("저장됨");
+      } catch (error) {
+        writingStyleSelected = previous;
+        renderWritingStyleCards(options);
+        setWritingStyleStatus("저장 실패");
+      }
+    }
+
+    async function loadWritingStyle() {
+      const host = document.getElementById("writingStyleCards");
+      if (!host) return;
+      try {
+        const data = await api("/api/user/writing-style");
+        writingStyleSelected = data.style || "";
+        renderWritingStyleCards(data.options || []);
+        setWritingStyleStatus(writingStyleSelected ? "저장됨" : "고르지 않음");
+      } catch (error) {
+        setWritingStyleStatus("불러오지 못함");
+      }
+    }
+
     async function loadUserSecrets() {
       try {
         const response = await api("/api/user/secrets");
@@ -13008,6 +13153,7 @@
       }
       await refreshReports();
       await loadUserSecrets();
+      await loadWritingStyle();
       await loadResearchIntegrations();
       await loadResearchData();
       try {
