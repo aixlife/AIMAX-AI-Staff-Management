@@ -378,6 +378,27 @@ def measure_visible_char_count(text):
     return len(visible)
 
 
+def measure_editor_comparable_char_count(text):
+    """에디터 감지 글자 수와 직접 비교할 수 있는 기준값.
+
+    measure_visible_char_count 는 공백을 포함해 세고, 에디터 쪽 카운터
+    (posting.editor.editor_visible_text_count)는 공백을 전부 지우고 센다.
+    두 값을 그대로 비교하면 한국어 본문에서 공백이 15~20% 라 완벽하게 입력된 글도
+    기준 미달로 찍힌다 — 2026-08-26 실측: 1584자 원고가 전량 입력돼도 에디터는 1218자,
+    통과선 1188자와 30자(2.5%) 차이였다. 같은 잣대로 세도록 공백을 지운 값을 돌려준다.
+    """
+    visible_lines = []
+    for raw_line in str(text or "").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("[이미지]"):
+            continue
+        line = re.sub(r"^#{1,6}\s*", "", line).strip()
+        line = re.sub(r"^[\s]*[-*]\s+", "", line).strip()
+        line = line.replace("**", "").replace("`", "")
+        visible_lines.append(line)
+    return len(re.sub(r"\s+", "", " ".join(visible_lines)))
+
+
 def _character_count_report(text, target_chars):
     range_info = _target_char_range(target_chars)
     count = measure_visible_char_count(text)

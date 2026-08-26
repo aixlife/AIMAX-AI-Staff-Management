@@ -1215,6 +1215,31 @@ def _open_list_option(driver, option_selector, label):
         return False
 
 
+def _caret_inside(driver, selector):
+    """캐럿(입력 위치)이 selector 안에 있는지 브라우저에 직접 묻는다.
+
+    표·목록을 빠져나왔다고 가정하고 다음 문단을 치면, 실패했을 때 그 문단이
+    표 칸이나 목록 항목으로 들어가 버린다(2026-08-25 v1.0.63 실측: 본문 절반 유실).
+    가정하지 말고 확인한다. 확인 자체가 실패하면 None 을 돌려 호출부가 판단하게 한다.
+    """
+    try:
+        return bool(driver.execute_script(
+            """
+            const sel = window.getSelection();
+            if (!sel || sel.rangeCount === 0) return null;
+            let node = sel.anchorNode;
+            if (!node) return null;
+            if (node.nodeType === 3) node = node.parentElement;
+            if (!node || !node.closest) return null;
+            return !!node.closest(arguments[0]);
+            """,
+            selector,
+        ))
+    except Exception as e:
+        logger.debug(f"캐럿 위치 확인 실패({selector}): {e}")
+        return None
+
+
 def _input_list(driver, payload):
     """목록 입력.
 
@@ -1246,16 +1271,33 @@ def _input_list(driver, payload):
         wait_short()
 
     # 마지막 Enter 로 생긴 빈 항목에서 목록을 끈다.
-    if not _open_list_option(driver, LIST_RESET, "목록해제"):
-        logger.warning("목록 해제에 실패했습니다. 다음 문단이 목록으로 들어갈 수 있습니다.")
+    # 해제가 됐는지 확인까지 한다 — 안 되면 다음 문단부터 통째로 목록 안으로 들어간다.
+    LIST_BLOCK = ".se-list, .se-component-list, ul, ol"
+    for attempt in (1, 2):
+        _open_list_option(driver, LIST_RESET, "목록해제")
+        wait_short()
+        inside = _caret_inside(driver, LIST_BLOCK)
+        if inside is False:
+            break
+        if inside is None:
+            logger.debug("목록 해제 여부를 확인하지 못했습니다(캐럿 조회 실패).")
+            break
+        logger.warning(f"목록 해제 {attempt}회차 실패 — 다시 시도합니다.")
+    else:
+        # 두 번 다 실패: 빈 줄을 만들어 목록에서 빠져나온다. 서식은 포기해도 본문은 지킨다.
+        send_keys_action(driver, Keys.ENTER)
+        wait_short()
+        if _caret_inside(driver, LIST_BLOCK):
+            logger.warning("목록 해제에 실패했습니다. 다음 문단이 목록으로 들어갈 수 있습니다.")
 
 
 def _input_table(driver, rows):
     """표 입력.
 
     스마트에디터 표 버튼은 3행 3열을 바로 만든다(2026-08-25 실측). 크기 조절 UI 가 없어
-    3x3 만 채우고, 그보다 큰 표는 넘치는 부분을 잘라낸다. 서버 쪽에서 3열·3행으로
-    만들도록 지시하므로 정상 경로에서는 잘릴 일이 없다.
+    3x3 만 채운다. 서버에 3열·3행으로 만들라고 지시하지만 실제 생성 글은 머리행 포함
+    4행짜리 표를 만들어 왔다(2026-08-26 실측) — 지시를 신뢰하지 않고, 넘치는 행은
+    버리는 대신 표 아래 문장으로 남긴다.
     표를 만들지 못하면 각 행을 한 줄 문장으로 넣는다 — 내용은 남아야 한다.
     """
     rows = [[str(c).strip() for c in r] for r in (rows or []) if r]
@@ -1303,9 +1345,56 @@ def _input_table(driver, rows):
             send_keys_action(driver, Keys.TAB)
         wait_short()
 
-    # 표 밖으로 빠져나온다.
-    send_keys_action(driver, Keys.ARROW_DOWN, Keys.ARROW_DOWN)
-    wait_short()
+    # 표 밖으로 빠져나온다 — 나왔는지 확인까지 한다.
+    # 표 안에 캐럿이 남으면 이어지는 문단이 마지막 칸으로 들어가 본문이 통째로 사라진다.
+    TABLE_BLOCK = ".se-component.se-table, table"
+    escaped = False
+    for _ in range(3):
+        send_keys_action(driver, Keys.ARROW_DOWN)
+        wait_short()
+        inside = _caret_inside(driver, TABLE_BLOCK)
+        if inside is False:
+            escaped = True
+            break
+        if inside is None:
+            # 확인이 안 되는 환경에서는 기존 동작(아래로 두 번)을 유지한다.
+            send_keys_action(driver, Keys.ARROW_DOWN)
+            wait_short()
+            escaped = True
+            break
+    if not escaped:
+        # 마지막 수단: 표 컴포넌트 다음 위치를 직접 클릭한다.
+        try:
+            driver.execute_script(
+                """
+                const t = document.querySelector('.se-component.se-table');
+                if (t && t.nextElementSibling) {
+                  const p = t.nextElementSibling.querySelector('[contenteditable="true"]') || t.nextElementSibling;
+                  p.click();
+                }
+                """
+            )
+            wait_short()
+            escaped = _caret_inside(driver, TABLE_BLOCK) is False
+        except Exception as e:
+            logger.debug(f"표 다음 문단 클릭 실패: {e}")
+    if not escaped:
+        logger.warning("표에서 빠져나오지 못했습니다. 이어지는 내용이 표 안으로 들어갈 수 있습니다.")
+
+    # 3행을 넘는 행은 버리지 않고 표 아래에 문장으로 남긴다.
+    # 예전 코드는 rows[:3] 로 잘라내 4행째부터 조용히 사라졌다
+    # (2026-08-25 실측: 머리행+3행 표에서 마지막 행 유실 → 본문 검증 실패로 글 전체 폐기).
+    overflow = rows[3:]
+    if overflow:
+        logger.warning(f"표는 3행까지만 들어갑니다. 나머지 {len(overflow)}행은 표 아래 문장으로 넣습니다.")
+        for row in overflow:
+            cells = [c for c in row if c]
+            if not cells:
+                continue
+            human_type(driver, " · ".join(cells))
+            wait_short()
+            send_keys_action(driver, Keys.ENTER)
+            wait_short()
 
 
 def _input_image_caption(driver, text):

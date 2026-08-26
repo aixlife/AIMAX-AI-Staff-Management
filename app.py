@@ -6484,7 +6484,12 @@ class NaverBlogApp:
             from datetime import datetime, timedelta
             from browser.stealth_driver import create_stealth_driver
             from auth.naver_login import login
-            from content.ai_text import generate_blog_content, humanize_blog_content, measure_visible_char_count
+            from content.ai_text import (
+                generate_blog_content,
+                humanize_blog_content,
+                measure_editor_comparable_char_count,
+                measure_visible_char_count,
+            )
             from content.markdown_parser import parse_markdown, parse_markdown_file, rebalance_image_blocks
             from content.seo_research import build_auto_seo_brief
             from posting.editor import navigate_to_editor, input_title, input_content, set_font, editor_visible_text_count
@@ -6675,6 +6680,7 @@ class NaverBlogApp:
 
                 title = ""
                 visible_char_count = 0
+                editor_expected_chars = 0
                 image_block_count = 0
                 image_attempted = 0
                 image_generated = 0
@@ -6708,6 +6714,7 @@ class NaverBlogApp:
                         content, post_usage = _apply_humanize_review(content, post_usage)
                         _merge_usage_totals(usage_totals, post_usage)
                         visible_char_count = measure_visible_char_count(content)
+                        editor_expected_chars = measure_editor_comparable_char_count(content)
                         parsed_title, content_list = parse_markdown(content)
                         title = str(post_artifact.get("title") or parsed_title or post["source"]).strip()
                         self._log(f"서버 생성 글 사용: {title} (모델: {post_artifact.get('text_model') or ai_model}, 글자 수: {visible_char_count}자)")
@@ -6752,6 +6759,7 @@ class NaverBlogApp:
                         content, post_usage = _apply_humanize_review(content, post_usage)
                         _merge_usage_totals(usage_totals, post_usage)
                         visible_char_count = measure_visible_char_count(content)
+                        editor_expected_chars = measure_editor_comparable_char_count(content)
                         self._log(f"생성 글자 수 확인: {visible_char_count}자 (요청 {word_count}자)")
                         title, content_list = parse_markdown(content)
                         # 과금된 원고를 네이버 입력 전에 따로 보관 (이후 단계 실패 시 재사용)
@@ -6764,6 +6772,7 @@ class NaverBlogApp:
                         with open(post["source"], "r", encoding="utf-8") as f:
                             md_content = f.read()
                         visible_char_count = measure_visible_char_count(md_content)
+                        editor_expected_chars = measure_editor_comparable_char_count(md_content)
                         title, content_list = parse_markdown(md_content)
                     content_list, moved_image_blocks = rebalance_image_blocks(content_list)
                     if moved_image_blocks:
@@ -6875,13 +6884,19 @@ class NaverBlogApp:
                                     self._log("[보호] 이미지 실패가 있어 공개 발행/예약 대신 임시저장으로 전환합니다.")
 
                             editor_char_count = editor_visible_text_count(self.driver)
-                            min_editor_chars = max(300, int((visible_char_count or 0) * 0.75))
-                            if visible_char_count and editor_char_count and editor_char_count < min_editor_chars:
+                            # 두 값을 같은 잣대로 비교한다. editor_visible_text_count 는 공백을 전부
+                            # 지우고 세므로, 기준도 공백을 지운 값(measure_editor_comparable_char_count)을
+                            # 쓴다. 예전에는 공백 포함 값과 비교해 완벽하게 입력된 글도 여유가 2.5%밖에
+                            # 없었다(2026-08-26 실측: 1218 대 1188).
+                            expected_chars = editor_expected_chars or visible_char_count or 0
+                            min_editor_chars = max(300, int(expected_chars * 0.75))
+                            if expected_chars and editor_char_count and editor_char_count < min_editor_chars:
                                 post_stage = "smart_editor_input_verification"
                                 stage = post_stage
                                 raise RuntimeError(
                                     "네이버 에디터 입력 글자 수가 생성 원고보다 크게 부족합니다. "
-                                    f"생성 원고 {visible_char_count}자 / 에디터 감지 {editor_char_count}자. "
+                                    f"생성 원고 {visible_char_count}자(공백 제외 {expected_chars}자) / "
+                                    f"에디터 감지 {editor_char_count}자. "
                                     "생성 원고 백업 파일을 확인해 다시 붙여넣을 수 있습니다."
                                 )
 
