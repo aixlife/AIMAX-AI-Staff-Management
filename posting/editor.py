@@ -1215,6 +1215,21 @@ def _open_list_option(driver, option_selector, label):
         return False
 
 
+def _inline_plain(text):
+    """목록 항목·표 칸에 들어갈 인라인 마크다운을 화면에 보일 문구로 바꾼다.
+
+    본문 블록은 파서가 **볼드** 를 걷어내고 파트로 넘겨주는데, 목록과 표는 원문 문자열이
+    그대로 들어가 별표가 화면에 노출됐다(2026-08-26 실측: 발행 글에 "**현금 유동성**:" 그대로).
+    """
+    raw = str(text or "")
+    try:
+        from content.markdown_parser import _parse_bold
+
+        return "".join(part_text for _, part_text in _parse_bold(raw)).strip()
+    except Exception:
+        return re.sub(r"\*\*|`", "", raw).strip()
+
+
 def _caret_inside(driver, selector):
     """캐럿(입력 위치)이 selector 안에 있는지 브라우저에 직접 묻는다.
 
@@ -1249,7 +1264,8 @@ def _input_list(driver, payload):
     적용에 실패하면 항목을 그냥 문장으로 넣는다 — 목록이 아니어도 내용은 남아야 한다.
     """
     style, items = payload if isinstance(payload, (tuple, list)) and len(payload) == 2 else ("bullet", [])
-    items = [str(t).strip() for t in (items or []) if str(t).strip()]
+    items = [_inline_plain(t) for t in (items or []) if str(t).strip()]
+    items = [t for t in items if t]
     if not items:
         return
     logger.info(f"목록 입력: {style} {len(items)}개")
@@ -1300,7 +1316,7 @@ def _input_table(driver, rows):
     버리는 대신 표 아래 문장으로 남긴다.
     표를 만들지 못하면 각 행을 한 줄 문장으로 넣는다 — 내용은 남아야 한다.
     """
-    rows = [[str(c).strip() for c in r] for r in (rows or []) if r]
+    rows = [[_inline_plain(c) for c in r] for r in (rows or []) if r]
     if not rows:
         return
     logger.info(f"표 입력: {len(rows)}행")
@@ -1327,23 +1343,47 @@ def _input_table(driver, rows):
         _fallback()
         return
 
-    # 첫 칸부터 Tab 으로 옮겨가며 채운다.
+    # 칸마다 직접 클릭해서 채운다.
+    # 예전에는 첫 칸을 클릭하고 Tab 으로 넘어갔는데, Tab 이 칸을 넘기지 못해 표 내용 전체가
+    # 첫 칸 하나에 뭉쳐 들어갔다(2026-08-26 실측: 발행 글의 표 첫 칸에 머리행+데이터가 통째로).
+    # 클릭이 안 되는 칸에서만 Tab 으로 폴백한다.
     flat = []
     for row in rows[:3]:
         padded = (row + ["", "", ""])[:3]
         flat.extend(padded)
-    try:
-        ActionChains(driver).move_to_element(cells[0]).click().perform()
-        wait_short()
-    except Exception:
-        driver.execute_script("arguments[0].click();", cells[0])
-        wait_short()
+
+    def _focus_cell(index):
+        """index 번째 칸에 포커스를 준다. DOM 이 다시 그려질 수 있어 매번 새로 조회한다."""
+        try:
+            fresh = driver.find_elements(By.CSS_SELECTOR, ".se-component.se-table td, .se-component.se-table th")
+            if index >= len(fresh):
+                return False
+            target = fresh[index]
+            editable = None
+            try:
+                editable = target.find_element(By.CSS_SELECTOR, "[contenteditable='true']")
+            except Exception:
+                editable = None
+            node = editable or target
+            try:
+                ActionChains(driver).move_to_element(node).click().perform()
+            except Exception:
+                driver.execute_script("arguments[0].click();", node)
+            wait_short()
+            return True
+        except Exception as e:
+            logger.debug(f"표 {index}번 칸 클릭 실패: {e}")
+            return False
+
     for index, text in enumerate(flat[:9]):
+        if not _focus_cell(index):
+            # 클릭으로 못 옮기면 예전 방식(Tab)으로라도 진행한다.
+            if index > 0:
+                send_keys_action(driver, Keys.TAB)
+                wait_short()
         if text:
             human_type(driver, text)
-        if index < 8:
-            send_keys_action(driver, Keys.TAB)
-        wait_short()
+            wait_short()
 
     # 표 밖으로 빠져나온다 — 나왔는지 확인까지 한다.
     # 표 안에 캐럿이 남으면 이어지는 문단이 마지막 칸으로 들어가 본문이 통째로 사라진다.
