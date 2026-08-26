@@ -8972,15 +8972,17 @@ function downloadProductAllowed(user, platform, product) {
   if (platform === "windows") {
     return product === "bundle" && userProducts(user).size > 0;
   }
+  // macOS 도 Windows 와 같이 통합 번들 한 개만 내려준다. 직원 개별 dmg 는 2026-05-29 이후
+  // 빌드가 끊겨 v1.0.2 에 멈춰 있었고(현재 macOS 최소 버전 v1.0.36), 번들 권한이 없는
+  // 유료 구매자는 그 구버전만 받을 수 있었다. 실행 권한은 러너가 따로 검사한다.
+  if (product === "bundle") return userProducts(user).size > 0;
   return productAllowed(user, product);
 }
 
 function defaultDownloadProduct(user, platformValue = "") {
   if (normalizePlatform(platformValue) === "windows") return "bundle";
   const products = userProducts(user);
-  if (products.has("bundle")) return "bundle";
-  if (products.has("yeri")) return "yeri";
-  if (products.has("hyunju")) return "hyunju";
+  if (products.size > 0) return "bundle";
   if (canAccessEunseo(user)) return "eunseo";
   return "";
 }
@@ -16153,7 +16155,7 @@ function handleDownloadOptions(req, res) {
   for (const platform of platforms) {
     const products = platform === "windows"
       ? ["bundle"]
-      : ["bundle", "yeri", "hyunju", "eunseo"].filter((product) => downloadProductAllowed(auth.user, platform, product));
+      : ["bundle", "eunseo"].filter((product) => downloadProductAllowed(auth.user, platform, product));
     for (const product of products) {
       downloads.push(downloadInfo(auth.user, platform, product));
     }

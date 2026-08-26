@@ -8583,10 +8583,10 @@
 
     function preferredDownloadProduct() {
       if (state.platform === "windows") return "bundle";
+      // 맥도 통합 번들 하나만 받는다. 직원 개별 dmg 는 2026-05-29 이후 빌드가 끊겨
+      // 번들 권한이 없는 구매자에게만 구버전(v1.0.2)이 내려가고 있었다.
       const products = new Set(productsForUser());
-      if (products.has("bundle")) return "bundle";
-      if (products.has("yeri")) return "yeri";
-      if (products.has("hyunju")) return "hyunju";
+      if (products.size > 0) return "bundle";
       return "";
     }
 
