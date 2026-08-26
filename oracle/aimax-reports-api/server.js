@@ -12839,7 +12839,10 @@ function waitingUserMailDesktopWorker(row) {
     const codeTokens = [worker?.product, worker?.staffCode]
       .map((value) => String(value || "").trim().toLowerCase())
       .filter((token) => token.length >= 3);
-    if (codeTokens.some((token) => context.includes(token))) return true;
+    // 단순 includes 면 짧은 코드가 다른 낱말 안에 걸린다 — 맥스의 staffCode "max" 가
+    // 거의 모든 보고문에 들어 있는 "aimax" 에 매칭돼, 예리/현주 사용자에게 나가는 메일이
+    // "맥스" 제목을 달고 "맥스 앱을 다시 설치하세요" 체크리스트까지 붙었다(2026-08-26 실측).
+    if (codeTokens.some((token) => new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`, "i").test(context))) return true;
     const names = [...new Set([worker?.name, worker?.label]
       .map((value) => String(value || "").trim().toLowerCase())
       .filter((token) => token.length >= 2))];
