@@ -11627,6 +11627,18 @@ const REPORT_AUTO_GUIDANCE = {
     public_message: "로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
     next_update_message: "웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
   },
+  editor_input_incomplete: {
+    status: "reviewing",
+    status_label: "확인 중",
+    public_message: "글은 정상적으로 만들어졌는데, 네이버 글쓰기 화면에 옮겨 담는 중간에 일부만 들어가고 끊겼습니다. 회원님 설정이나 계정 문제가 아니라 AIMAX가 고쳐야 하는 오류입니다.",
+    next_update_message: "만들어진 원고는 백업 파일로 남아 있어 그대로 다시 쓸 수 있습니다. 같은 키워드로 계속 반복하면 같은 자리에서 멈출 수 있으니, 저희가 원인을 확인해 이 화면에 다음 안내를 남길 때까지 기다려주세요.",
+  },
+  aimax_action_required: {
+    status: "reviewing",
+    status_label: "확인 중",
+    public_message: "실행기가 남긴 기록상 AIMAX 쪽에서 고쳐야 하는 오류로 확인됐습니다. 회원님 설정이나 계정 문제가 아닙니다.",
+    next_update_message: "저희가 원인을 확인한 뒤 이 화면에 다음 안내를 남깁니다. 같은 증상은 여러 번 보내지 않으셔도 됩니다.",
+  },
   core_exe_missing: {
     status: "waiting_user",
     status_label: "사용자 확인 필요",
@@ -11682,6 +11694,7 @@ const REPORT_STRUCTURED_JOB_GUIDANCE_RULES = [
   ["browser_driver_policy_blocked", /browser_start|chromedriver|undetected_chromedriver|application control policy|애플리케이션 제어 정책|winerror 4551/],
   // 이미지 로컬 키 누락은 진단 코드가 api_key_missing 으로 올라와서 일반 규칙에 먼저 걸린다.
   // 조치 위치(웹 설정 vs 실행기 앱)가 정반대라 반드시 api_key_missing 앞에서 걸러야 한다.
+  ["editor_input_incomplete", /smart_editor_input_verification|입력 글자 수가 생성 원고보다|에디터 감지 \d+자/i],
   ["editor_structure_changed", /editor_title_area_not_found|se-section-documenttitle|제목 입력 영역을 찾지 못/i],
   ["image_local_key_missing", /이미지 생성용 로컬 api 키가 없어|이미지 생성용 로컬 api 키/i],
   ["api_key_missing", /key_missing|no api key|api 키가 없습니다|키가 없습니다/],
@@ -11770,6 +11783,13 @@ function classifyStructuredJobGuidance(report) {
   for (const [key, pattern] of REPORT_STRUCTURED_JOB_GUIDANCE_RULES) {
     if (pattern.test(signal)) return { key, signal_tier: "job_structured", ...REPORT_AUTO_GUIDANCE[key] };
   }
+  // 실행기가 "이건 AIMAX가 고쳐야 한다"고 이미 판정한 건(diagnostic.code=admin_action_required)은
+  // 자유 텍스트 룰로 넘기지 않는다. 넘기면 화면 문구의 우연한 단어 조합이 사용자 조치 안내로
+  // 뒤집는다 — 2026-08-26 AIMAX-RPT-20260826001314 이 "키워드…저장/업로드…필요" 가
+  // api_key_missing 패턴에 걸려 "API 키를 확인하세요"로 나갔다.
+  if (/admin_action_required/i.test(signal)) {
+    return { key: "aimax_action_required", signal_tier: "job_diagnostic", ...REPORT_AUTO_GUIDANCE.aimax_action_required };
+  }
   return null;
 }
 
@@ -11799,7 +11819,7 @@ function classifyReportAutoGuidance(report) {
     ["image_generation_failed", /image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted/],
     ["organization_verification_required", /organization_verification_required|organization verification|verify your organization|must be verified|조직 인증/],
     ["model_not_found", /model_not_found|unsupported model|모델.*잘못|모델.*사용할 수 없|ai모델 사용불가/],
-    ["api_key_missing", /api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안/],
+    ["api_key_missing", /api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가[^.\n]{0,20}없|키[^.\n]{0,10}(저장|등록)[^.\n]{0,10}필요|api[^.\n]{0,20}저장[^.\n]{0,10}안/],
     ["api_key_invalid", /api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized/],
     ["quota_exceeded", /quota_exceeded|insufficient_quota|billing|payment|credit|balance|크레딧|결제|요금제 한도|한도 초과/],
     ["rate_limited", /rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일 한도/],
@@ -12135,7 +12155,8 @@ function automationTicketCategory(summary, report) {
   if (/api_key|quota|rate_limit|provider_transient|image_paid_required/.test(autoGuidanceCategory)) return "user_ai_provider";
   if (/runner_update_required|bundle_integrity_mismatch|core_exe_missing/.test(autoGuidanceCategory)) return "local_runner";
   // naver_login_page_changed 는 우리 코드(실행기 선택자) 작업이라 naver_editor 로 묶는다.
-  if (/naver_login_required|naver_login_page_changed/.test(autoGuidanceCategory)) return "naver_editor";
+  if (/naver_login_required|naver_login_page_changed|editor_input_incomplete/.test(autoGuidanceCategory)) return "naver_editor";
+  if (/aimax_action_required/.test(autoGuidanceCategory)) return "general_error";
   const diagnostic = report?.diagnostic || report?.system?.agent?.diagnostic || reportPrimaryJob(report)?.diagnostic || null;
   const diagnosticCode = sanitizeFailedStage(diagnostic?.code || "");
   const stage = sanitizeFailedStage(summary.job_stage || "");
@@ -12763,7 +12784,12 @@ const WAITING_USER_MAIL_ENABLED = String(process.env.AIMAX_WAITING_USER_MAIL ?? 
 const WAITING_USER_MAIL_LOOKBACK_DAYS = safeInt(process.env.AIMAX_WAITING_USER_MAIL_LOOKBACK_DAYS || "7", 1, 3650);
 const WAITING_USER_MAIL_PER_SWEEP = safeInt(process.env.AIMAX_WAITING_USER_MAIL_PER_SWEEP || "10", 1, 1000);
 const WAITING_USER_MAIL_INTERVAL_MS = safeInt(process.env.AIMAX_WAITING_USER_MAIL_INTERVAL_MS || "300000", 1000, 24 * 60 * 60 * 1000);
-const WAITING_USER_MAIL_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+// 같은 주소로 몰아 보내지 않기 위한 간격. 기본 6시간 — 스모크만 env 로 낮춘다.
+const WAITING_USER_MAIL_COOLDOWN_MS = safeInt(
+  process.env.AIMAX_WAITING_USER_MAIL_COOLDOWN_MS || String(6 * 60 * 60 * 1000),
+  0,
+  7 * 24 * 60 * 60 * 1000,
+);
 const WAITING_USER_MAIL_MAX_ATTEMPTS = 3;
 // 안내 분류가 교정됐을 때만 다시 보낸다. 같은 보고에 최대 2회까지(최초 1회 + 재발송 2회).
 const WAITING_USER_MAIL_MAX_RESEND = 2;
@@ -12829,7 +12855,12 @@ function waitingUserMailDesktopWorker(row) {
 // 만 보고 있어서, 그대로 두면 "접수됐다"는 연락조차 못 받는 구멍이 생긴다. 이 카테고리만
 // 예외로 통과시킨다. 피드백 리포트(staff_feedback_reviewing)까지 새어나가면 안 되므로
 // 카테고리를 명시 화이트리스트로 좁힌다.
-const AIMAX_OWNED_GUIDANCE_CATEGORIES = new Set(["model_not_found"]);
+const AIMAX_OWNED_GUIDANCE_CATEGORIES = new Set([
+  "model_not_found",
+  // 실행기가 diagnostic.code=admin_action_required 로 올린 건 — 사용자가 설정으로 못 고친다.
+  "editor_input_incomplete",
+  "aimax_action_required",
+]);
 
 function isAimaxOwnedReviewingReport(row) {
   if (normalizeReportStatus(row?.status || "") !== "reviewing") return false;
@@ -13047,7 +13078,11 @@ async function sweepWaitingUserReportMail() {
       const cleanId = cleanReportId(row?.report_id);
       if (!cleanId) continue;
       // C-2: 이번 프로세스에서 이미 보낸 행이면(마커 기록 실패 포함) 다시 보내지 않는다.
-      if (waitingUserMailSentReportIds.has(cleanId)) continue;
+      // 안내 분류가 바뀌면 같은 프로세스 안에서도 정정 메일 1회를 허용해야 한다.
+      // 키를 report_id 단독으로 잡으면 분류가 교정돼도 재시작 전까지 영구 스킵된다
+      // (2026-08-25 AIMAX-RPT-20260825133403: 접수 7분 뒤 교정됐는데 메일이 안 나갔다).
+      const sentKey = `${cleanId}:${String(row?.auto_guidance_category || "")}`;
+      if (waitingUserMailSentReportIds.has(sentKey)) continue;
       const statusUpdatedMs = Date.parse(String(row?.status_updated_at || row?.stored_at || ""));
       // 시각 파싱 불가 또는 룩백 초과 행은 오발송 방지를 위해 건너뛴다.
       if (!Number.isFinite(statusUpdatedMs) || statusUpdatedMs < cutoffMs) continue;
@@ -13106,7 +13141,7 @@ async function sweepWaitingUserReportMail() {
       }
       // C-2: 발송 성공 → 마커 기록(배치) 시도 전에 인메모리 dedup 을 먼저 채운다.
       const notifiedAt = nowIso();
-      waitingUserMailSentReportIds.add(cleanId);
+      waitingUserMailSentReportIds.add(sentKey);
       waitingUserMailLastSentByEmail.set(email, Date.parse(notifiedAt) || nowMs);
       lastNotifiedByEmail.set(email, Date.parse(notifiedAt) || nowMs);
       const notifiedPatch = {

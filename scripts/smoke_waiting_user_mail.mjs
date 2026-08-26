@@ -500,6 +500,57 @@ async function scenarioResendOnCategoryChange() {
   }
 }
 
+// 13) 같은 프로세스가 이미 보낸 행이라도, 분류가 교정되면 그 프로세스에서 재발송된다.
+//     프로세스 내 dedup 키를 report_id 단독으로 잡으면 재시작 전까지 영구 스킵된다
+//     (2026-08-25 AIMAX-RPT-20260825133403: 접수 7분 뒤 교정됐는데 21시간 메일이 안 나갔다).
+async function scenarioResendWithinSameProcess() {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-wum-same-proc-"));
+  const email = "sameproc@example.test";
+  const reportId = "rep-same-proc";
+  seedUsers(tmpDir, [email]);
+  seedIndex(tmpDir, [reportRow({
+    report_id: reportId,
+    account_email: email,
+    auto_guidance_category: "runner_update_required",
+  })]);
+  const stub = await startMailStub({ status: 200 });
+  const port = nextPort();
+  // 쿨다운 0 으로 두어야 "같은 프로세스 재발송"만 검증 대상이 된다.
+  const { child, logs } = bootServer(tmpDir, port, {
+    AIMAX_MAIL_WEBHOOK_URL: stub.url,
+    AIMAX_WAITING_USER_MAIL_COOLDOWN_MS: "0",
+  });
+  try {
+    await waitForServer(port, logs);
+    const first = await waitFor(
+      () => readIndexRows(tmpDir).find((r) => r.report_id === reportId && r.user_notified_at),
+      "first_send",
+    );
+    assert(first.user_notified_category === "runner_update_required", `first_category:${first.user_notified_category}`);
+    assert(stub.received.length === 1, `first_send_count:${stub.received.length}`);
+    // 스윕(자동 안내)이 분류를 교정한 상황을 그대로 재현한다 — 서버 재시작 없이 인덱스만 고친다.
+    const rows = readIndexRows(tmpDir).map((r) => (
+      r.report_id === reportId
+        ? { ...r, auto_guidance_category: "core_exe_missing", status_updated_at: new Date().toISOString() }
+        : r
+    ));
+    seedIndex(tmpDir, rows);
+    const resent = await waitFor(
+      () => readIndexRows(tmpDir).find((r) => r.report_id === reportId && r.user_notify_resent_at),
+      "resend_same_process",
+    );
+    assert(stub.received.length === 2, `resend_count:${stub.received.length}`);
+    assert(resent.user_notified_category === "core_exe_missing", `resent_category:${resent.user_notified_category}`);
+    assert(Number(resent.user_notify_resend_count) === 1, `resend_marker:${resent.user_notify_resend_count}`);
+    assert(/정정/.test(stub.received[1].subject || ""), `resend_subject:${stub.received[1].subject}`);
+    console.log("PASS 13) 같은 프로세스에서도 분류 교정 시 재발송 (dedup 키에 분류 포함)");
+  } finally {
+    child.kill("SIGTERM");
+    await stub.close();
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_error) {}
+  }
+}
+
 try {
   await scenarioSendAndDedup();
   await scenarioSkips();
@@ -510,6 +561,7 @@ try {
   await scenarioMaskedEmailSends();
   await scenarioSkipReeval();
   await scenarioResendOnCategoryChange();
+  await scenarioResendWithinSameProcess();
   console.log("WAITING_USER_MAIL_SMOKE_OK");
 } catch (error) {
   console.error("WAITING_USER_MAIL_SMOKE_FAILED");

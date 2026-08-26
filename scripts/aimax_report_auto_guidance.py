@@ -217,6 +217,33 @@ GUIDANCE: dict[str, Guidance] = {
         public_message="로컬 실행기 버전 또는 연결 상태가 현재 웹 작업과 맞지 않아 업데이트/재연결이 필요한 상태입니다.",
         next_update_message="웹앱 업데이트 탭에서 최신 설치 파일을 받은 뒤 AIMAX와 열린 브라우저를 모두 닫고 설치하세요. 설치 후 실행기 연결을 다시 누르고 새 작업 1건만 테스트해주세요.",
     ),
+    "editor_input_incomplete": Guidance(
+        category="editor_input_incomplete",
+        status="reviewing",
+        status_label="확인 중",
+        public_message=(
+            "글은 정상적으로 만들어졌는데, 네이버 글쓰기 화면에 옮겨 담는 중간에 일부만 들어가고 끊겼습니다. "
+            "회원님 설정이나 계정 문제가 아니라 AIMAX가 고쳐야 하는 오류입니다."
+        ),
+        next_update_message=(
+            "만들어진 원고는 백업 파일로 남아 있어 그대로 다시 쓸 수 있습니다. "
+            "같은 키워드로 계속 반복하면 같은 자리에서 멈출 수 있으니, 저희가 원인을 확인해 "
+            "이 화면에 다음 안내를 남길 때까지 기다려주세요."
+        ),
+    ),
+    "aimax_action_required": Guidance(
+        category="aimax_action_required",
+        status="reviewing",
+        status_label="확인 중",
+        public_message=(
+            "실행기가 남긴 기록상 AIMAX 쪽에서 고쳐야 하는 오류로 확인됐습니다. "
+            "회원님 설정이나 계정 문제가 아닙니다."
+        ),
+        next_update_message=(
+            "저희가 원인을 확인한 뒤 이 화면에 다음 안내를 남깁니다. "
+            "같은 증상은 여러 번 보내지 않으셔도 됩니다."
+        ),
+    ),
     "core_exe_missing": Guidance(
         category="core_exe_missing",
         status="waiting_user",
@@ -418,6 +445,8 @@ AIMAX_ACTION_CATEGORIES = frozenset(
         "editor_structure_changed",
         "naver_login_page_changed",
         "model_not_found",
+        "editor_input_incomplete",
+        "aimax_action_required",
     }
 )
 
@@ -441,6 +470,7 @@ STRUCTURED_JOB_RULES: list[tuple[str, str]] = [
     ("bundle_integrity_mismatch", r"bundle_integrity|startup bundle integrity"),
     ("browser_driver_policy_blocked", r"browser_start|chromedriver|undetected_chromedriver|application control policy|애플리케이션 제어 정책|winerror 4551"),
     # 조치 위치가 정반대(실행기 앱 vs 웹 설정)라 api_key_missing 앞에서 걸러야 한다.
+    ("editor_input_incomplete", r"smart_editor_input_verification|입력 글자 수가 생성 원고보다|에디터 감지 \d+자"),
     ("editor_structure_changed", r"editor_title_area_not_found|se-section-documenttitle|제목 입력 영역을 찾지 못"),
     ("image_local_key_missing", r"이미지 생성용 로컬 api 키"),
     ("api_key_missing", r"key_missing|no api key|api 키가 없습니다|키가 없습니다"),
@@ -543,6 +573,12 @@ def classify_structured_job(row: dict[str, Any], detail: dict[str, Any] | None, 
     for key, pattern in STRUCTURED_JOB_RULES:
         if re.search(pattern, signal, re.I):
             return GUIDANCE[key]
+    # 실행기가 "AIMAX가 고쳐야 한다"고 이미 판정한 건(diagnostic.code=admin_action_required)은
+    # 자유 텍스트 룰로 넘기지 않는다. 넘기면 화면 문구의 우연한 단어 조합이 사용자 조치 안내로
+    # 뒤집는다 — 2026-08-26 AIMAX-RPT-20260826001314 이 "키워드…저장/업로드…필요" 가
+    # api_key_missing 패턴에 걸려 "API 키를 확인하세요"로 나갔다.
+    if re.search(r"admin_action_required", signal, re.I):
+        return GUIDANCE["aimax_action_required"]
     return None
 
 
@@ -744,7 +780,7 @@ def classify(row: dict[str, Any], detail: dict[str, Any] | None, jobs_by_id: dic
         ("editor_structure_changed", r"editor_title_area_not_found|se-section-documenttitle|제목 입력 영역을 찾지 못"),
         ("image_local_key_missing", r"이미지 생성용 로컬 api 키"),
         ("image_generation_failed", r"image_generation_failed|이미지 생성 실패|이미지.*0장|요청 \d+장 중 0장|image_upload_failed|image_uploaded_but_not_inserted"),
-        ("api_key_missing", r"api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가.*없|키.*저장.*필요|api.*저장.*안"),
+        ("api_key_missing", r"api[_ -]?key.*missing|key_missing|no api key|no api key was provided|키가[^.\n]{0,20}없|키[^.\n]{0,10}(저장|등록)[^.\n]{0,10}필요|api[^.\n]{0,20}저장[^.\n]{0,10}안"),
         ("api_key_invalid", r"api_key_invalid|invalid api key|api key not valid|인증 실패|키 인증 실패|unauthorized"),
         ("quota_exceeded", r"quota_exceeded|insufficient_quota|billing|payment|credit|balance|크레딧|결제|요금제 한도|한도 초과"),
         ("rate_limited", r"rate_limited|rate limit|resource_exhausted|429|무료 사용량|분당|일일 한도"),
