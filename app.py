@@ -6681,6 +6681,11 @@ class NaverBlogApp:
                 title = ""
                 visible_char_count = 0
                 editor_expected_chars = 0
+                # 검증 수치 기본값 — 검증 구간을 타지 않는 경로에서도 결과 조립이 깨지지 않게.
+                editor_char_count = 0
+                expected_chars = 0
+                min_editor_chars = 0
+                input_fill_ratio = 0
                 image_block_count = 0
                 image_attempted = 0
                 image_generated = 0
@@ -6890,6 +6895,16 @@ class NaverBlogApp:
                             # 없었다(2026-08-26 실측: 1218 대 1188).
                             expected_chars = editor_expected_chars or visible_char_count or 0
                             min_editor_chars = max(300, int(expected_chars * 0.75))
+                            # 통과해도 수치를 남긴다. "done" 만으로는 90%가 들어갔는지 76%가
+                            # 들어갔는지 알 수 없어, 서식이 조금씩 갉아먹는 회귀를 못 본다.
+                            input_fill_ratio = (
+                                round(editor_char_count / expected_chars, 3)
+                                if expected_chars and editor_char_count else 0
+                            )
+                            self._log(
+                                f"[검증] 본문 입력 {editor_char_count}자 / 기대 {expected_chars}자 "
+                                f"({int(input_fill_ratio * 100)}%, 통과선 {min_editor_chars}자)"
+                            )
                             if expected_chars and editor_char_count and editor_char_count < min_editor_chars:
                                 post_stage = "smart_editor_input_verification"
                                 stage = post_stage
@@ -6976,6 +6991,12 @@ class NaverBlogApp:
                         "draft_save_confirmed": draft_save_confirmed,
                         "char_count": visible_char_count,
                         "target_char_count": word_count,
+                        "input_verification": {
+                            "editor_chars": editor_char_count,
+                            "expected_chars": expected_chars,
+                            "min_required": min_editor_chars,
+                            "fill_ratio": input_fill_ratio,
+                        },
                         "recovery_markdown_path": saved_md_path or "",
                         "recovery_manifest_path": recovery_manifest_path or "",
                     })

@@ -136,5 +136,11 @@ sig = func_source("_caret_inside")
 check("예외 시 None 반환", "return None" in sig, True)
 check("호출부가 None 을 별도 처리", "inside is None" in src and "inside is None" in src_list, True)
 
+print("[7] 검증 수치가 로그·결과에 남는가 (계측)")
+APP_SRC = (ROOT / "app.py").read_text(encoding="utf-8")
+check("성공 경로에도 입력률 로그", "[검증] 본문 입력" in APP_SRC, True)
+check("결과에 input_verification 포함", '"input_verification": {' in APP_SRC, True)
+check("변수 기본값 초기화(경로 미진입 대비)", "input_fill_ratio = 0" in APP_SRC, True)
+
 print(f"\n결과: PASS {passed} / FAIL {failed}")
 sys.exit(1 if failed else 0)
