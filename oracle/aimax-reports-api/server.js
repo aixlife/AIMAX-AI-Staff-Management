@@ -87,6 +87,7 @@ const CAFE24_WEBHOOK_SECRET = String(process.env.AIMAX_CAFE24_WEBHOOK_SECRET || 
 const TELEGRAM_BOT_TOKEN = String(process.env.AIMAX_TELEGRAM_BOT_TOKEN || "").trim();
 const TELEGRAM_CHAT_ID = String(process.env.AIMAX_TELEGRAM_CHAT_ID || "").trim();
 const TELEGRAM_MESSAGE_THREAD_ID = String(process.env.AIMAX_TELEGRAM_MESSAGE_THREAD_ID || "").trim();
+const TELEGRAM_API_BASE = String(process.env.AIMAX_TELEGRAM_API_BASE || "https://api.telegram.org").replace(/\/+$/, "");
 const TELEGRAM_ALERTS_ENABLED = String(process.env.AIMAX_TELEGRAM_ALERTS_ENABLED || "1").trim() !== "0";
 const CAFE24_REVIEW_ALERTS_ENABLED = String(process.env.AIMAX_CAFE24_REVIEW_ALERTS_ENABLED || "1").trim() !== "0";
 const CAFE24_TELEGRAM_MESSAGE_THREAD_ID = String(process.env.AIMAX_CAFE24_TELEGRAM_MESSAGE_THREAD_ID || TELEGRAM_MESSAGE_THREAD_ID).trim();
@@ -13428,7 +13429,7 @@ async function sendTelegramMessage(text, options = {}) {
   if (messageThreadId) {
     payload.message_thread_id = messageThreadId;
   }
-  const data = await postJsonUrl(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, payload, {}, 12000);
+  const data = await postJsonUrl(`${TELEGRAM_API_BASE}/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, payload, {}, 12000);
   return redactPayload(data);
 }
 
@@ -13671,7 +13672,7 @@ function patchCafe24OrderAutoStatus(orderId, patch) {
   return order;
 }
 
-function markCafe24AutoProcessFailure(orderId, error, stage) {
+function markCafe24AutoProcessFailure(orderId, error, stage, options = {}) {
   const failedAt = nowIso();
   const current = loadCafe24Orders().orders.find((item) => item.id === orderId);
   const failed = patchCafe24OrderAutoStatus(orderId, {
@@ -13682,7 +13683,7 @@ function markCafe24AutoProcessFailure(orderId, error, stage) {
     auto_process_error_at: failedAt,
     updated_at: failedAt,
   });
-  queueCafe24AutoFailureAlert(failed, error);
+  if (options.alert !== false) queueCafe24AutoFailureAlert(failed, error);
   return failed;
 }
 
@@ -13761,7 +13762,7 @@ async function autoProcessCafe24Order(snapshot, options = {}) {
     products: orderProducts,
     source: options.provisionSource || (options.resendGuide ? "cafe24_order_admin_resend" : "cafe24_order_auto"),
     admin_note: [
-      `${options.resendGuide ? "Cafe24 안내 메일 재발송" : options.adminRetry ? "Cafe24 자동 처리 재시도" : "Cafe24 주문 자동 처리"}: ${order.external_id || order.id}`,
+      `${options.resendGuide ? "Cafe24 안내 메일 재발송" : options.adminRetry ? "Cafe24 자동 처리 재시도" : options.autoRetry ? "Cafe24 자동 재시도 스윕" : "Cafe24 주문 자동 처리"}: ${order.external_id || order.id}`,
       order.product_name ? `상품명: ${order.product_name}` : "",
       order.amount ? `금액: ${order.amount}` : "",
     ].filter(Boolean).join("\n"),
@@ -13845,6 +13846,160 @@ function queueCafe24AutoProcess(order) {
   });
   return true;
 }
+
+// 카페24 자동 처리 실패 건 자동 재시도 스윕 (2026-08-30 CEO 승인).
+// failed 주문을 스윕 주기(기본 10분)마다 재시도한다. 최대 횟수 소진 시 1회만 텔레그램으로
+// "수동 확인 필요"를 알리고 이후 건드리지 않는다. 과거 백로그가 갑자기 메일을 받지 않도록
+// 적용 기준일(SINCE) 이전 실패 건은 제외한다 — 온보딩 리마인드 스윕과 같은 설계.
+const CAFE24_RETRY_SWEEP_ENABLED = String(process.env.AIMAX_CAFE24_RETRY_SWEEP ?? "1").trim() !== "0";
+const CAFE24_RETRY_SWEEP_MS = safeInt(process.env.AIMAX_CAFE24_RETRY_SWEEP_MS || String(10 * 60 * 1000), 500, 24 * 60 * 60 * 1000);
+const CAFE24_RETRY_SWEEP_INITIAL_DELAY_MS = safeInt(process.env.AIMAX_CAFE24_RETRY_SWEEP_INITIAL_DELAY_MS || "120000", 250, 60 * 60 * 1000);
+const CAFE24_RETRY_MAX_ATTEMPTS = safeInt(process.env.AIMAX_CAFE24_RETRY_MAX_ATTEMPTS || "3", 1, 20);
+const CAFE24_RETRY_MAX_PER_RUN = safeInt(process.env.AIMAX_CAFE24_RETRY_MAX_PER_RUN || "10", 1, 100);
+const CAFE24_RETRY_SINCE = String(process.env.AIMAX_CAFE24_RETRY_SINCE || "2026-08-30T00:00:00Z").trim();
+let cafe24RetrySweepBusy = false;
+
+function cafe24AutoRetryEligible(order, nowMs) {
+  if (String(order?.status || "") !== "failed") return false;
+  if (order.sent_at) return false;
+  if (order.issue) return false;
+  if (!isValidEmail(order.email)) return false;
+  if (!PRODUCTS.has(String(order.product || "").trim())) return false;
+  if (order.auto_retry_stopped_at) return false;
+  if (safeInt(order.retry_count, 0, 1000) >= CAFE24_RETRY_MAX_ATTEMPTS) return false;
+  const failedAt = Date.parse(order.auto_process_error_at || order.updated_at || "");
+  if (!Number.isFinite(failedAt)) return false;
+  const since = Date.parse(CAFE24_RETRY_SINCE);
+  if (Number.isFinite(since) && failedAt < since) return false;
+  const startedAt = Date.parse(order.auto_process_started_at || "");
+  if (Number.isFinite(startedAt) && nowMs - startedAt < CAFE24_AUTO_PROCESS_LOCK_MS) return false;
+  return true;
+}
+
+// 이중 메일 발송 가드: rememberUserEmailEvent 이력은 메일 발송 "성공 후"에만 기록되므로,
+// 주문 생성 이후 시각의 cafe24_onboarding_guide* 이벤트가 있으면 메일은 이미 나간 것이다
+// (발송 성공과 주문 상태 반영 사이 크래시 등). 이 경우 자동 재시도는 멈추고 사람이 확인한다.
+function cafe24GuideAlreadySentForOrder(order, usersData) {
+  const email = normalizeEmail(order?.email || "");
+  if (!email) return false;
+  const user = (usersData?.users || []).find((item) => normalizeEmail(item?.email || "") === email);
+  if (!user || !Array.isArray(user.email_events)) return false;
+  const orderBase = Date.parse(order.created_at || order.received_at || "");
+  return user.email_events.some((event) => {
+    if (!String(event?.type || "").startsWith("cafe24_onboarding_guide")) return false;
+    const at = Date.parse(event.sent_at || "");
+    if (!Number.isFinite(at)) return true;
+    return !Number.isFinite(orderBase) || at >= orderBase;
+  });
+}
+
+function telegramCafe24RetryStopAlertText(order, error, reason) {
+  const head = reason === "guide_already_sent"
+    ? ["[AIMAX 카페24 자동 재시도 중단]", "안내 메일 발송 이력이 이미 있어 자동 재시도를 멈췄습니다 — 수동 확인 필요"]
+    : ["[AIMAX 카페24 자동 재시도 소진]", `자동 재시도 ${CAFE24_RETRY_MAX_ATTEMPTS}회 소진 — 수동 확인 필요`];
+  return [...head, telegramCafe24AutoFailureAlertText(order, error)].join("\n");
+}
+
+function queueCafe24RetryStopAlert(order, error, reason) {
+  if (!order || !telegramAlertsConfigured()) return false;
+  const snapshot = { ...order };
+  sendTelegramMessage(telegramCafe24RetryStopAlertText(snapshot, error, reason), {
+    messageThreadId: CAFE24_TELEGRAM_MESSAGE_THREAD_ID,
+  })
+    .then(() => {
+      patchCafe24OrderAutoStatus(snapshot.id, { auto_retry_alert_sent_at: nowIso() });
+    })
+    .catch((alertError) => {
+      patchCafe24OrderAutoStatus(snapshot.id, {
+        auto_retry_alert_error: String(alertError.code || alertError.message || "telegram_send_failed").slice(0, 160),
+      });
+      console.warn("[cafe24 retry] stop alert send failed", alertError.code || alertError.message || "telegram_send_failed");
+    });
+  return true;
+}
+
+async function sweepCafe24AutoRetries() {
+  if (!CAFE24_RETRY_SWEEP_ENABLED) return { retried: 0, sent: 0, stopped: 0 };
+  if (cafe24RetrySweepBusy) return { retried: 0, sent: 0, stopped: 0, busy: true };
+  cafe24RetrySweepBusy = true;
+  try {
+    const candidates = loadCafe24Orders().orders.filter((order) => cafe24AutoRetryEligible(order, Date.now()));
+    if (!candidates.length) return { retried: 0, sent: 0, stopped: 0 };
+    const targets = candidates.slice(0, CAFE24_RETRY_MAX_PER_RUN);
+    if (candidates.length > targets.length) {
+      console.warn(`[cafe24 retry] ${candidates.length - targets.length} candidate(s) deferred to next sweep (cap ${CAFE24_RETRY_MAX_PER_RUN}/run)`);
+    }
+    let retried = 0;
+    let sent = 0;
+    let stopped = 0;
+    for (const target of targets) {
+      const current = loadCafe24Orders().orders.find((order) => order.id === target.id);
+      if (!current || !cafe24AutoRetryEligible(current, Date.now())) continue;
+      if (cafe24GuideAlreadySentForOrder(current, loadUsers())) {
+        const patched = patchCafe24OrderAutoStatus(current.id, {
+          auto_retry_stopped_at: nowIso(),
+          auto_retry_stopped_reason: "guide_already_sent",
+        });
+        queueCafe24RetryStopAlert(patched || current, { code: "guide_already_sent" }, "guide_already_sent");
+        stopped += 1;
+        console.warn("[cafe24 retry] stop — guide already sent, manual check needed", current.id);
+        continue;
+      }
+      const attemptNo = safeInt(current.retry_count, 0, 1000) + 1;
+      patchCafe24OrderAutoStatus(current.id, { retry_count: attemptNo, last_retry_at: nowIso() });
+      retried += 1;
+      try {
+        await autoProcessCafe24Order({ id: current.id }, {
+          force: true,
+          autoRetry: true,
+          provisionSource: "cafe24_order_auto_retry",
+          setupSource: "cafe24_order_auto_retry_setup_link",
+          emailEventType: "cafe24_onboarding_guide_auto_retry",
+        });
+        sent += 1;
+      } catch (error) {
+        const code = String(error?.code || "");
+        if (["order_already_done", "invalid_order_status"].includes(code)) {
+          console.warn("[cafe24 retry] skipped", current.id, code);
+          continue;
+        }
+        // 중간 실패는 텔레그램 알림 없이 기록만 — 알림은 소진 시 1회.
+        markCafe24AutoProcessFailure(current.id, error, error.stage || "auto_retry", { alert: false });
+        if (attemptNo >= CAFE24_RETRY_MAX_ATTEMPTS) {
+          const latest = patchCafe24OrderAutoStatus(current.id, {
+            auto_retry_stopped_at: nowIso(),
+            auto_retry_stopped_reason: "exhausted",
+          });
+          queueCafe24RetryStopAlert(latest, error, "exhausted");
+          stopped += 1;
+        }
+      }
+    }
+    console.warn(`[cafe24 retry] sweep done retried=${retried} sent=${sent} stopped=${stopped} candidates=${candidates.length}`);
+    return { retried, sent, stopped };
+  } catch (error) {
+    console.warn("[cafe24 retry] sweep failed", error?.code || error?.message || error);
+    return { retried: 0, sent: 0, stopped: 0, error: true };
+  } finally {
+    cafe24RetrySweepBusy = false;
+  }
+}
+
+function startCafe24AutoRetrySweep() {
+  if (!CAFE24_RETRY_SWEEP_ENABLED) return null;
+  const runSweep = () => {
+    sweepCafe24AutoRetries().catch((error) => {
+      console.warn("[cafe24 retry] sweep failed", error?.code || error?.message || error);
+    });
+  };
+  const initial = setTimeout(runSweep, Math.min(CAFE24_RETRY_SWEEP_INITIAL_DELAY_MS, CAFE24_RETRY_SWEEP_MS));
+  if (typeof initial.unref === "function") initial.unref();
+  const timer = setInterval(runSweep, CAFE24_RETRY_SWEEP_MS);
+  if (typeof timer.unref === "function") timer.unref();
+  console.warn(`[cafe24 retry] armed interval=${Math.round(CAFE24_RETRY_SWEEP_MS / 1000)}s max=${CAFE24_RETRY_MAX_ATTEMPTS} since=${CAFE24_RETRY_SINCE} cap=${CAFE24_RETRY_MAX_PER_RUN}/run`);
+  return timer;
+}
+
 
 async function handleAdminLogin(req, res) {
   if (!adminSecret()) {
@@ -19674,6 +19829,7 @@ function startServer() {
   startSongiDiscoverySubscriptionPoller();
   startWaitingUserReportMailSweep();
   startOnboardingReminderSweep();
+  startCafe24AutoRetrySweep();
   server.listen(PORT, HOST, () => {
     console.log(`aimax-reports-api listening on http://${HOST}:${PORT}`);
   });
@@ -19732,6 +19888,10 @@ module.exports = {
     onboardingSetupLinkText,
     shouldAutoProcessCafe24Order,
     shouldSendCafe24ReviewAlert,
+    cafe24AutoRetryEligible,
+    cafe24GuideAlreadySentForOrder,
+    sweepCafe24AutoRetries,
+    telegramCafe24RetryStopAlertText,
     telegramCafe24AutoFailureAlertText,
     telegramCafe24ReviewAlertText,
   },
