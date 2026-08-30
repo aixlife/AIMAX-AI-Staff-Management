@@ -87,10 +87,10 @@ Every existing runnable job kind must get an individual parity row before migrat
 |---|---|---|
 | 예리 blog writing | DEFERRED | keywords, CTA, model/image model, local Naver save, schedule/draft safety |
 | 현주 neighbor/customer work | DEFERRED | saved messages, local execution, stop/guard behavior |
-| 송이 research | DEFERRED | keyword/URL inputs, sources, paid collection guard, result brief |
+| 송이 research | REPLACED | 웹 자료조사 폼 폐기(CEO 지시). 맡기기 창은 파트너 직원 훔쳐봐(hoomcha.com/aimax) 안내 화면으로 대체 |
 | 윤미 analysis | DEFERRED | model selection, estimate, explicit confirmation, result/history |
 | 상수 web module | DEFERRED | worker contract and result behavior |
-| 세무 invoice draft/issue | DEFERRED | direct entitlement, draft, preflight, points/cost, issue confirmation, history |
+| 세무 invoice draft/issue | RETIRED | 프리뷰에서 세무 직원·업무 픽스처 전면 제거(CEO 지시) |
 | 은서 external/mobile tool | DEFERRED | execution options, platform guidance, release link |
 | External download employees | DEFERRED | platform-specific download and version metadata |
 | 카드뉴스 | DEFERRED | separate branch after shell approval |
