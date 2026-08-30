@@ -11,7 +11,7 @@ import { getSampleDeliverable } from "../data/sampleDeliverables";
 import {
   DEFAULT_WRITE_MODE,
   WRITE_MODES,
-  writeModeMeta,
+  writeModeModelLabel,
   yunmiUpgradeEstimateWon,
 } from "../data/taskOptions";
 import { downloadDeliverable } from "../lib/deliverableFile";
@@ -402,7 +402,7 @@ export function WorkPage({
                         " 모드" +
                         (mode.value === DEFAULT_WRITE_MODE ? " (기본값)" : "")}
                     </strong>
-                    <small>{writeModeMeta(mode)}</small>
+                    <small>{writeModeModelLabel(mode)}</small>
                   </div>
                   <span className="upgrade-mode-row__price">
                     {"예상 ₩" +

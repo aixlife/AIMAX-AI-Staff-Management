@@ -2343,3 +2343,29 @@
   word-break: keep-all;
   cursor: pointer;
 }
+
+/* 생성 버튼 직전 예상 비용 요약 — 0원 단독 표기 금지 (2026-08-31 CEO 피드백) */
+.submit-cost-recap {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line-strong);
+  border-left: 3px solid var(--color-brand);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.submit-cost-recap strong {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.submit-cost-recap span {
+  color: var(--color-ink-soft);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}

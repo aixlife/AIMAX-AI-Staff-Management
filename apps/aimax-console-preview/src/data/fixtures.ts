@@ -608,7 +608,8 @@ function attentionFixture(): FixtureSet {
   copy.employeeId = "cardnews";
   copy.title = "7월 강의 홍보 카드뉴스 이미지 범위 확인";
   copy.summary = "표지 1장 또는 추천 카드 3장의 AI 이미지 생성 범위를 선택해주세요.";
-  copy.cost = "표지 1장 예상 $0.04 · 추천 3장 예상 $0.12";
+  // 비개발자 청중 기준 원화 표기 (gpt-image-1 장당 약 62원, 환율 1476원/USD).
+  copy.cost = "표지 1장 약 62원 · 추천 3장 약 186원";
   copy.requestId = "PREVIEW-CARDNEWS-003";
   fixture.tasks.push(copy);
   fixture.notices = [

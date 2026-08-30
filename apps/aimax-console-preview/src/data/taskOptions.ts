@@ -36,6 +36,20 @@
  * - 윤미 예상 비용 박스는 "기본 초안은 무료 · AI 완성 전환은 결과 확인 후 선택"을
  *   명시합니다 (설명 없는 0원 표기 금지). 폼에는 유료 전환 선택이 없고,
  *   작성 모드는 나중에 AI 완성으로 전환할 때 쓸 모드를 미리 고르는 항목입니다.
+ *
+ * 2026-08-31 CEO 피드백 6라운드 반영:
+ * - 작성 모드 카드에서 "$0.75/$3.75 (1M 토큰)" 같은 개발자 표기를 없앴습니다.
+ *   보조 표기는 "글 1편(1500자 기준) 약 N원"의 결과물 단위 원화이고, 모델명은
+ *   작은 보조 글씨로만 유지합니다 (청중 = 비개발자 대표). 상세 단가는 예상 비용
+ *   박스 안의 한 줄(원화)로만 남습니다.
+ * - 윤미 예상 비용은 두 줄 고정: "기본 초안 만들기: 무료" /
+ *   "AI 완성으로 전환 시: 약 N원 (선택한 작성 모드 기준)".
+ * - 모든 폼 직원의 예상 비용에 submitRecap(생성 버튼 직전 요약)을 추가했습니다.
+ * - 현주 폼에 "내 블로그 소개" textarea를 신설했습니다. 실서비스가 웹 작업 설정의
+ *   블로그 소개(blog_profile → generateNeighborMessageDrafts(profile))로 멘트
+ *   초안을 만드는 것을 폼 안에서 완결되게 미러링합니다. 멘트 초안 만들기는
+ *   입력한 소개를 반영한 픽스처 멘트를 만들고, 소개가 비면 일반 멘트 + 안내를
+ *   보여줍니다.
  */
 
 export interface OptionChoice {
@@ -127,7 +141,14 @@ export type TaskOptionField =
       draftFill?: {
         buttonLabel: string;
         notice: string;
+        /** 소개가 비어 있을 때 채우는 일반 초안 */
         drafts: string[];
+        /** 다른 입력 필드(소개 문구)를 반영해 초안을 만드는 픽스처 규칙 */
+        profile?: {
+          fieldId: string;
+          build: (profile: string) => string[];
+          emptyNotice: string;
+        };
       };
     })
   | (BaseField & {
@@ -151,6 +172,12 @@ export interface CostEstimate {
   lines: string[];
   basis: CostBasis;
   basisLabel: string;
+  /**
+   * 생성 버튼 직전(확인 체크 근처)에 다시 보여줄 요약 1~2줄.
+   * "0원" 단독 표기 금지 — 무료라면 왜 무료인지, 유료 전환이 있으면
+   * 언제 얼마가 드는지 같이 적습니다 (2026-08-31 CEO 피드백).
+   */
+  submitRecap: string[];
 }
 
 export interface EmployeeTaskOptions {
@@ -375,20 +402,43 @@ export function writeModeById(value: string): WriteMode {
   return WRITE_MODES.find((mode) => mode.value === value) || WRITE_MODES[0];
 }
 
-function usdLabel(value: number): string {
-  return "$" + value.toFixed(2);
+/** 결과물 단위 비용 표기의 기준 분량 (글 1편). */
+export const WRITE_MODE_ARTICLE_CHARS = 1500;
+
+/** 글 1편(1500자 기준) 예상 원가 — 카드 보조 표기·상세 단가 한 줄 공용. */
+export function writeModePerArticleWon(modeValue: string): number {
+  const mode = writeModeById(modeValue);
+  return estimateTextCostWon(mode.model, WRITE_MODE_ARTICLE_CHARS).won;
 }
 
-/** 모드 카드 보조 표기: 실제 모델명 · $입력/$출력 (1M 토큰) */
+/** 카드에 작은 보조 글씨로만 남기는 실제 모델명. */
+export function writeModeModelLabel(mode: WriteMode): string {
+  return AI_MODEL_PRICES[mode.model].label;
+}
+
+/**
+ * 모드 카드 보조 표기: "글 1편(1500자 기준) 약 N원 · 모델명".
+ * "$0.75/$3.75 (1M 토큰)" 같은 개발자 표기는 쓰지 않습니다
+ * (청중 = 비개발자 대표, 2026-08-31 CEO 피드백).
+ */
 export function writeModeMeta(mode: WriteMode): string {
-  const price = AI_MODEL_PRICES[mode.model];
   return (
-    price.label +
+    "글 1편(" +
+    WRITE_MODE_ARTICLE_CHARS.toLocaleString("ko-KR") +
+    "자 기준) 약 " +
+    wonLabel(writeModePerArticleWon(mode.value)) +
     " · " +
-    usdLabel(price.inputUsdPer1m) +
-    "/" +
-    usdLabel(price.outputUsdPer1m) +
-    " (1M 토큰)"
+    writeModeModelLabel(mode)
+  );
+}
+
+/** 상세 단가가 궁금한 사람용 한 줄 (예상 비용 박스 전용, 원화만). */
+export function writeModeDetailPriceLine(): string {
+  return (
+    "상세 단가(1,500자 1편 기준): " +
+    WRITE_MODES.map(
+      (mode) => mode.label + " 약 " + wonLabel(writeModePerArticleWon(mode.value)),
+    ).join(" · ")
   );
 }
 
@@ -734,10 +784,19 @@ const yeriOptions: EmployeeTaskOptions = {
           "장 " +
           wonLabel(imageWon),
         "이미지 단가: 장당 약 " + wonLabel(wonFromUsd(imagePrice.perImageUsd)),
-        "환율 " + USD_KRW_RATE.toLocaleString("ko-KR") + "원/USD",
+        writeModeDetailPriceLine(),
       ],
       basis: "live",
       basisLabel: USD_KRW_RATE_LABEL,
+      submitRecap: [
+        "예상 원가 약 " +
+          wonLabel(totalWon) +
+          " (" +
+          textCost.modeLabel +
+          " 모드 · 이미지 " +
+          imageCount +
+          "장 포함)",
+      ],
     };
   },
 };
@@ -751,6 +810,37 @@ const HYUNJU_SPEED_SECONDS: Record<string, number> = {
   normal: 60,
   fast: 40,
 };
+
+/** 블로그 소개가 비어 있을 때 채우는 일반 멘트 (기존 픽스처 3종). */
+export const HYUNJU_GENERIC_MESSAGE_DRAFTS: string[] = [
+  "안녕하세요. 블로그 글이 좋아서 들렀습니다. 앞으로 자주 소통하고 싶어 서로이웃 신청드립니다.",
+  "안녕하세요. 좋은 글을 꾸준히 보고 싶어서 서로이웃 신청드립니다. 자주 들러 인사드릴게요.",
+  "글 잘 보고 갑니다. 비슷한 관심사로 블로그를 운영하고 있어 서로이웃으로 소통하고 싶습니다.",
+];
+
+/**
+ * 실서비스 generateNeighborMessageDrafts(profile) 미러 (app.html:14614).
+ * 입력한 블로그 소개(명사구로 정돈)를 반영한 픽스처 멘트 3종을 만듭니다.
+ * 소개가 비어 있으면 일반 멘트를 돌려줍니다.
+ */
+export function buildHyunjuMessageDrafts(profile: string): string[] {
+  let intro = profile.replace(/\s+/g, " ").trim();
+  intro = intro.replace(/[.!?…]+$/, "");
+  intro = intro.replace(/(입니다|이에요|예요|에요|합니다)$/, "").trim();
+  if (intro.length > 60) intro = intro.slice(0, 60).trim();
+  if (!intro) return [...HYUNJU_GENERIC_MESSAGE_DRAFTS];
+  return [
+    "안녕하세요. " +
+      intro +
+      " 운영자입니다. 이웃님 글이 좋아 서로이웃 신청드립니다. 자주 들러 소통하고 싶습니다.",
+    "반갑습니다. " +
+      intro +
+      " 운영자입니다. 관심사가 비슷해 글을 재미있게 봤고, 서로이웃으로 자주 소통하고 싶어 신청드립니다.",
+    "안녕하세요. " +
+      intro +
+      " 운영자예요. 좋은 글 오래 보고 싶어 서로이웃 신청드립니다. 제 블로그에도 놀러 오세요.",
+  ];
+}
 
 const hyunjuOptions: EmployeeTaskOptions = {
   employeeId: "hyunju",
@@ -815,6 +905,17 @@ const hyunjuOptions: EmployeeTaskOptions = {
       title: "서로이웃 신청 멘트",
       fields: [
         {
+          // 실서비스 웹 작업 설정의 블로그 소개(blog_profile) 미러 — 멘트 초안의
+          // 재료라 멘트 바로 위에 둬 폼 안에서 완결합니다 (2026-08-31 CEO 피드백,
+          // 프리뷰 추가 입력 1개).
+          kind: "textarea",
+          id: "blogProfile",
+          label: "내 블로그 소개",
+          placeholder:
+            "어떤 블로그인지 한두 문장 (예: 순천 맛집과 동네 카페를 기록하는 블로그)",
+          hint: "아래 '멘트 초안 만들기'가 이 소개 문구를 바탕으로 멘트를 만듭니다. 비워두면 일반 멘트를 만듭니다.",
+        },
+        {
           kind: "textList",
           id: "messages",
           label: "서로이웃 신청 멘트",
@@ -827,12 +928,14 @@ const hyunjuOptions: EmployeeTaskOptions = {
           draftFill: {
             buttonLabel: "멘트 초안 만들기",
             notice:
-              "실서비스에서는 AI가 계정 소개를 바탕으로 멘트 초안을 생성합니다. 프리뷰에서는 준비된 픽스처 멘트 3종을 채웁니다.",
-            drafts: [
-              "안녕하세요. 블로그 글이 좋아서 들렀습니다. 앞으로 자주 소통하고 싶어 서로이웃 신청드립니다.",
-              "안녕하세요. 좋은 글을 꾸준히 보고 싶어서 서로이웃 신청드립니다. 자주 들러 인사드릴게요.",
-              "글 잘 보고 갑니다. 비슷한 관심사로 블로그를 운영하고 있어 서로이웃으로 소통하고 싶습니다.",
-            ],
+              "입력한 블로그 소개를 바탕으로 만듭니다. 프리뷰에서는 소개를 반영한 픽스처 멘트 3종을 채웁니다.",
+            drafts: HYUNJU_GENERIC_MESSAGE_DRAFTS,
+            profile: {
+              fieldId: "blogProfile",
+              build: buildHyunjuMessageDrafts,
+              emptyNotice:
+                "블로그 소개가 비어 있어 일반 멘트 3종을 채웠습니다. 위 '내 블로그 소개'를 입력하고 다시 누르면 소개를 반영한 멘트를 만듭니다.",
+            },
           },
         },
       ],
@@ -882,6 +985,13 @@ const hyunjuOptions: EmployeeTaskOptions = {
       ],
       basis: "estimate",
       basisLabel: "작업량 추정 (실서비스에 단가 표기 없음)",
+      submitRecap: [
+        "외부 AI/API 비용 0원 (로컬 자동화) · 신청 " +
+          totalRequests +
+          "건 · 약 " +
+          minutes +
+          "분 예상",
+      ],
     };
   },
 };
@@ -1036,29 +1146,25 @@ const yunmiOptions: EmployeeTaskOptions = {
       Math.min(7000, combined.length + YUNMI_UPGRADE_CHAR_COUNT),
     );
     const estimate = estimateWriteModeCost(modeValue, charCount);
+    const upgradeLine =
+      "AI 완성으로 전환 시: 약 " +
+      wonLabel(estimate.won) +
+      " (선택한 작성 모드 '" +
+      estimate.modeLabel +
+      "' · " +
+      estimate.modelLabel +
+      " 기준)";
     return {
-      // 설명 없는 0원 금지: 왜 0원인지, 유료 전환은 언제 고르는지 함께 보여줍니다.
-      headline: "기본 초안: 외부 AI/API 비용 0원",
+      // 설명 없는 0원 단독 표기 금지: 무료/유료 전환을 두 줄로 나눠 보여줍니다.
+      headline: "기본 초안 만들기: 무료",
       lines: [
-        "기본 초안은 무료입니다 · AI 완성 전환은 결과 확인 후 선택합니다.",
-        "AI 완성으로 전환하면 " +
-          estimate.modeLabel +
-          " 모드 (" +
-          estimate.modelLabel +
-          ") 기준 약 " +
-          wonLabel(estimate.won) +
-          " 예상",
-        "입력 " +
-          estimate.inputTokens.toLocaleString("ko-KR") +
-          "t / 출력 " +
-          estimate.outputTokens.toLocaleString("ko-KR") +
-          "t 추정 · 환율 " +
-          USD_KRW_RATE.toLocaleString("ko-KR") +
-          "원/USD",
-        "자동 유료 재시도는 하지 않습니다.",
+        upgradeLine,
+        "전환 여부는 결과 확인 후 업무 페이지에서 선택합니다 · 자동 유료 재시도는 하지 않습니다.",
+        writeModeDetailPriceLine(),
       ],
       basis: "live",
       basisLabel: USD_KRW_RATE_LABEL,
+      submitRecap: ["기본 초안 만들기: 무료", upgradeLine],
     };
   },
 };
@@ -1250,6 +1356,13 @@ const sangsuOptions: EmployeeTaskOptions = {
       ],
       basis: "free",
       basisLabel: "브라우저 생성 · 외부 비용 없음",
+      submitRecap: [
+        "총 견적 금액 " +
+          totals.total.toLocaleString("ko-KR") +
+          "원" +
+          (totals.vat > 0 ? " (부가세 포함)" : " (부가세 미적용)") +
+          " · 외부 AI/API 비용 0원 (브라우저 생성)",
+      ],
     };
   },
 };

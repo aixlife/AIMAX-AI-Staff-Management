@@ -41,6 +41,9 @@ const LIVE_CONTROL_COUNTS: Record<string, number> = {
 
 const PREVIEW_EXTRA_CONTROLS: Record<string, number> = {
   yeri: 2,
+  // 현주 프리뷰 추가 1개: 내 블로그 소개 textarea (실서비스는 웹 작업 설정의
+  // blog_profile을 쓰지만, 프리뷰는 폼 안에서 완결되게 멘트 위에 둡니다).
+  hyunju: 1,
   sangsu: 1,
 };
 
@@ -360,7 +363,7 @@ test("hyunju restores the draft-message button as a fixture", () => {
   for (const draft of messages.draftFill.drafts) {
     assert.match(draft, /서로이웃/);
   }
-  assert.match(messages.draftFill.notice, /실서비스에서는 AI가/);
+  assert.match(messages.draftFill.notice, /입력한 블로그 소개를 바탕으로/);
 
   const fieldsSource = read("src/components/TaskOptionFields.tsx");
   assert.match(fieldsSource, /draftFill/);

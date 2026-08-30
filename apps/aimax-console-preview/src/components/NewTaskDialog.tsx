@@ -266,7 +266,10 @@ export function NewTaskDialog({
   onQuoteCreate,
   onOpenTask,
 }: NewTaskDialogProps) {
-  const [title, setTitle] = useState(employee.name + " 새 업무 프리뷰");
+  // 업무 이름은 비워 두고 회색 예시(placeholder)로만 보여줍니다.
+  // 빈 채로 생성하면 아래 기본 이름을 자동 부여합니다 (2026-08-31 CEO 피드백).
+  const defaultTitle = employee.name + " 새 업무 프리뷰";
+  const [title, setTitle] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
   const isQuote = employee.id === "sangsu";
@@ -304,12 +307,13 @@ export function NewTaskDialog({
   const costEstimate = optionConfig
     ? optionConfig.estimateCost(optionValues)
     : undefined;
-  const canSubmit =
-    acknowledged && Boolean(title.trim()) && missingLabels.length === 0;
+  const canSubmit = acknowledged && missingLabels.length === 0;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit) return;
+    // 빈 이름은 막지 않고 기본 이름을 자동 부여합니다.
+    const finalTitle = title.trim() || defaultTitle;
     // "최근 설정 불러오기" 칩용 저장 — 4개 폼 직원 공통, 키·개인정보성 값 없음.
     if (optionConfig) {
       saveRecentOptionValues(employee.id, optionConfig, optionValues);
@@ -318,17 +322,17 @@ export function NewTaskDialog({
       // 상수 즉시형 예외: 업무 페이지로 이동하지 않고 그 자리에서 결과를 엽니다.
       const taskId = onQuoteCreate(
         employee,
-        title.trim(),
+        finalTitle,
         optionSummary || undefined,
       );
       setQuoteResult({
         taskId,
-        title: title.trim(),
+        title: finalTitle,
         values: { ...optionValues },
       });
       return;
     }
-    onCreate(employee, title.trim(), optionSummary || undefined);
+    onCreate(employee, finalTitle, optionSummary || undefined);
   };
 
   const downloadQuote = (result: QuoteResultState) => {
@@ -449,9 +453,13 @@ export function NewTaskDialog({
             id="preview-task-name"
             value={title}
             maxLength={120}
+            placeholder={defaultTitle}
             onChange={(event) => setTitle(event.target.value)}
           />
-          <span className="field-hint">대표 결과 목록에서 구분할 수 있게 적어주세요.</span>
+          <span className="field-hint">
+            대표 결과 목록에서 구분할 수 있게 적어주세요. 비워두면 "
+            {defaultTitle}" 이름이 자동으로 붙습니다.
+          </span>
         </div>
 
         {optionConfig ? (
@@ -557,6 +565,19 @@ export function NewTaskDialog({
             <p>업무 카드만 브라우저 메모리에 만듭니다. API·실행기·유료 모델은 호출하지 않습니다.</p>
           </div>
         </div>
+
+        {costEstimate && costEstimate.submitRecap.length > 0 ? (
+          <div
+            className="submit-cost-recap"
+            role="note"
+            aria-label="생성 전 예상 비용 요약"
+          >
+            <strong>예상 비용</strong>
+            {costEstimate.submitRecap.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </div>
+        ) : null}
 
         <label className="check-row">
           <input

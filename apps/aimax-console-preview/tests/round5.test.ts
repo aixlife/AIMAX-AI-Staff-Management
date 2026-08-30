@@ -73,10 +73,11 @@ test("write modes are exactly standard/balanced/premium with model+price meta", 
       ["premium", "프리미엄", "claude-sonnet-5"],
     ],
   );
+  // 6라운드: 개발자 표기($/1M 토큰) 대신 결과물 단위 원화 + 모델명 보조 표기.
   const expectedMeta: Record<string, string> = {
-    standard: "Gemini 3.7 Flash · $0.75/$3.75 (1M 토큰)",
-    balanced: "GPT-5.6 Terra · $2.00/$12.00 (1M 토큰)",
-    premium: "Claude Sonnet 5 · $3.00/$15.00 (1M 토큰)",
+    standard: "글 1편(1,500자 기준) 약 10원 · Gemini 3.7 Flash",
+    balanced: "글 1편(1,500자 기준) 약 28원 · GPT-5.6 Terra",
+    premium: "글 1편(1,500자 기준) 약 37원 · Claude Sonnet 5",
   };
   for (const mode of WRITE_MODES) {
     assert.equal(writeModeMeta(mode), expectedMeta[mode.value]);
@@ -108,8 +109,9 @@ test("yeri and yunmi replace the model select with the three mode cards", () => 
     );
     assert.match(mode.choices[0].label, /기본값/);
     for (const choice of mode.choices) {
-      assert.ok(choice.meta, choice.label + " 모델명·단가 보조 표기가 없습니다");
-      assert.match(choice.meta || "", /\$/);
+      assert.ok(choice.meta, choice.label + " 모델명·비용 보조 표기가 없습니다");
+      assert.match(choice.meta || "", /글 1편\(1,500자 기준\) 약 \d+원/);
+      assert.doesNotMatch(choice.meta || "", /\$|토큰/);
       assert.ok(choice.hint, choice.label + " 성격 한 줄이 없습니다");
     }
   }
@@ -312,7 +314,7 @@ test("sangsu quote finishes in place and lands silently as a done task", () => {
   assert.match(dialog, /견적서 다운로드/);
   assert.match(dialog, /buildQuoteDeliverable/);
   // 다른 직원은 현행 이동+강조 유지 (onCreate 경로 보존).
-  assert.match(dialog, /onCreate\(employee, title\.trim\(\), optionSummary \|\| undefined\);/);
+  assert.match(dialog, /onCreate\(employee, finalTitle, optionSummary \|\| undefined\);/);
 
   // 다운로드 문서는 견적 합계·부가세 계산을 그대로 담습니다.
   const sangsu = getTaskOptions("sangsu");
@@ -339,12 +341,9 @@ test("yunmi free draft is explained and the upgrade CTA lives on the work page",
   const yunmi = getTaskOptions("yunmi");
   assert.ok(yunmi);
   const estimate = yunmi.estimateCost(buildDefaultOptionValues(yunmi));
-  assert.match(estimate.headline, /0원/);
-  // 설명 없는 0원 금지.
-  assert.match(
-    estimate.lines[0],
-    /기본 초안은 무료입니다 · AI 완성 전환은 결과 확인 후 선택/,
-  );
+  // 6라운드: 두 줄 고정 — 무료 표기와 전환 시 예상 비용을 같이 보여줍니다.
+  assert.equal(estimate.headline, "기본 초안 만들기: 무료");
+  assert.match(estimate.lines[0], /AI 완성으로 전환 시: 약 \d+원/);
 
   // 폼 안에는 유료 전환 선택(전환 여부 토글)이 없습니다 — 모드 선택만 있습니다.
   const fieldIds = allFields(yunmi).map((field) => field.id);

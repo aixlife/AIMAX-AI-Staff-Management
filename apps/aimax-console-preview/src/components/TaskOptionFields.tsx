@@ -101,6 +101,110 @@ function ChoiceCards({
   );
 }
 
+interface TextListFieldProps {
+  field: Extract<TaskOptionField, { kind: "textList" }>;
+  values: OptionValues;
+  onChange: (fieldId: string, value: OptionValue) => void;
+}
+
+/**
+ * 멘트 목록 + "멘트 초안 만들기" 픽스처.
+ * draftFill.profile이 있으면 소개 필드(blogProfile) 값을 반영한 초안을 만들고,
+ * 소개가 비어 있으면 일반 초안을 채운 뒤 안내(emptyNotice)를 보여줍니다.
+ */
+function TextListField({ field, values, onChange }: TextListFieldProps) {
+  const [fillNotice, setFillNotice] = useState<string | null>(null);
+  const entries = Array.isArray(values[field.id])
+    ? (values[field.id] as string[])
+    : [""];
+  const draftFill = field.draftFill;
+
+  const fillDrafts = () => {
+    if (!draftFill) return;
+    if (draftFill.profile) {
+      const raw = values[draftFill.profile.fieldId];
+      const profileValue = typeof raw === "string" ? raw.trim() : "";
+      if (profileValue) {
+        onChange(field.id, draftFill.profile.build(profileValue));
+        setFillNotice(null);
+        return;
+      }
+      onChange(field.id, [...draftFill.drafts]);
+      setFillNotice(draftFill.profile.emptyNotice);
+      return;
+    }
+    onChange(field.id, [...draftFill.drafts]);
+  };
+
+  return (
+    <div className="field">
+      {field.hideLabel ? null : (
+        <span className="field-label-text">{field.label}</span>
+      )}
+      <div className="text-list" role="group" aria-label={field.label}>
+        {entries.map((entry, index) => (
+          <div className="text-list__row" key={index}>
+            <textarea
+              value={entry}
+              rows={2}
+              maxLength={300}
+              placeholder={field.placeholder}
+              aria-label={field.label + " " + (index + 1) + "번"}
+              onChange={(event) =>
+                onChange(
+                  field.id,
+                  entries.map((item, itemIndex) =>
+                    itemIndex === index ? event.target.value : item,
+                  ),
+                )
+              }
+            />
+            {entries.length > 1 ? (
+              <button
+                className="row-remove"
+                type="button"
+                aria-label={field.label + " " + (index + 1) + "번 삭제"}
+                onClick={() =>
+                  onChange(
+                    field.id,
+                    entries.filter((_item, itemIndex) => itemIndex !== index),
+                  )
+                }
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+      <div className="field-action-row">
+        {draftFill ? (
+          <button
+            className="button button--secondary button--small"
+            type="button"
+            onClick={fillDrafts}
+          >
+            {draftFill.buttonLabel}
+          </button>
+        ) : null}
+        <button
+          className="button button--secondary button--small"
+          type="button"
+          onClick={() => onChange(field.id, [...entries, ""])}
+        >
+          {field.addLabel}
+        </button>
+      </div>
+      {draftFill ? (
+        <span className="field-hint" role="status">
+          {fillNotice || draftFill.notice}
+        </span>
+      ) : null}
+      {field.hint ? <span className="field-hint">{field.hint}</span> : null}
+    </div>
+  );
+}
+
 export function TaskOptionFields({
   fields,
   values,
@@ -334,80 +438,13 @@ export function TaskOptionFields({
         }
 
         if (field.kind === "textList") {
-          const entries = Array.isArray(values[field.id])
-            ? (values[field.id] as string[])
-            : [""];
-          const updateEntry = (index: number, entry: string) => {
-            onChange(
-              field.id,
-              entries.map((item, itemIndex) =>
-                itemIndex === index ? entry : item,
-              ),
-            );
-          };
           return (
-            <div className="field" key={field.id}>
-              {field.hideLabel ? null : (
-                <span className="field-label-text">{field.label}</span>
-              )}
-              <div className="text-list" role="group" aria-label={field.label}>
-                {entries.map((entry, index) => (
-                  <div className="text-list__row" key={index}>
-                    <textarea
-                      value={entry}
-                      rows={2}
-                      maxLength={300}
-                      placeholder={field.placeholder}
-                      aria-label={field.label + " " + (index + 1) + "번"}
-                      onChange={(event) => updateEntry(index, event.target.value)}
-                    />
-                    {entries.length > 1 ? (
-                      <button
-                        className="row-remove"
-                        type="button"
-                        aria-label={field.label + " " + (index + 1) + "번 삭제"}
-                        onClick={() =>
-                          onChange(
-                            field.id,
-                            entries.filter(
-                              (_item, itemIndex) => itemIndex !== index,
-                            ),
-                          )
-                        }
-                      >
-                        ×
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-              <div className="field-action-row">
-                {field.draftFill ? (
-                  <button
-                    className="button button--secondary button--small"
-                    type="button"
-                    onClick={() =>
-                      onChange(field.id, [...(field.draftFill?.drafts || [])])
-                    }
-                  >
-                    {field.draftFill.buttonLabel}
-                  </button>
-                ) : null}
-                <button
-                  className="button button--secondary button--small"
-                  type="button"
-                  onClick={() => onChange(field.id, [...entries, ""])}
-                >
-                  {field.addLabel}
-                </button>
-              </div>
-              {field.draftFill ? (
-                <span className="field-hint">{field.draftFill.notice}</span>
-              ) : null}
-              {field.hint ? (
-                <span className="field-hint">{field.hint}</span>
-              ) : null}
-            </div>
+            <TextListField
+              key={field.id}
+              field={field}
+              values={values}
+              onChange={onChange}
+            />
           );
         }
 
