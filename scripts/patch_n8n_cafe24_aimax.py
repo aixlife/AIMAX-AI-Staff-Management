@@ -72,7 +72,7 @@ def aimax_node() -> dict:
     body_expression = (
         "={{ JSON.stringify(Object.assign({"
         "source: 'cafe24_order_email', "
-        "external_id: ($json.email || '') + '|' + ($json.product || '') + '|' + ($json.amount || '') + '|' + ($json.orderDate || ''), "
+        "external_id: ($json.orderId || '') || (($json.email || '') + '|' + ($json.product || '') + '|' + ($json.amount || '') + '|' + ($json.orderDate || '')), "
         "order_id: $json.orderId || '', "
         "name: $json.name, "
         "email: $json.email, "
