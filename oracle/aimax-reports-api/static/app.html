@@ -3856,6 +3856,16 @@
                         <label for="yeriKeywords">키워드</label>
                         <input id="yeriKeywords" placeholder="예: 강남 피부관리, 리프팅 후기" required>
                       </div>
+                      <div class="field wide">
+                        <label for="yeriStyleSelect">이번 글 스타일</label>
+                        <select id="yeriStyleSelect">
+                          <option value="" selected>계정 기본 스타일 사용</option>
+                          <option value="consult">상담 유도형</option>
+                          <option value="info">정보 정리형</option>
+                          <option value="review">후기·추천형</option>
+                        </select>
+                        <div class="small muted" style="margin-top:4px;">비워두면 설정 탭 "글쓰기 스타일"에 저장된 계정 스타일이 적용됩니다. 여기서 고르면 이번 글에만 우선합니다.</div>
+                      </div>
                       <div class="field">
                         <label for="yeriMode">발행 방식</label>
                         <select id="yeriMode">
@@ -12274,6 +12284,16 @@
 
     let writingStyleSelected = "";
 
+    function updateYeriStyleDefaultOption() {
+      const select = document.getElementById("yeriStyleSelect");
+      if (!select || !select.options.length) return;
+      const labels = { consult: "상담 유도형", info: "정보 정리형", review: "후기·추천형" };
+      const current = labels[writingStyleSelected] || "";
+      select.options[0].textContent = current
+        ? "계정 기본 스타일 사용 (현재: " + current + ")"
+        : "계정 기본 스타일 사용";
+    }
+
     function renderWritingStyleCards(options) {
       const host = document.getElementById("writingStyleCards");
       if (!host) return;
@@ -12310,10 +12330,12 @@
           body: JSON.stringify({ style: styleKey }),
         });
         setWritingStyleStatus("저장됨");
+        updateYeriStyleDefaultOption();
       } catch (error) {
         writingStyleSelected = previous;
         renderWritingStyleCards(options);
         setWritingStyleStatus("저장 실패");
+        updateYeriStyleDefaultOption();
       }
     }
 
@@ -12325,6 +12347,7 @@
         writingStyleSelected = data.style || "";
         renderWritingStyleCards(data.options || []);
         setWritingStyleStatus(writingStyleSelected ? "저장됨" : "고르지 않음");
+        updateYeriStyleDefaultOption();
       } catch (error) {
         setWritingStyleStatus("불러오지 못함");
       }
@@ -14182,9 +14205,11 @@
           return;
         }
         const mode = $("#yeriMode")?.value || "publish";
+        const perJobStyle = $("#yeriStyleSelect")?.value || "";
         await createJob("yeri_write", {
           keywords,
           mode,
+          ...(perJobStyle ? { style_id: perJobStyle } : {}),
           ai_model: normalizeAiModel($("#yeriAiModel")?.value || selectedAiModel()),
           image_model: normalizeImageModel($("#yeriImageModel")?.value || selectedYeriImageModel()),
           word_count: Number($("#yeriWordCount")?.value || 1500),
