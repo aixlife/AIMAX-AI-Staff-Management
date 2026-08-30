@@ -5,6 +5,8 @@ interface TaskCardProps {
   task: Task;
   employee?: Employee;
   active?: boolean;
+  /** 방금 만든 업무를 몇 초간 강조 표시합니다. */
+  highlighted?: boolean;
   onSelect: (taskId: string) => void;
 }
 
@@ -12,17 +14,25 @@ export function TaskCard({
   task,
   employee,
   active = false,
+  highlighted = false,
   onSelect,
 }: TaskCardProps) {
   return (
     <button
-      className={"task-card" + (active ? " is-active" : "")}
+      className={
+        "task-card" +
+        (active ? " is-active" : "") +
+        (highlighted ? " task-card--just-created" : "")
+      }
       type="button"
       aria-pressed={active}
       onClick={() => onSelect(task.id)}
     >
       <span className="task-card__topline">
         <span>{employee?.name || "알 수 없는 직원"}</span>
+        {highlighted ? (
+          <span className="task-card__new-flag">방금 만든 업무</span>
+        ) : null}
         <TaskStatusBadge task={task} />
       </span>
       <strong>{task.title}</strong>

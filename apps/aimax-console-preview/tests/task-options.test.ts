@@ -11,6 +11,7 @@ import {
   buildDefaultOptionValues,
   computeQuoteTotals,
   countInputControls,
+  fieldVisible,
   getTaskOptions,
 } from "../src/data/taskOptions.ts";
 
@@ -210,8 +211,10 @@ test("yeri style template cards carry toggleable examples", () => {
 });
 
 test("2026-08 writing model lineup is mirrored with prices for yeri and yunmi", () => {
+  // Gemini 3.7 Flash는 2026-08-13 출시 신형(12/31까지 인트로가 0.75/3.75).
   const expectedPrices: Record<string, [number, number]> = {
     "gemini-3.5-flash": [1.5, 9.0],
+    "gemini-3.7-flash": [0.75, 3.75],
     "gpt-5.6-terra": [2.0, 12.0],
     "claude-sonnet-5": [3.0, 15.0],
     "gpt-5.6-sol": [4.0, 20.0],
@@ -240,12 +243,154 @@ test("2026-08 writing model lineup is mirrored with prices for yeri and yunmi", 
       Object.keys(expectedPrices),
       employeeId + " 모델 선택지가 라인업과 다릅니다",
     );
+    // 추천·기본값은 Gemini 3.5 Flash 유지 (변경은 카운슬 결정 대기).
     assert.equal(modelField.defaultValue, "gemini-3.5-flash");
     assert.match(modelField.choices[0].label, /추천/);
     for (const choice of modelField.choices) {
       assert.ok(choice.hint, choice.label + " 모델 설명 한 줄이 없습니다");
     }
+    const fresh = modelField.choices.find(
+      (choice) => choice.value === "gemini-3.7-flash",
+    );
+    assert.ok(fresh, employeeId + "에 Gemini 3.7 Flash가 없습니다");
+    assert.match(fresh.label, /신형/);
+    assert.doesNotMatch(fresh.label, /추천/);
+    assert.match(fresh.hint || "", /인트로가/);
   }
+});
+
+test("yeri publish mode mirrors live label order but defaults to draft save", () => {
+  const yeri = getTaskOptions("yeri");
+  assert.ok(yeri);
+  const mode = allFields(yeri).find((field) => field.id === "mode");
+  assert.ok(mode && mode.kind === "select");
+  assert.deepEqual(
+    mode.choices.map((choice) => [choice.value, choice.label]),
+    [
+      ["publish", "즉시 발행"],
+      ["save", "임시 저장"],
+      ["schedule", "예약 발행"],
+    ],
+    "발행 방식 옵션 순서·라벨은 실서비스 미러여야 합니다",
+  );
+  assert.equal(mode.defaultValue, "save");
+});
+
+test("yeri image models show per-image won prices and recommend gpt-image-2", () => {
+  const yeri = getTaskOptions("yeri");
+  assert.ok(yeri);
+  const imageModel = allFields(yeri).find((field) => field.id === "imageModel");
+  assert.ok(imageModel && imageModel.kind === "select");
+  // 실서비스 USD 단가 × 환율 1476, Math.ceil 기준 장당 원화.
+  const expectedWon: Record<string, string> = {
+    "gpt-image-1": "62원",
+    "gpt-image-2": "79원",
+    "gemini-2.5-flash-image": "58원",
+    "gemini-3.1-flash-image": "99원",
+    "gemini-3-pro-image": "198원",
+  };
+  assert.deepEqual(
+    imageModel.choices.map((choice) => choice.value),
+    Object.keys(expectedWon),
+  );
+  for (const choice of imageModel.choices) {
+    assert.match(
+      choice.label,
+      new RegExp("장당 약 " + expectedWon[choice.value]),
+      choice.value + " 장당 원화 표기가 없습니다",
+    );
+  }
+  const recommended = imageModel.choices.find(
+    (choice) => choice.value === "gpt-image-2",
+  );
+  assert.ok(recommended);
+  assert.match(recommended.label, /추천/);
+  assert.match(recommended.hint || "", /한글/);
+  assert.match(recommended.hint || "", /2026-08-18/);
+  assert.equal(
+    imageModel.choices.filter((choice) => /추천/.test(choice.label)).length,
+    1,
+    "이미지 모델 추천 배지는 gpt-image-2 하나여야 합니다",
+  );
+  // 기본값 변경은 지시에 없어 기존값을 유지합니다.
+  assert.equal(imageModel.defaultValue, "gpt-image-1");
+});
+
+test("yeri CTA fields show only for consult-style templates and keep values", () => {
+  const yeri = getTaskOptions("yeri");
+  assert.ok(yeri);
+  const fields = allFields(yeri);
+  const values = buildDefaultOptionValues(yeri);
+  values.ctaLink = "smartstore 상담 예약 페이지 주소";
+  values.ctaText = "상담 신청하기";
+
+  for (const id of ["ctaLink", "ctaText"]) {
+    const field = fields.find((candidate) => candidate.id === id);
+    assert.ok(field, id + " 필드가 없습니다");
+    assert.equal(
+      fieldVisible(field, { ...values, template: "consult" }),
+      true,
+      id + "는 상담 유도형에서 보여야 합니다",
+    );
+    assert.equal(
+      fieldVisible(field, { ...values, template: "account-default" }),
+      true,
+      id + "는 계정 기본 스타일에서 보여야 합니다 (무엇이 올지 모르므로)",
+    );
+    for (const template of ["info", "review"]) {
+      assert.equal(
+        fieldVisible(field, { ...values, template }),
+        false,
+        id + "는 " + template + " 템플릿에서 숨겨져야 합니다",
+      );
+    }
+  }
+  // 숨김은 표시만 제어하고 입력값은 보존됩니다.
+  assert.equal(values.ctaLink, "smartstore 상담 예약 페이지 주소");
+  assert.equal(values.ctaText, "상담 신청하기");
+});
+
+test("no visible field label duplicates its section title", () => {
+  for (const employeeId of ["yeri", "hyunju", "yunmi", "sangsu"]) {
+    const config = getTaskOptions(employeeId);
+    assert.ok(config, employeeId + " 옵션 폼이 없습니다");
+    for (const section of config.sections) {
+      for (const field of section.fields) {
+        if (field.hideLabel) continue;
+        assert.notEqual(
+          field.label,
+          section.title,
+          employeeId +
+            " '" +
+            section.title +
+            "' 섹션 제목과 필드 라벨이 중복됩니다",
+        );
+      }
+    }
+  }
+  const hyunju = getTaskOptions("hyunju");
+  assert.ok(hyunju);
+  const messages = allFields(hyunju).find((field) => field.id === "messages");
+  assert.ok(messages && messages.kind === "textList");
+  assert.equal(messages.hideLabel, true);
+});
+
+test("hyunju restores the draft-message button as a fixture", () => {
+  const hyunju = getTaskOptions("hyunju");
+  assert.ok(hyunju);
+  const messages = allFields(hyunju).find((field) => field.id === "messages");
+  assert.ok(messages && messages.kind === "textList");
+  assert.ok(messages.draftFill, "멘트 초안 만들기 픽스처 구성이 없습니다");
+  assert.equal(messages.draftFill.buttonLabel, "멘트 초안 만들기");
+  assert.equal(messages.draftFill.drafts.length, 3);
+  for (const draft of messages.draftFill.drafts) {
+    assert.match(draft, /서로이웃/);
+  }
+  assert.match(messages.draftFill.notice, /실서비스에서는 AI가/);
+
+  const fieldsSource = read("src/components/TaskOptionFields.tsx");
+  assert.match(fieldsSource, /draftFill/);
+  assert.match(fieldsSource, /field-action-row/);
 });
 
 test("yeri schedule area shows only for reserved publishing with naver 30-minute slots", () => {

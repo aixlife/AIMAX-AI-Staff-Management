@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { fieldVisible } from "../data/taskOptions";
 import type {
   ItemRow,
   OptionValue,
@@ -99,11 +100,7 @@ export function TaskOptionFields({
   onChange,
   idPrefix,
 }: TaskOptionFieldsProps) {
-  const visibleFields = fields.filter(
-    (field) =>
-      !field.visibleWhen ||
-      values[field.visibleWhen.fieldId] === field.visibleWhen.equals,
-  );
+  const visibleFields = fields.filter((field) => fieldVisible(field, values));
 
   return (
     <>
@@ -343,7 +340,9 @@ export function TaskOptionFields({
           };
           return (
             <div className="field" key={field.id}>
-              <span className="field-label-text">{field.label}</span>
+              {field.hideLabel ? null : (
+                <span className="field-label-text">{field.label}</span>
+              )}
               <div className="text-list" role="group" aria-label={field.label}>
                 {entries.map((entry, index) => (
                   <div className="text-list__row" key={index}>
@@ -375,13 +374,29 @@ export function TaskOptionFields({
                   </div>
                 ))}
               </div>
-              <button
-                className="button button--secondary button--small"
-                type="button"
-                onClick={() => onChange(field.id, [...entries, ""])}
-              >
-                {field.addLabel}
-              </button>
+              <div className="field-action-row">
+                {field.draftFill ? (
+                  <button
+                    className="button button--secondary button--small"
+                    type="button"
+                    onClick={() =>
+                      onChange(field.id, [...(field.draftFill?.drafts || [])])
+                    }
+                  >
+                    {field.draftFill.buttonLabel}
+                  </button>
+                ) : null}
+                <button
+                  className="button button--secondary button--small"
+                  type="button"
+                  onClick={() => onChange(field.id, [...entries, ""])}
+                >
+                  {field.addLabel}
+                </button>
+              </div>
+              {field.draftFill ? (
+                <span className="field-hint">{field.draftFill.notice}</span>
+              ) : null}
               {field.hint ? (
                 <span className="field-hint">{field.hint}</span>
               ) : null}

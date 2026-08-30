@@ -139,6 +139,38 @@ test("landing keeps one task-to-result-to-team story with accessible motion", ()
   assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ["react", "react-dom"]);
 });
 
+test("creating a task lands on the work page with the new task highlighted", () => {
+  const app = read("src/App.tsx");
+  assert.match(app, /setHighlightTaskId\(taskId\)/);
+  assert.match(app, /navigate\("work"\)/);
+  assert.match(app, /highlightTaskId=\{highlightTaskId\}/);
+  // 강조는 수 초 뒤 자동 해제됩니다.
+  assert.match(app, /setHighlightTaskId\(undefined\), 4000/);
+
+  const card = read("src/components/TaskCard.tsx");
+  assert.match(card, /task-card--just-created/);
+  assert.match(card, /방금 만든 업무/);
+
+  const styles = read("src/styles/pages.css");
+  assert.match(styles, /\.task-card--just-created/);
+});
+
+test("done tasks expose preview and download actions for every employee", () => {
+  const work = read("src/pages/WorkPage.tsx");
+  assert.match(work, /미리보기/);
+  assert.match(work, /다운로드/);
+  assert.match(work, /downloadDeliverable/);
+  assert.match(work, /DeliverableDialog/);
+
+  const lib = read("src/lib/deliverableFile.ts");
+  assert.match(lib, /URL\.createObjectURL/);
+  assert.match(lib, /deliverableToText/);
+
+  // 상수만 제출 버튼명이 견적서 생성하기이고, 다른 직원은 유지됩니다.
+  const dialog = read("src/components/NewTaskDialog.tsx");
+  assert.match(dialog, /isQuote \? "견적서 생성하기" : "로컬 업무 만들기"/);
+});
+
 test("shared dialogs restore focus and trap keyboard navigation", () => {
   const modal = read("src/components/Modal.tsx");
   assert.match(modal, /previous\?\.focus\(\)/);

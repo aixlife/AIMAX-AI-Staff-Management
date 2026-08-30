@@ -7,11 +7,14 @@ import { StatusBadge, TaskStatusBadge } from "../components/StatusBadge";
 import { TaskCard } from "../components/TaskCard";
 import { TaskTimeline } from "../components/TaskTimeline";
 import { getSampleDeliverable } from "../data/sampleDeliverables";
+import { downloadDeliverable } from "../lib/deliverableFile";
 import type { FixtureSet, TaskStatus } from "../types";
 
 interface WorkPageProps {
   fixture: FixtureSet;
   selectedTaskId?: string;
+  /** 방금 만든 업무를 목록 맨 위에서 잠시 강조하기 위한 ID */
+  highlightTaskId?: string;
   onSelectTask: (taskId: string) => void;
   onConfirmTask: (taskId: string) => void;
   onOpenConnections: () => void;
@@ -31,6 +34,7 @@ const filters: Array<{ value: TaskFilter; label: string }> = [
 export function WorkPage({
   fixture,
   selectedTaskId,
+  highlightTaskId,
   onSelectTask,
   onConfirmTask,
   onOpenConnections,
@@ -106,6 +110,7 @@ export function WorkPage({
                   (item) => item.id === task.employeeId,
                 )}
                 active={task.id === selected?.id}
+                highlighted={task.id === highlightTaskId}
                 onSelect={onSelectTask}
               />
             ))
@@ -261,7 +266,25 @@ export function WorkPage({
                         );
                       }}
                     >
-                      결과 열기
+                      미리보기
+                    </button>
+                    <button
+                      className="button button--secondary"
+                      type="button"
+                      onClick={() => {
+                        if (deliverable) {
+                          downloadDeliverable(deliverable, employee);
+                          onPreviewNotice(
+                            "샘플 결과를 텍스트 파일로 내려받았습니다. 실서비스에서는 실제 업무 결과 파일이 저장됩니다.",
+                          );
+                          return;
+                        }
+                        onPreviewNotice(
+                          "이 직원의 샘플 결과는 준비 중이라 내려받을 파일이 없습니다.",
+                        );
+                      }}
+                    >
+                      다운로드
                     </button>
                     <button
                       className="button button--secondary"

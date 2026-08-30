@@ -460,7 +460,7 @@ export function NewTaskDialog({
             type="submit"
             disabled={!canSubmit}
           >
-            로컬 업무 만들기
+            {isQuote ? "견적서 생성하기" : "로컬 업무 만들기"}
           </button>
         </div>
         </div>

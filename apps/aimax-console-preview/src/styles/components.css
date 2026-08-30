@@ -2204,3 +2204,10 @@
     display: none;
   }
 }
+
+/* textList 하단 버튼 줄: 멘트 초안 만들기 + 멘트 칸 추가를 나란히 배치 */
+.field-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

@@ -43,6 +43,8 @@ export function App() {
     fixture.tasks[0]?.id,
   );
   const [newTaskEmployee, setNewTaskEmployee] = useState<Employee | undefined>();
+  /** 방금 만든 업무를 업무 페이지 목록 맨 위에서 잠시 강조하기 위한 ID */
+  const [highlightTaskId, setHighlightTaskId] = useState<string | undefined>();
   const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
   const [taskFromPicker, setTaskFromPicker] = useState(false);
   const [resumeEmployee, setResumeEmployee] = useState<Employee | undefined>();
@@ -62,6 +64,7 @@ export function App() {
     setTasks(fixture.tasks);
     setSelectedEmployeeId(fixture.employees[0]?.id);
     setSelectedTaskId(fixture.tasks[0]?.id);
+    setHighlightTaskId(undefined);
     setNewTaskEmployee(undefined);
     setEmployeePickerOpen(false);
     setTaskFromPicker(false);
@@ -72,6 +75,13 @@ export function App() {
     const timer = window.setTimeout(() => setToast(null), 3600);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  /** 생성 직후 강조는 수 초만 유지하고 자동 해제합니다. */
+  useEffect(() => {
+    if (!highlightTaskId) return;
+    const timer = window.setTimeout(() => setHighlightTaskId(undefined), 4000);
+    return () => window.clearTimeout(timer);
+  }, [highlightTaskId]);
 
   const runtimeFixture = useMemo(
     () => ({
@@ -189,6 +199,7 @@ export function App() {
     };
     setTasks((current) => [task, ...current]);
     setSelectedTaskId(taskId);
+    setHighlightTaskId(taskId);
     setNewTaskEmployee(undefined);
     setTaskFromPicker(false);
     navigate("work");
@@ -246,6 +257,7 @@ export function App() {
         <WorkPage
           fixture={runtimeFixture}
           selectedTaskId={selectedTaskId}
+          highlightTaskId={highlightTaskId}
           onSelectTask={setSelectedTaskId}
           onConfirmTask={confirmTask}
           onOpenConnections={() => navigate("connections")}

@@ -17,6 +17,15 @@
  * 환율 USD_KRW_RATE(1476원)와 토큰 추정식은 기존 그대로입니다.
  * 예약 발행 시각은 네이버 예약 발행과 동일하게 30분 단위만 고를 수 있게
  * 시(select)·분(00/30 select)으로 제공합니다 (2026-08 웹 실측).
+ *
+ * 2026-08-31 CEO 지시 반영:
+ * - 예리 발행 방식 기본값은 임시 저장(save)입니다 (옵션 순서·라벨은 실서비스 미러).
+ * - 글쓰기 모델에 Gemini 3.7 Flash(신형, 12/31까지 인트로가)를 추가했습니다.
+ *   추천·기본값은 Gemini 3.5 Flash를 유지합니다 (변경은 카운슬 결정 대기).
+ * - 이미지 모델은 실서비스 단가를 장당 원화(환율 1476)로 표기하고
+ *   gpt-image-2를 추천합니다 (이미지 속 한글 유일 지원, 2026-08-18 실측).
+ * - CTA 링크·문구는 상담 유도형/계정 기본 스타일에서만 노출합니다 (값 보존).
+ * - 섹션 제목과 같은 필드 라벨 중복은 hideLabel로 제거했습니다 (현주 멘트).
  */
 
 export interface OptionChoice {
@@ -47,8 +56,10 @@ interface BaseField {
   id: string;
   label: string;
   hint?: string;
-  /** 실서비스처럼 다른 값 선택 시에만 노출되는 항목 */
-  visibleWhen?: { fieldId: string; equals: string };
+  /** 실서비스처럼 다른 값 선택 시에만 노출되는 항목 (equals 또는 oneOf 하나만 사용) */
+  visibleWhen?: { fieldId: string; equals?: string; oneOf?: string[] };
+  /** 섹션 제목과 라벨이 같을 때 화면 라벨만 숨깁니다 (aria-label은 유지) */
+  hideLabel?: boolean;
 }
 
 export type TaskOptionField =
@@ -95,6 +106,12 @@ export type TaskOptionField =
       addLabel: string;
       placeholder?: string;
       defaultValues: string[];
+      /** 픽스처 초안 채우기 버튼 (실서비스 AI 생성 버튼의 프리뷰 대응) */
+      draftFill?: {
+        buttonLabel: string;
+        notice: string;
+        drafts: string[];
+      };
     })
   | (BaseField & {
       kind: "itemTable";
@@ -142,6 +159,8 @@ interface TextModelPrice {
 /** 2026-08 글쓰기 모델 라인업. GPT-5.6 Sol은 2026-08-22 인하가 기준. */
 export const AI_MODEL_PRICES: Record<string, TextModelPrice> = {
   "gemini-3.5-flash": { inputUsdPer1m: 1.5, outputUsdPer1m: 9.0, label: "Gemini 3.5 Flash" },
+  // 2026-08-13 출시 신형. 12/31까지 인트로가 $0.75/$3.75가 적용됩니다.
+  "gemini-3.7-flash": { inputUsdPer1m: 0.75, outputUsdPer1m: 3.75, label: "Gemini 3.7 Flash" },
   "gpt-5.6-terra": { inputUsdPer1m: 2.0, outputUsdPer1m: 12.0, label: "GPT-5.6 Terra" },
   "claude-sonnet-5": { inputUsdPer1m: 3.0, outputUsdPer1m: 15.0, label: "Claude Sonnet 5" },
   "gpt-5.6-sol": { inputUsdPer1m: 4.0, outputUsdPer1m: 20.0, label: "GPT-5.6 Sol" },
@@ -224,9 +243,18 @@ export function buildDefaultOptionValues(
   return values;
 }
 
-function fieldVisible(field: TaskOptionField, values: OptionValues): boolean {
+export function fieldVisible(
+  field: TaskOptionField,
+  values: OptionValues,
+): boolean {
   if (!field.visibleWhen) return true;
-  return values[field.visibleWhen.fieldId] === field.visibleWhen.equals;
+  const current = values[field.visibleWhen.fieldId];
+  if (field.visibleWhen.oneOf) {
+    return (
+      typeof current === "string" && field.visibleWhen.oneOf.includes(current)
+    );
+  }
+  return current === field.visibleWhen.equals;
 }
 
 export function missingRequiredLabels(
@@ -292,6 +320,11 @@ const WRITE_MODEL_CHOICES: OptionChoice[] = [
     hint: "품질·속도·비용 균형이 가장 좋아 기본값으로 권장합니다.",
   },
   {
+    value: "gemini-3.7-flash",
+    label: "Gemini 3.7 Flash (신형)",
+    hint: "2026-08-13 출시 신형입니다. 12/31까지 인트로가 $0.75/$3.75 (1M 토큰 기준)가 적용됩니다.",
+  },
+  {
     value: "gpt-5.6-terra",
     label: "GPT-5.6 Terra",
     hint: "품질이 안정적인 중간 단가 모델로 일반 글에 무난합니다.",
@@ -328,12 +361,34 @@ const SCHEDULE_MINUTE_CHOICES: OptionChoice[] = [
   { value: "30", label: "30분" },
 ];
 
+/** 실서비스 단가를 장당 원화(환율 1476원/USD)로 환산해 표기합니다. */
+function imageModelChoiceLabel(value: string, badge?: string): string {
+  const price = IMAGE_MODEL_PRICES[value];
+  const perImageWon = wonLabel(wonFromUsd(price.perImageUsd));
+  return (
+    price.label + (badge ? " (" + badge + ")" : "") + " · 장당 약 " + perImageWon
+  );
+}
+
 const IMAGE_MODEL_CHOICES: OptionChoice[] = [
-  { value: "gpt-image-1", label: "OpenAI gpt-image-1" },
-  { value: "gpt-image-2", label: "OpenAI gpt-image-2" },
-  { value: "gemini-2.5-flash-image", label: "Gemini Nano Banana" },
-  { value: "gemini-3.1-flash-image", label: "Gemini Nano Banana 2" },
-  { value: "gemini-3-pro-image", label: "Gemini Nano Banana Pro" },
+  { value: "gpt-image-1", label: imageModelChoiceLabel("gpt-image-1") },
+  {
+    value: "gpt-image-2",
+    label: imageModelChoiceLabel("gpt-image-2", "추천"),
+    hint: "이미지 속 한글을 깨지 않고 넣을 수 있는 유일한 모델입니다 (2026-08-18 실측, 다른 모델은 한글이 깨집니다).",
+  },
+  {
+    value: "gemini-2.5-flash-image",
+    label: imageModelChoiceLabel("gemini-2.5-flash-image"),
+  },
+  {
+    value: "gemini-3.1-flash-image",
+    label: imageModelChoiceLabel("gemini-3.1-flash-image"),
+  },
+  {
+    value: "gemini-3-pro-image",
+    label: imageModelChoiceLabel("gemini-3-pro-image"),
+  },
 ];
 
 const yeriOptions: EmployeeTaskOptions = {
@@ -433,7 +488,8 @@ const yeriOptions: EmployeeTaskOptions = {
             { value: "save", label: "임시 저장" },
             { value: "schedule", label: "예약 발행" },
           ],
-          defaultValue: "publish",
+          // 옵션 순서·라벨은 실서비스 미러, 기본값만 임시 저장 (실서비스 UX 관례).
+          defaultValue: "save",
         },
         {
           kind: "date",
@@ -516,8 +572,27 @@ const yeriOptions: EmployeeTaskOptions = {
           label: "카테고리",
           placeholder: "선택",
         },
-        { kind: "text", id: "ctaLink", label: "CTA 링크", placeholder: "선택" },
-        { kind: "text", id: "ctaText", label: "CTA 문구", placeholder: "선택" },
+        {
+          kind: "text",
+          id: "ctaLink",
+          label: "CTA 링크",
+          placeholder: "선택",
+          visibleWhen: {
+            fieldId: "template",
+            oneOf: ["account-default", "consult"],
+          },
+        },
+        {
+          kind: "text",
+          id: "ctaText",
+          label: "CTA 문구",
+          placeholder: "선택",
+          hint: "상담 유도형·계정 기본 스타일에서만 표시됩니다. 다른 템플릿으로 바꿔도 입력값은 보존됩니다.",
+          visibleWhen: {
+            fieldId: "template",
+            oneOf: ["account-default", "consult"],
+          },
+        },
       ],
     },
     {
@@ -670,16 +745,29 @@ const hyunjuOptions: EmployeeTaskOptions = {
       ],
     },
     {
+      // 섹션 제목과 필드 라벨이 같아 화면 라벨은 숨깁니다 (중복 라벨 제거).
       title: "서로이웃 신청 멘트",
       fields: [
         {
           kind: "textList",
           id: "messages",
           label: "서로이웃 신청 멘트",
+          hideLabel: true,
           addLabel: "멘트 칸 추가",
           placeholder:
             "한 줄에 하나씩 입력합니다. 비워두면 로컬 앱에 저장된 멘트를 사용합니다.",
           defaultValues: [""],
+          // 실서비스 설정 탭 generateNeighborMessagesBtn(AI 생성) 미러.
+          draftFill: {
+            buttonLabel: "멘트 초안 만들기",
+            notice:
+              "실서비스에서는 AI가 계정 소개를 바탕으로 멘트 초안을 생성합니다. 프리뷰에서는 준비된 픽스처 멘트 3종을 채웁니다.",
+            drafts: [
+              "안녕하세요. 블로그 글이 좋아서 들렀습니다. 앞으로 자주 소통하고 싶어 서로이웃 신청드립니다.",
+              "안녕하세요. 좋은 글을 꾸준히 보고 싶어서 서로이웃 신청드립니다. 자주 들러 인사드릴게요.",
+              "글 잘 보고 갑니다. 비슷한 관심사로 블로그를 운영하고 있어 서로이웃으로 소통하고 싶습니다.",
+            ],
+          },
         },
       ],
     },
