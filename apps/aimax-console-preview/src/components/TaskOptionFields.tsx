@@ -224,6 +224,9 @@ export function TaskOptionFields({
           const value = typeof values[field.id] === "string"
             ? (values[field.id] as string)
             : field.defaultValue;
+          const selectedChoice = field.choices.find(
+            (choice) => choice.value === value,
+          );
           return (
             <div className="field" key={field.id}>
               <label htmlFor={fieldId}>{field.label}</label>
@@ -238,6 +241,11 @@ export function TaskOptionFields({
                   </option>
                 ))}
               </select>
+              {selectedChoice?.hint ? (
+                <span className="field-hint field-hint--choice">
+                  {selectedChoice.hint}
+                </span>
+              ) : null}
               {field.hint ? (
                 <span className="field-hint">{field.hint}</span>
               ) : null}

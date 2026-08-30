@@ -290,26 +290,50 @@ export function NewTaskDialog({
 
         {optionConfig ? (
           <>
-            {optionConfig.sections.map((section) => (
-              <section
-                className="option-group"
-                aria-label={section.title}
-                key={section.title}
-              >
-                <header className="option-group__head">
-                  <strong>{section.title}</strong>
-                </header>
-                {section.description ? (
-                  <p className="option-group__desc">{section.description}</p>
-                ) : null}
-                <TaskOptionFields
-                  fields={section.fields}
-                  values={optionValues}
-                  onChange={setOption}
-                  idPrefix={"opt-" + employee.id}
-                />
-              </section>
-            ))}
+            {optionConfig.sections.map((section) =>
+              section.advanced ? (
+                <details
+                  className="option-group option-group--advanced"
+                  key={section.title}
+                >
+                  <summary className="option-group__summary">
+                    <strong>{section.title}</strong>
+                    <span
+                      className="option-group__toggle-hint"
+                      aria-hidden="true"
+                    />
+                  </summary>
+                  {section.description ? (
+                    <p className="option-group__desc">{section.description}</p>
+                  ) : null}
+                  <TaskOptionFields
+                    fields={section.fields}
+                    values={optionValues}
+                    onChange={setOption}
+                    idPrefix={"opt-" + employee.id}
+                  />
+                </details>
+              ) : (
+                <section
+                  className="option-group"
+                  aria-label={section.title}
+                  key={section.title}
+                >
+                  <header className="option-group__head">
+                    <strong>{section.title}</strong>
+                  </header>
+                  {section.description ? (
+                    <p className="option-group__desc">{section.description}</p>
+                  ) : null}
+                  <TaskOptionFields
+                    fields={section.fields}
+                    values={optionValues}
+                    onChange={setOption}
+                    idPrefix={"opt-" + employee.id}
+                  />
+                </section>
+              ),
+            )}
 
             {costEstimate ? (
               <section

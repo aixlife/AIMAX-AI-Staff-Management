@@ -2053,3 +2053,40 @@
   line-height: 1.7;
   word-break: keep-all;
 }
+
+/* --- 업무 맡기기: 고급 설정 토글 (details, 유일하게 접히는 그룹) --- */
+
+.option-group--advanced > .option-group__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  cursor: pointer;
+  list-style: none;
+  word-break: keep-all;
+}
+
+.option-group--advanced > .option-group__summary::-webkit-details-marker {
+  display: none;
+}
+
+.option-group--advanced > .option-group__summary strong {
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.option-group__toggle-hint::after {
+  content: "눌러서 펼치기";
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.option-group--advanced[open] > .option-group__summary .option-group__toggle-hint::after {
+  content: "눌러서 접기";
+}
+
+.field-hint--choice {
+  color: var(--color-ink-soft);
+  font-weight: 700;
+}

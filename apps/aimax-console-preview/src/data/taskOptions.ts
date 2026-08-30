@@ -7,10 +7,13 @@
  * - 현주: app.html hyunjuJobForm (타겟 방식~신청 멘트, 6개 입력)
  * - 윤미: app.html yunmiJobForm (주제~레퍼런스 메모, 5개 입력)
  * - 상수: app.html sangsuJobForm (로고~작성일, 14개 입력)
- * 값은 전부 픽스처이며 어떤 항목도 축약·숨김(details) 처리하지 않습니다.
+ * 값은 전부 픽스처이며 어떤 항목도 삭제하지 않습니다. 예리 폼만
+ * 필수 / 자주 쓰는 설정 / 고급(토글 1개) 3단으로 재그룹했습니다.
  *
- * 단가·환율은 실서비스 app.html의 AI_MODEL_PRICES / IMAGE_MODEL_PRICES /
- * USD_KRW_RATE(1476원, 2026-06-24 확인분)를 그대로 옮긴 값입니다.
+ * 글쓰기 모델·단가는 2026-08 라인업(아래 AI_MODEL_PRICES)으로 교체했고,
+ * 환율 USD_KRW_RATE(1476원)와 토큰 추정식은 기존 그대로입니다.
+ * 예약 발행 시각은 네이버 예약 발행과 동일하게 30분 단위만 고를 수 있게
+ * 시(select)·분(00/30 select)으로 제공합니다 (2026-08 웹 실측).
  */
 
 export interface OptionChoice {
@@ -99,6 +102,8 @@ export type TaskOptionField =
 export interface OptionSection {
   title: string;
   description?: string;
+  /** true면 다이얼로그에서 접힌 토글(고급 설정)로 렌더링합니다. */
+  advanced?: boolean;
   fields: TaskOptionField[];
 }
 
@@ -123,7 +128,7 @@ export interface EmployeeTaskOptions {
 /* ------------------------------------------------------------------ */
 
 export const USD_KRW_RATE = 1476;
-export const USD_KRW_RATE_LABEL = "실서비스 2026-06-24 단가표 기준";
+export const USD_KRW_RATE_LABEL = "2026-08 글쓰기 모델 단가표 기준";
 
 interface TextModelPrice {
   inputUsdPer1m: number;
@@ -131,14 +136,13 @@ interface TextModelPrice {
   label: string;
 }
 
+/** 2026-08 글쓰기 모델 라인업. GPT-5.6 Sol은 2026-08-22 인하가 기준. */
 export const AI_MODEL_PRICES: Record<string, TextModelPrice> = {
-  "gemini-2.5-flash": { inputUsdPer1m: 0.3, outputUsdPer1m: 2.5, label: "Gemini 2.5 Flash" },
   "gemini-3.5-flash": { inputUsdPer1m: 1.5, outputUsdPer1m: 9.0, label: "Gemini 3.5 Flash" },
-  "gemini-3.1-pro-preview": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.0, label: "Gemini 3.1 Pro Preview" },
-  "gemini-2.5-pro": { inputUsdPer1m: 1.25, outputUsdPer1m: 10.0, label: "Gemini 2.5 Pro" },
-  "gpt-5.4-mini": { inputUsdPer1m: 0.75, outputUsdPer1m: 4.5, label: "GPT-5.4 mini" },
-  "gpt-5-mini": { inputUsdPer1m: 0.25, outputUsdPer1m: 2.0, label: "GPT-5 mini" },
-  claude: { inputUsdPer1m: 3.0, outputUsdPer1m: 15.0, label: "Claude Sonnet" },
+  "gpt-5.6-terra": { inputUsdPer1m: 2.0, outputUsdPer1m: 12.0, label: "GPT-5.6 Terra" },
+  "claude-sonnet-5": { inputUsdPer1m: 3.0, outputUsdPer1m: 15.0, label: "Claude Sonnet 5" },
+  "gpt-5.6-sol": { inputUsdPer1m: 4.0, outputUsdPer1m: 20.0, label: "GPT-5.6 Sol" },
+  "claude-haiku-4.5": { inputUsdPer1m: 1.0, outputUsdPer1m: 5.0, label: "Claude Haiku 4.5" },
 };
 
 export const IMAGE_MODEL_PRICES: Record<string, { perImageUsd: number; label: string }> = {
@@ -163,7 +167,7 @@ export function wonLabel(value: number): string {
 }
 
 function estimateTextCostWon(model: string, charCount: number) {
-  const price = AI_MODEL_PRICES[model] || AI_MODEL_PRICES["gemini-2.5-flash"];
+  const price = AI_MODEL_PRICES[model] || AI_MODEL_PRICES["gemini-3.5-flash"];
   const tokens = estimateTokens(charCount);
   const usd =
     (tokens.inputTokens / 1_000_000) * price.inputUsdPer1m +
@@ -279,12 +283,46 @@ function joinParts(parts: string[]): string {
 /* ------------------------------------------------------------------ */
 
 const WRITE_MODEL_CHOICES: OptionChoice[] = [
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (기본/무료 티어 가능)" },
-  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (고품질/유료)" },
-  { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview (유료/고급)" },
-  { value: "gpt-5.4-mini", label: "GPT-5.4 mini" },
-  { value: "gpt-5-mini", label: "GPT-5 mini" },
-  { value: "claude", label: "Claude" },
+  {
+    value: "gemini-3.5-flash",
+    label: "Gemini 3.5 Flash (추천)",
+    hint: "품질·속도·비용 균형이 가장 좋아 기본값으로 권장합니다.",
+  },
+  {
+    value: "gpt-5.6-terra",
+    label: "GPT-5.6 Terra",
+    hint: "품질이 안정적인 중간 단가 모델로 일반 글에 무난합니다.",
+  },
+  {
+    value: "claude-sonnet-5",
+    label: "Claude Sonnet 5",
+    hint: "문장 품질이 꾸준한 중상급 단가 모델입니다.",
+  },
+  {
+    value: "gpt-5.6-sol",
+    label: "GPT-5.6 Sol",
+    hint: "품질 최상급 대신 단가가 가장 높습니다 (2026-08-22 인하가 기준).",
+  },
+  {
+    value: "claude-haiku-4.5",
+    label: "Claude Haiku 4.5 (가벼운 글용)",
+    hint: "가장 저렴하고 빠른 모델로 짧고 가벼운 글에 맞습니다.",
+  },
+];
+
+/** 네이버 예약 발행 미러: 시각은 시 select + 분(00/30) select로만 선택합니다. */
+const SCHEDULE_HOUR_CHOICES: OptionChoice[] = Array.from(
+  { length: 24 },
+  (_, hour) => {
+    const meridiem = hour < 12 ? "오전" : "오후";
+    const display = hour % 12 === 0 ? 12 : hour % 12;
+    return { value: String(hour), label: meridiem + " " + display + "시" };
+  },
+);
+
+const SCHEDULE_MINUTE_CHOICES: OptionChoice[] = [
+  { value: "00", label: "00분" },
+  { value: "30", label: "30분" },
 ];
 
 const IMAGE_MODEL_CHOICES: OptionChoice[] = [
@@ -299,7 +337,8 @@ const yeriOptions: EmployeeTaskOptions = {
   employeeId: "yeri",
   sections: [
     {
-      title: "무엇을 쓸까요",
+      title: "필수 입력",
+      description: "이 두 가지만 정하면 바로 맡길 수 있습니다.",
       fields: [
         {
           kind: "text",
@@ -378,7 +417,9 @@ const yeriOptions: EmployeeTaskOptions = {
       ],
     },
     {
-      title: "발행·모델 설정",
+      title: "자주 쓰는 설정",
+      description:
+        "실사용률이 높은 항목만 항상 펼쳐 둡니다 (카테고리 44% · CTA 42%).",
       fields: [
         {
           kind: "select",
@@ -392,18 +433,45 @@ const yeriOptions: EmployeeTaskOptions = {
           defaultValue: "publish",
         },
         {
+          kind: "date",
+          id: "scheduleDate",
+          label: "예약 날짜",
+          visibleWhen: { fieldId: "mode", equals: "schedule" },
+        },
+        {
+          kind: "select",
+          id: "scheduleHour",
+          label: "예약 시간",
+          hint: "네이버 예약 발행과 동일하게 목록에서만 고를 수 있습니다.",
+          choices: SCHEDULE_HOUR_CHOICES,
+          defaultValue: "9",
+          visibleWhen: { fieldId: "mode", equals: "schedule" },
+        },
+        {
+          kind: "select",
+          id: "scheduleMinute",
+          label: "예약 분",
+          hint: "네이버는 30분 단위 예약만 지원해 00분·30분만 선택할 수 있습니다.",
+          choices: SCHEDULE_MINUTE_CHOICES,
+          defaultValue: "00",
+          visibleWhen: { fieldId: "mode", equals: "schedule" },
+        },
+        {
+          kind: "number",
+          id: "scheduleInterval",
+          label: "예약 간격",
+          min: 1,
+          max: 72,
+          defaultValue: "1",
+          hint: "키워드가 여러 개면 이 간격(시간)만큼 벌려 예약합니다.",
+          visibleWhen: { fieldId: "mode", equals: "schedule" },
+        },
+        {
           kind: "select",
           id: "aiModel",
           label: "글쓰기 모델",
           choices: WRITE_MODEL_CHOICES,
-          defaultValue: "gemini-2.5-flash",
-        },
-        {
-          kind: "select",
-          id: "imageModel",
-          label: "이미지 모델",
-          choices: IMAGE_MODEL_CHOICES,
-          defaultValue: "gpt-image-1",
+          defaultValue: "gemini-3.5-flash",
         },
         {
           kind: "select",
@@ -433,39 +501,27 @@ const yeriOptions: EmployeeTaskOptions = {
           defaultValue: "3",
         },
         {
+          kind: "select",
+          id: "imageModel",
+          label: "이미지 모델",
+          choices: IMAGE_MODEL_CHOICES,
+          defaultValue: "gpt-image-1",
+        },
+        {
           kind: "text",
           id: "category",
           label: "카테고리",
           placeholder: "선택",
-        },
-      ],
-    },
-    {
-      title: "예약·CTA",
-      fields: [
-        { kind: "date", id: "scheduleDate", label: "예약 날짜" },
-        {
-          kind: "number",
-          id: "scheduleHour",
-          label: "예약 시간",
-          min: 0,
-          max: 23,
-          placeholder: "0-23",
-        },
-        {
-          kind: "number",
-          id: "scheduleInterval",
-          label: "예약 간격",
-          min: 1,
-          max: 72,
-          defaultValue: "1",
         },
         { kind: "text", id: "ctaLink", label: "CTA 링크", placeholder: "선택" },
         { kind: "text", id: "ctaText", label: "CTA 문구", placeholder: "선택" },
       ],
     },
     {
-      title: "작성 품질 옵션",
+      title: "고급 설정",
+      description:
+        "SEO 참고자료·품질 체크, 기존 작성글 문체 참고(사용률 8%) 같은 세부 옵션입니다.",
+      advanced: true,
       fields: [
         {
           kind: "checkboxGroup",
@@ -507,7 +563,7 @@ const yeriOptions: EmployeeTaskOptions = {
     ]);
   },
   estimateCost: (values) => {
-    const model = text(values, "aiModel") || "gemini-2.5-flash";
+    const model = text(values, "aiModel") || "gemini-3.5-flash";
     const imageModel = text(values, "imageModel") || "gpt-image-1";
     const wordCount = Number(text(values, "wordCount")) || 1500;
     const imageCount = Number(text(values, "imageCount")) || 0;
@@ -516,7 +572,7 @@ const yeriOptions: EmployeeTaskOptions = {
       IMAGE_MODEL_PRICES[imageModel] || IMAGE_MODEL_PRICES["gpt-image-1"];
     const imageWon = wonFromUsd(imageCount * imagePrice.perImageUsd);
     const totalWon = textCost.won + imageWon;
-    const gptMini = estimateTextCostWon("gpt-5.4-mini", wordCount);
+    const haiku = estimateTextCostWon("claude-haiku-4.5", wordCount);
     return {
       headline: "예상 원가 약 " + wonLabel(totalWon),
       lines: [
@@ -532,7 +588,9 @@ const yeriOptions: EmployeeTaskOptions = {
           wonLabel(imageWon),
         "이미지 단가: 장당 약 " + wonLabel(wonFromUsd(imagePrice.perImageUsd)),
         "환율 " + USD_KRW_RATE.toLocaleString("ko-KR") + "원/USD",
-        "참고: GPT-5.4 mini 글 비용 " + wonLabel(gptMini.won) + " 수준",
+        "참고: 가벼운 글용 Claude Haiku 4.5 글 비용 " +
+          wonLabel(haiku.won) +
+          " 수준",
       ],
       basis: "live",
       basisLabel: USD_KRW_RATE_LABEL,
@@ -675,12 +733,8 @@ const hyunjuOptions: EmployeeTaskOptions = {
 /* 윤미 — app.html yunmiJobForm 5개 입력 미러                             */
 /* ------------------------------------------------------------------ */
 
-const YUNMI_MODEL_CHOICES: OptionChoice[] = [
-  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" },
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-];
+/** 윤미도 2026-08 글쓰기 모델 라인업을 그대로 씁니다 (폼 구조는 기존 유지). */
+const YUNMI_MODEL_CHOICES: OptionChoice[] = WRITE_MODEL_CHOICES;
 
 const yunmiOptions: EmployeeTaskOptions = {
   employeeId: "yunmi",
