@@ -12,6 +12,51 @@ function decodeBasicEntities(value) {
     .replace(/&#39;/g, "'");
 }
 
+// ---- AIMAX 명시 상품 코드 매핑 (2026-08-30) ----
+// 서버 server.js 의 CAFE24_STAFF_PRODUCT_RULES / CAFE24_NON_STAFF_PRODUCT_PATTERNS 사본.
+// 코드값·패턴·평가 순서를 서버와 정확히 일치시켜야 한다. 서버 규칙이 바뀌면 이 표도 같이 갱신할 것.
+// 매칭 실패(모르는 상품)나 비직원 상품이면 aimax_product 필드를 아예 넣지 않는다 — 서버 추론 폴백 유지.
+function normalizeAimaxProductText(value) {
+  return String(value || '').toLowerCase().replace(/\s+/g, '');
+}
+
+const AIMAX_NON_STAFF_PRODUCT_PATTERNS = [
+  /회원가입을하셨습니다|회원가입|입금처리가확인/,
+  /ai로직원만드는법|ai로직원만드는/,
+  /일본구매대행/,
+  /창업프로그램\d+기|aimax창업프로그램/,
+  /제2의뇌|제의뇌|나같이생각하는ai비서/,
+  /공동구매수익화/,
+  /사업자pt/,
+  /평생회원제/,
+  /무료배포판|무료배포/,
+  /전자책|스레드가이드북|컨셉의정석|ai에게시켰는데|내생각을영상으로만드는ai직원|노트한장에서유튜브업로드/,
+  /무료특강|무료웨비나|패밀리데이|8주클래스|무자본해외수출/,
+];
+
+// 서버 규칙과 같은 순서 — blog_team 이 예리/현주보다 먼저 평가돼야 한다.
+const AIMAX_PRODUCT_CODE_RULES = [
+  { code: 'blog_team', pattern: /블로그마케팅팀|블로그마케팅.*예리.*현주|예리.*현주|현주.*예리|blogteam|blog_team/ },
+  { code: 'yeri', pattern: /예리|yeri|블로그마케터/ },
+  { code: 'hyunju', pattern: /현주|hyunju|영업사원/ },
+  { code: 'songi', pattern: /송이|songi|자료조사|자료조사원|리서치|research/ },
+  { code: 'yunmi', pattern: /윤미|yunmi|스크립트작가|스크립트/ },
+  { code: 'jieun', pattern: /지은|jieun|오피스매니저|오피스지원|office/ },
+  { code: 'nakyung', pattern: /나경|nakyung|판서쌤|판서|pencil/ },
+  { code: 'maxalert', pattern: /맥스|maxalert|max_alert|알람앱/ },
+  { code: 'hyojin', pattern: /효진|hyojin|영상제작|아나운서/ },
+  { code: 'sangsu', pattern: /상수|sangsu|경리|견적|견적서|quote|quotation|estimate/ },
+  { code: 'bundle', pattern: /전체통합|통합권한|통합설치|bundle|올인원|allinone/ },
+];
+
+function mapAimaxProductCode(name) {
+  const normalized = normalizeAimaxProductText(name);
+  if (!normalized) return '';
+  if (AIMAX_NON_STAFF_PRODUCT_PATTERNS.some((pattern) => pattern.test(normalized))) return '';
+  const rule = AIMAX_PRODUCT_CODE_RULES.find((entry) => entry.pattern.test(normalized));
+  return rule ? rule.code : '';
+}
+
 // th 바로 다음 td 추출 (greedy 패턴 없이 정확하게)
 function extractCell(label, src) {
   const re = new RegExp('<th[^>]*>[^<]*' + label + '[^<]*<\\/th>\\s*<td[^>]*>([^<]+)', 'i');
@@ -120,9 +165,28 @@ function extractItems(src) {
 
 const partnerHint = extractPartnerHint(sourceText);
 const orderId = extractOrderId(sourceText);
-const items = extractItems(html);
 
-return [{json: {
+// 품목별 명시 코드: 매칭된 품목에만 aimax_product 를 붙인다 (실패 시 필드 없음).
+const items = extractItems(html).map((row) => {
+  const code = mapAimaxProductCode(row.name);
+  return code ? { ...row, aimax_product: code } : row;
+});
+
+// top-level 명시 코드는 주문 전체가 단일 코드로 확정될 때만 넣는다.
+// 서버 explicit 경로(buildCafe24Order)는 products 를 [코드] 하나로 고정하므로,
+// 다품목·복수 코드 주문에 top-level 을 보내면 나머지 상품 권한이 유실된다.
+const itemCodes = [];
+for (const row of items) {
+  if (row.aimax_product && !itemCodes.includes(row.aimax_product)) itemCodes.push(row.aimax_product);
+}
+let aimaxProduct = '';
+if (items.length) {
+  if (itemCodes.length === 1 && items.every((row) => row.aimax_product)) aimaxProduct = itemCodes[0];
+} else {
+  aimaxProduct = mapAimaxProductCode(product);
+}
+
+const output = {
   orderId,
   name,
   phone,
@@ -134,4 +198,7 @@ return [{json: {
   partnerUrl: partnerHint.partnerUrl,
   productNo: partnerHint.productNo,
   partnerRef: partnerHint.partnerRef
-}}];
+};
+if (aimaxProduct) output.aimax_product = aimaxProduct;
+
+return [{json: output}];
