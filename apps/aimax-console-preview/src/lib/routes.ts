@@ -1,5 +1,7 @@
 import type { AppRoute } from "../types";
 
+export type AppView = "landing" | AppRoute;
+
 export const routes: Array<{
   id: AppRoute;
   label: string;
@@ -45,12 +47,28 @@ export const routes: Array<{
 ];
 
 export function routeFromHash(hash: string): AppRoute {
-  const candidate = hash.replace(/^#\/?/, "").split(/[?&]/)[0];
+  const candidate = hash
+    .replace(/^#\/?/, "")
+    .replace(/^app\//, "")
+    .split(/[?&]/)[0];
   return routes.some((route) => route.id === candidate)
     ? (candidate as AppRoute)
     : "home";
 }
 
+export function viewFromHash(hash: string): AppView {
+  const candidate = hash.replace(/^#\/?/, "").split(/[?&]/)[0];
+  if (!candidate || candidate === "landing") return "landing";
+  const appRoute = candidate.replace(/^app\//, "");
+  return routes.some((route) => route.id === appRoute)
+    ? (appRoute as AppRoute)
+    : "landing";
+}
+
 export function routeHash(route: AppRoute): string {
-  return "#/" + route;
+  return "#/app/" + route;
+}
+
+export function landingHash(): string {
+  return "#/";
 }

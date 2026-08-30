@@ -4,6 +4,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { landingHash, routeHash, viewFromHash } from "../src/lib/routes.ts";
+
 const testsDir = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(testsDir, "..");
 
@@ -71,4 +73,77 @@ test("shell exposes skip navigation and current-page semantics", () => {
   assert.match(shell, /href="#main-content"/);
   assert.match(shell, /aria-current=/);
   assert.match(shell, /<main id="main-content"/);
+});
+
+test("the public landing is the default and console routes live below app", () => {
+  assert.equal(viewFromHash(""), "landing");
+  assert.equal(viewFromHash("#/"), "landing");
+  assert.equal(viewFromHash("#/app/home"), "home");
+  assert.equal(viewFromHash("#/app/employees"), "employees");
+  assert.equal(routeHash("work"), "#/app/work");
+  assert.equal(landingHash(), "#/");
+});
+
+test("landing removes public login and keeps employee identity primary", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const resume = read("src/components/ResumeDialog.tsx");
+
+  assert.doesNotMatch(landing, /public-login/);
+  assert.doesNotMatch(landing, /onLoginPreview/);
+  assert.match(landing, /설명보다/);
+  assert.match(landing, /일 하나/);
+  assert.match(landing, /업무 골라보기/);
+  assert.match(landing, /입사지원서 전체 보기/);
+  assert.match(landing, /운영실 체험/);
+  assert.match(landing, /가상의 AI 직원/);
+  assert.match(resume, /입 사 지 원 서/);
+  assert.match(resume, /인적사항/);
+  assert.match(resume, /자기소개/);
+  assert.match(resume, /경력사항/);
+  assert.match(resume, /보유기술/);
+  assert.match(resume, /추천사/);
+  assert.match(resume, /면접 메모/);
+});
+
+test("landing keeps one task-to-result-to-team story with accessible motion", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const styles = read("src/styles/landing.css");
+  const packageJson = JSON.parse(read("package.json")) as { dependencies: Record<string, string> };
+
+  assert.match(landing, /task-proof-card/);
+  assert.match(landing, /work-journey/);
+  assert.match(landing, /useState<TaskChoice\["id"\]>\("blog"\)/);
+  assert.match(landing, /employee\.id === "yeri"/);
+  assert.match(landing, /window\.setTimeout/);
+  assert.match(landing, /staff-lineup/);
+  assert.match(landing, /team-scroll-story/);
+  assert.match(landing, /syncEmployeeToScroll/);
+  assert.match(landing, /window\.addEventListener\("scroll"/);
+  assert.match(landing, /window\.requestAnimationFrame/);
+  assert.match(landing, /resume-preview-paper/);
+  assert.doesNotMatch(landing, /setInterval/);
+  assert.doesNotMatch(landing, /staff-orbit-stage/);
+  assert.doesNotMatch(landing, /team-arrival/);
+  assert.doesNotMatch(landing, /landing-employee-grid/);
+  assert.doesNotMatch(landing, /공식 출처 24개/);
+  assert.match(landing, /IntersectionObserver/);
+  assert.match(landing, /모션 끄기/);
+  assert.match(landing, /aria-live="polite"/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
+  assert.match(styles, /\.team-scroll-story__sticky/);
+  assert.match(styles, /position: sticky/);
+  assert.match(styles, /staff-select-pop/);
+  assert.match(styles, /\.landing-page\.is-motion-paused/);
+  assert.match(styles, /animation: none !important/);
+  assert.match(styles, /transition: none !important/);
+  assert.deepEqual(Object.keys(packageJson.dependencies).sort(), ["react", "react-dom"]);
+});
+
+test("shared dialogs restore focus and trap keyboard navigation", () => {
+  const modal = read("src/components/Modal.tsx");
+  assert.match(modal, /previous\?\.focus\(\)/);
+  assert.match(modal, /event\.key !== "Tab"/);
+  assert.match(modal, /lastFocusable\.focus\(\)/);
+  assert.match(modal, /firstFocusable\.focus\(\)/);
+  assert.match(modal, /event\.key === "Escape"/);
 });

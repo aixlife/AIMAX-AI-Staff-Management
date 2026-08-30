@@ -55,3 +55,27 @@ test("fixture lookup helpers do not invent missing records", () => {
   assert.equal(findEmployee(fixture, "missing"), undefined);
   assert.equal(findTask(fixture, "missing"), undefined);
 });
+
+test("public employee profiles keep a human identity and complete resume", () => {
+  const fixture = buildFixture("normal");
+  const publicProfiles = fixture.employees.filter(
+    (employee) => employee.photo && employee.resume,
+  );
+
+  assert.ok(publicProfiles.length >= 5);
+  assert.equal(new Set(publicProfiles.map((employee) => employee.name)).size, publicProfiles.length);
+  for (const employee of publicProfiles) {
+    assert.match(employee.photo || "", /^\/assets\/avatar_[a-z]+\.jpg$/);
+    assert.ok((employee.voiceLine || "").length > 8);
+    assert.ok(employee.resume);
+    assert.ok(employee.resume.career.length >= 3);
+    assert.ok(employee.resume.skills.length >= 5);
+    assert.match(employee.resume.employeeNo, /^AIMAX-/);
+  }
+});
+
+test("employees without an approved name and photo stay explicitly pending", () => {
+  const fixture = buildFixture("normal");
+  assert.equal(findEmployee(fixture, "cardnews")?.profilePending, true);
+  assert.equal(findEmployee(fixture, "cardnews")?.photo, undefined);
+});

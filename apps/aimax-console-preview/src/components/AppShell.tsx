@@ -12,6 +12,7 @@ interface AppShellProps {
   scenario: PreviewScenario;
   onScenarioChange: (scenario: PreviewScenario) => void;
   onNavigate: (route: AppRoute) => void;
+  onOpenLanding: () => void;
   onNewTask: () => void;
   children: ReactNode;
 }
@@ -23,6 +24,7 @@ export function AppShell({
   scenario,
   onScenarioChange,
   onNavigate,
+  onOpenLanding,
   onNewTask,
   children,
 }: AppShellProps) {
@@ -33,7 +35,7 @@ export function AppShell({
       </a>
 
       <aside className="app-sidebar" aria-label="AIMAX 주요 메뉴">
-        <div className="brand-lockup">
+        <button className="brand-lockup brand-lockup--button" type="button" onClick={onOpenLanding} aria-label="AIMAX 공개 랜딩으로 이동">
           <div className="brand-mark" aria-hidden="true">
             AX
           </div>
@@ -41,7 +43,7 @@ export function AppShell({
             <strong>AIMAX</strong>
             <span>AI 운영실</span>
           </div>
-        </div>
+        </button>
 
         <nav className="primary-nav">
           {routes.map((item) => (
@@ -77,21 +79,24 @@ export function AppShell({
             <span className="preview-banner__flag">LOCAL PREVIEW</span>
             <span>로그인·서버·API 연결 없음 · 모든 변경은 브라우저 메모리에만 유지</span>
           </div>
-          <label className="scenario-control">
-            <span>화면 상태</span>
-            <select
-              value={scenario}
-              onChange={(event) =>
-                onScenarioChange(event.target.value as PreviewScenario)
-              }
-            >
-              {scenarioOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="preview-banner__controls">
+            <button type="button" onClick={onOpenLanding}>랜딩으로</button>
+            <label className="scenario-control">
+              <span>화면 상태</span>
+              <select
+                value={scenario}
+                onChange={(event) =>
+                  onScenarioChange(event.target.value as PreviewScenario)
+                }
+              >
+                {scenarioOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </section>
 
         <header className="page-header">

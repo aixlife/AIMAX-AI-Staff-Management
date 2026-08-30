@@ -2,13 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./components/AppShell";
 import { NewTaskDialog } from "./components/NewTaskDialog";
+import { ResumeDialog } from "./components/ResumeDialog";
 import { Toast } from "./components/Toast";
 import { buildFixture } from "./data/fixtures";
-import { routeFromHash, routeHash, routes } from "./lib/routes";
+import { landingHash, routeHash, routes, viewFromHash } from "./lib/routes";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { HelpPage } from "./pages/HelpPage";
 import { HomePage } from "./pages/HomePage";
+import { LandingPage } from "./pages/LandingPage";
 import { WorkPage } from "./pages/WorkPage";
 import type {
   AppRoute,
@@ -27,11 +29,11 @@ function nextPreviewTaskId(tasks: Task[]): string {
 }
 
 export function App() {
-  const [route, setRoute] = useState<AppRoute>(() =>
-    routeFromHash(window.location.hash),
-  );
+  const [view, setView] = useState(() => viewFromHash(window.location.hash));
+  const route: AppRoute = view === "landing" ? "home" : view;
   const [scenario, setScenario] = useState<PreviewScenario>("normal");
   const fixture = useMemo(() => buildFixture(scenario), [scenario]);
+  const landingEmployees = useMemo(() => buildFixture("normal").employees, []);
   const [tasks, setTasks] = useState<Task[]>(fixture.tasks);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | undefined>(
     fixture.employees[0]?.id,
@@ -40,14 +42,18 @@ export function App() {
     fixture.tasks[0]?.id,
   );
   const [newTaskEmployee, setNewTaskEmployee] = useState<Employee | undefined>();
+  const [resumeEmployee, setResumeEmployee] = useState<Employee | undefined>();
   const [toast, setToast] = useState<ToastState | null>(null);
 
   useEffect(() => {
-    const onHashChange = () => setRoute(routeFromHash(window.location.hash));
+    const onHashChange = () => setView(viewFromHash(window.location.hash));
     window.addEventListener("hashchange", onHashChange);
-    if (!window.location.hash) window.location.hash = routeHash("home");
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [view]);
 
   useEffect(() => {
     setTasks(fixture.tasks);
@@ -74,7 +80,12 @@ export function App() {
 
   const navigate = (nextRoute: AppRoute) => {
     window.location.hash = routeHash(nextRoute);
-    setRoute(nextRoute);
+    setView(nextRoute);
+  };
+
+  const openLanding = () => {
+    window.location.hash = landingHash();
+    setView("landing");
   };
 
   const openEmployee = (employeeId: string) => {
@@ -93,6 +104,16 @@ export function App() {
 
   const showPreviewNotice = (message: string) => {
     setToast({ id: Date.now(), message });
+  };
+
+  const hireFromResume = (employee: Employee) => {
+    setResumeEmployee(undefined);
+    setSelectedEmployeeId(employee.id);
+    navigate("employees");
+    setToast({
+      id: Date.now(),
+      message: employee.name + "의 운영실 프로필을 열었습니다. 실제 업무는 실행되지 않았습니다.",
+    });
   };
 
   const createPreviewTask = (employee: Employee, title: string) => {
@@ -178,6 +199,7 @@ export function App() {
           selectedEmployeeId={selectedEmployeeId}
           onSelectEmployee={setSelectedEmployeeId}
           onStartTask={startTask}
+          onShowResume={setResumeEmployee}
         />
       );
     }
@@ -220,6 +242,26 @@ export function App() {
     );
   };
 
+  if (view === "landing") {
+    return (
+      <>
+        <LandingPage
+          employees={landingEmployees}
+          onEnterConsole={() => navigate("home")}
+          onShowResume={setResumeEmployee}
+        />
+        {resumeEmployee ? (
+          <ResumeDialog
+            employee={resumeEmployee}
+            onClose={() => setResumeEmployee(undefined)}
+            onHire={hireFromResume}
+          />
+        ) : null}
+        <Toast toast={toast} />
+      </>
+    );
+  }
+
   return (
     <>
       <AppShell
@@ -229,6 +271,7 @@ export function App() {
         scenario={scenario}
         onScenarioChange={setScenario}
         onNavigate={navigate}
+        onOpenLanding={openLanding}
         onNewTask={() => {
           const employee =
             runtimeFixture.employees.find(
@@ -246,6 +289,14 @@ export function App() {
           employee={newTaskEmployee}
           onClose={() => setNewTaskEmployee(undefined)}
           onCreate={createPreviewTask}
+        />
+      ) : null}
+
+      {resumeEmployee ? (
+        <ResumeDialog
+          employee={resumeEmployee}
+          onClose={() => setResumeEmployee(undefined)}
+          onHire={hireFromResume}
         />
       ) : null}
 

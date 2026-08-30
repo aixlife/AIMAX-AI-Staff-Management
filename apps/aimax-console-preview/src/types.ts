@@ -13,12 +13,42 @@ export type EmployeeExecution = "web" | "local" | "hybrid" | "external";
 
 export type EmployeeStatus = "ready" | "setup_required" | "running" | "unavailable";
 
+export interface ResumeCareer {
+  period: string;
+  org: string;
+  note: string;
+}
+
+export interface ResumeSkill {
+  label: string;
+  score: number;
+}
+
+export interface EmployeeResume {
+  employeeNo: string;
+  team: string;
+  experience: string;
+  hometown: string;
+  formerRole: string;
+  statement: string;
+  intro: string;
+  career: ResumeCareer[];
+  reference: {
+    quote: string;
+    from: string;
+  };
+  interviewLine: string;
+  skills: ResumeSkill[];
+}
+
 export interface Employee {
   id: string;
   name: string;
   role: string;
   team: string;
   initials: string;
+  photo?: string;
+  voiceLine?: string;
   summary: string;
   execution: EmployeeExecution;
   status: EmployeeStatus;
@@ -29,6 +59,8 @@ export interface Employee {
   costSummary: string;
   lastUsed?: string;
   beta?: boolean;
+  profilePending?: boolean;
+  resume?: EmployeeResume;
 }
 
 export type TaskStatus =

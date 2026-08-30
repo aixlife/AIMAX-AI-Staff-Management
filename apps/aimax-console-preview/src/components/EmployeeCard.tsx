@@ -4,6 +4,7 @@ import {
   employeeStatusTone,
   StatusBadge,
 } from "./StatusBadge";
+import { EmployeePortrait } from "./EmployeePortrait";
 
 interface EmployeeCardProps {
   employee: Employee;
@@ -23,9 +24,7 @@ export function EmployeeCard({
       aria-pressed={active}
       onClick={() => onSelect(employee.id)}
     >
-      <span className={"avatar avatar--" + employee.id} aria-hidden="true">
-        {employee.initials}
-      </span>
+      <EmployeePortrait employee={employee} size="medium" showStatus />
       <span className="employee-card__body">
         <span className="employee-card__heading">
           <strong>{employee.name}</strong>
@@ -34,6 +33,9 @@ export function EmployeeCard({
           ) : null}
         </span>
         <span className="employee-card__role">{employee.role}</span>
+        {employee.profilePending ? (
+          <span className="employee-card__pending">이름·사진 확정 필요</span>
+        ) : null}
         <span className="employee-card__meta">
           <StatusBadge
             label={employeeStatusLabel(employee.status)}

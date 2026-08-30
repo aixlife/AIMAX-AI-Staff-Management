@@ -22,6 +22,11 @@
   --color-brand-strong: #0a5d57;
   --color-brand-soft: #e4f4f0;
   --color-brand-faint: #f2faf7;
+  --color-paper: #f7f1e7;
+  --color-paper-strong: #efe4d3;
+  --color-coral: #f1745d;
+  --color-sun: #f0c45f;
+  --color-forest: #10271d;
 
   --color-info: #2d5f9a;
   --color-info-soft: #e9f1fb;
@@ -75,6 +80,9 @@
   --content-max: 1440px;
   --motion-fast: 140ms;
   --motion-base: 200ms;
+  --motion-slow: 560ms;
+  --motion-scene: 8s;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --focus-ring: 0 0 0 3px rgba(15, 118, 110, 0.25);
 }

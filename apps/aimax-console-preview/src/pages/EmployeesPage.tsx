@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { EmployeeCard } from "../components/EmployeeCard";
+import { EmployeePortrait } from "../components/EmployeePortrait";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
 import {
@@ -15,6 +16,7 @@ interface EmployeesPageProps {
   selectedEmployeeId?: string;
   onSelectEmployee: (employeeId: string) => void;
   onStartTask: (employee: Employee) => void;
+  onShowResume: (employee: Employee) => void;
 }
 
 type EmployeeFilter = "all" | EmployeeExecution;
@@ -31,6 +33,7 @@ export function EmployeesPage({
   selectedEmployeeId,
   onSelectEmployee,
   onStartTask,
+  onShowResume,
 }: EmployeesPageProps) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<EmployeeFilter>("all");
@@ -124,9 +127,7 @@ export function EmployeesPage({
           {selected ? (
             <>
               <header className="employee-detail-header">
-                <span className={"avatar avatar--xl avatar--" + selected.id}>
-                  {selected.initials}
-                </span>
+                <EmployeePortrait employee={selected} size="large" decorative={false} showStatus />
                 <div>
                   <div className="badge-row">
                     <StatusBadge
@@ -148,6 +149,10 @@ export function EmployeesPage({
               </header>
 
               <p className="employee-detail-summary">{selected.summary}</p>
+
+              {selected.voiceLine ? (
+                <blockquote className="employee-detail-voice">“{selected.voiceLine}”</blockquote>
+              ) : null}
 
               <div className="employee-contract-grid">
                 <div>
@@ -209,14 +214,23 @@ export function EmployeesPage({
                   <span>최근 사용</span>
                   <strong>{selected.lastUsed || "아직 없음"}</strong>
                 </div>
-                <button
-                  className="button button--primary"
-                  type="button"
-                  onClick={() => onStartTask(selected)}
-                >
-                  업무 맡기기
-                  <Icon name="arrow" className="button__icon button__icon--end" />
-                </button>
+                <div className="button-row">
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => onShowResume(selected)}
+                  >
+                    {selected.resume ? "이력서 보기" : "프로필 보기"}
+                  </button>
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={() => onStartTask(selected)}
+                  >
+                    업무 맡기기
+                    <Icon name="arrow" className="button__icon button__icon--end" />
+                  </button>
+                </div>
               </footer>
             </>
           ) : (

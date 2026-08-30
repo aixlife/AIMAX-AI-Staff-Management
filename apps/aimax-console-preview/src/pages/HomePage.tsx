@@ -1,5 +1,6 @@
 import type { FixtureSet } from "../types";
 import { EmptyState } from "../components/EmptyState";
+import { EmployeePortrait } from "../components/EmployeePortrait";
 import { Icon } from "../components/Icon";
 import {
   employeeStatusLabel,
@@ -183,9 +184,11 @@ export function HomePage({
                     type="button"
                     onClick={() => onOpenTask(task.id)}
                   >
-                    <span className={"avatar avatar--" + task.employeeId}>
-                      {employee?.initials || "AI"}
-                    </span>
+                    {employee ? (
+                      <EmployeePortrait employee={employee} size="medium" showStatus />
+                    ) : (
+                      <span className="avatar">AI</span>
+                    )}
                     <span className="running-row__body">
                       <span className="running-row__top">
                         <strong>{task.title}</strong>
@@ -271,9 +274,7 @@ export function HomePage({
               type="button"
               onClick={() => onOpenEmployee(employee.id)}
             >
-              <span className={"avatar avatar--large avatar--" + employee.id}>
-                {employee.initials}
-              </span>
+              <EmployeePortrait employee={employee} size="large" showStatus />
               <strong>{employee.name}</strong>
               <span>{employee.role}</span>
               <StatusBadge
