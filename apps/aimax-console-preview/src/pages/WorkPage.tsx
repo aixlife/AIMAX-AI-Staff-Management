@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { DeliverableDialog } from "../components/DeliverableDialog";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
 import { StatusBadge, TaskStatusBadge } from "../components/StatusBadge";
 import { TaskCard } from "../components/TaskCard";
 import { TaskTimeline } from "../components/TaskTimeline";
+import { getSampleDeliverable } from "../data/sampleDeliverables";
 import type { FixtureSet, TaskStatus } from "../types";
 
 interface WorkPageProps {
@@ -36,6 +38,7 @@ export function WorkPage({
 }: WorkPageProps) {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [confirmed, setConfirmed] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -50,9 +53,11 @@ export function WorkPage({
   const employee = fixture.employees.find(
     (item) => item.id === selected?.employeeId,
   );
+  const deliverable = getSampleDeliverable(selected?.employeeId);
 
   useEffect(() => {
     setConfirmed(false);
+    setDetailOpen(false);
   }, [selected?.id]);
 
   if (!fixture.tasks.length) {
@@ -246,11 +251,15 @@ export function WorkPage({
                     <button
                       className="button button--primary"
                       type="button"
-                      onClick={() =>
+                      onClick={() => {
+                        if (deliverable) {
+                          setDetailOpen(true);
+                          return;
+                        }
                         onPreviewNotice(
-                          "결과 뷰어는 Phase 2에서 기존 결과 형식과 대조한 뒤 연결합니다.",
-                        )
-                      }
+                          "이 직원의 샘플 결과는 준비 중입니다. 결과 뷰어는 Phase 2에서 기존 결과 형식과 대조한 뒤 연결합니다.",
+                        );
+                      }}
                     >
                       결과 열기
                     </button>
@@ -295,6 +304,14 @@ export function WorkPage({
           )}
         </section>
       </div>
+
+      {detailOpen && selected && deliverable ? (
+        <DeliverableDialog
+          deliverable={deliverable}
+          employee={employee}
+          onClose={() => setDetailOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }

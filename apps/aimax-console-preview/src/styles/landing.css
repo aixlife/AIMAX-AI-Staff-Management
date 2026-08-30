@@ -385,7 +385,7 @@
 .task-choice-grid {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   padding: var(--space-5) 0;
 }
@@ -1265,4 +1265,58 @@
   .landing-hero h1 em::after,
   .work-journey__connector i,
   .staff-lineup__track i { transform: none; }
+}
+
+/* 결과 상세 열기 (샘플 산출물) */
+.landing-detail-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(16, 39, 29, 0.16);
+  border-radius: 999px;
+  color: var(--color-forest);
+  background: #fff;
+  font-size: 0.72rem;
+  font-weight: 850;
+  opacity: 0;
+  animation: result-line-in 440ms var(--ease-out) forwards;
+  animation-delay: 1240ms;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background var(--motion-base) ease,
+    border-color var(--motion-base) ease;
+}
+
+.landing-detail-open:hover {
+  transform: translateY(-1px);
+  border-color: rgba(16, 39, 29, 0.3);
+  background: var(--color-brand-faint);
+}
+
+.landing-detail-open svg {
+  width: 14px;
+  height: 14px;
+}
+
+.landing-detail-open--dark {
+  margin-top: 12px;
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fffaf1;
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+  animation: none;
+}
+
+.landing-detail-open--dark:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.landing-page.is-motion-paused .landing-detail-open,
+.landing-page.is-reduced-motion .landing-detail-open {
+  opacity: 1;
+  animation: none;
 }

@@ -6,8 +6,10 @@ import {
   type CSSProperties,
 } from "react";
 
+import { DeliverableDialog } from "../components/DeliverableDialog";
 import { EmployeePortrait } from "../components/EmployeePortrait";
 import { Icon } from "../components/Icon";
+import { getSampleDeliverable } from "../data/sampleDeliverables";
 import type { Employee } from "../types";
 
 interface LandingPageProps {
@@ -17,7 +19,7 @@ interface LandingPageProps {
 }
 
 interface TaskChoice {
-  id: "research" | "blog" | "quote" | "leads";
+  id: "research" | "blog" | "quote" | "leads" | "office";
   label: string;
   employeeId: string;
   request: string;
@@ -67,6 +69,15 @@ const taskChoices: TaskChoice[] = [
     resultItems: ["우선 볼 고객 후보", "후보를 고른 이유", "접점별 첫 행동"],
     ownerDecision: "누구에게 먼저 다가갈지 정합니다.",
   },
+  {
+    id: "office",
+    label: "사무 지원",
+    employeeId: "jieun",
+    request: "신청서 캡처를 정리해줘",
+    resultTitle: "사무 지원 처리 결과",
+    resultItems: ["정리된 캡처와 가림 처리", "추출한 텍스트 정리", "원본 보존 안내"],
+    ownerDecision: "정리된 파일을 어디에 쓸지만 정합니다.",
+  },
 ];
 
 export function LandingPage({
@@ -98,9 +109,11 @@ export function LandingPage({
   const [motionPaused, setMotionPaused] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const [taskProofInView, setTaskProofInView] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const activeTask =
     availableTasks.find((task) => task.id === selectedTaskId) || availableTasks[0];
+  const activeDeliverable = getSampleDeliverable(activeTask?.employeeId);
   const selectedTeamEmployee =
     publicEmployees.find((employee) => employee.id === selectedTeamEmployeeId) ||
     publicEmployees.find((employee) => employee.id === "yeri") ||
@@ -158,6 +171,7 @@ export function LandingPage({
     if (
       !taskProofInView ||
       motionPaused ||
+      detailOpen ||
       prefersReducedMotion ||
       availableTasks.length < 2
     ) return undefined;
@@ -173,6 +187,7 @@ export function LandingPage({
     return () => window.clearTimeout(timer);
   }, [
     availableTasks,
+    detailOpen,
     motionPaused,
     motionRun,
     prefersReducedMotion,
@@ -346,6 +361,15 @@ export function LandingPage({
                     <span>받게 될 결과</span>
                     <h2>{activeTask.resultTitle}</h2>
                     <ul>{activeTask.resultItems.map((item) => <li key={item}>{item}<i /></li>)}</ul>
+                    {activeDeliverable ? (
+                      <button
+                        className="landing-detail-open"
+                        type="button"
+                        onClick={() => setDetailOpen(true)}
+                      >
+                        결과 상세 열기 <Icon name="arrow" />
+                      </button>
+                    ) : null}
                   </div>
                 </article>
               </div>
@@ -394,6 +418,15 @@ export function LandingPage({
                   <span>03 · 대표님이 결정</span>
                   <strong>{activeTask.resultTitle}</strong>
                   <small>{activeTask.ownerDecision}</small>
+                  {activeDeliverable ? (
+                    <button
+                      className="landing-detail-open landing-detail-open--dark"
+                      type="button"
+                      onClick={() => setDetailOpen(true)}
+                    >
+                      산출물 상세 보기 <Icon name="arrow" />
+                    </button>
+                  ) : null}
                 </article>
               </div>
               <div className="work-journey__decision"><span>대표님에게 돌아오는 것</span><strong>{activeTask.ownerDecision}</strong></div>
@@ -508,6 +541,14 @@ export function LandingPage({
           <div><p>첫 업무를 고르고, 맞는 직원을 확인해보세요. 지금 프리뷰에서는 로그인 없이 운영실까지 둘러볼 수 있습니다.</p><button className="public-cta public-cta--light" type="button" onClick={focusTaskChoices}>첫 업무 고르기 <Icon name="arrow" /></button></div>
         </section>
       </main>
+
+      {detailOpen && activeTask && activeDeliverable ? (
+        <DeliverableDialog
+          deliverable={activeDeliverable}
+          employee={activeTask.employee}
+          onClose={() => setDetailOpen(false)}
+        />
+      ) : null}
 
       <footer className="public-footer">
         <div className="public-brand"><span>AX</span><strong>AIMAX</strong></div>
