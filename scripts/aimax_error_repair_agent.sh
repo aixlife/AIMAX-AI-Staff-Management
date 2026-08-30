@@ -37,6 +37,7 @@ with_lock || {
 WATCHDOG_JSON="$(
   cd "$ROOT_DIR"
   python3 scripts/aimax_report_watchdog.py \
+    --data-dir "$DATA_DIR" \
     --stale-minutes "$STALE_MINUTES" \
     --lookback-days "$LOOKBACK_DAYS" \
     --limit 20
@@ -44,7 +45,8 @@ WATCHDOG_JSON="$(
 
 stale_count="$(json_get_number "$WATCHDOG_JSON" '.stale_report_count')"
 ticket_count="$(json_get_number "$WATCHDOG_JSON" '.open_ticket_count')"
-if [[ "$stale_count" -eq 0 && "$ticket_count" -eq 0 ]]; then
+anomaly_count="$(json_get_number "$WATCHDOG_JSON" '.anomaly_count')"
+if [[ "$stale_count" -eq 0 && "$ticket_count" -eq 0 && "$anomaly_count" -eq 0 ]]; then
   jq -n --arg at "$(now_iso)" '{ok:true, skipped:"no_repair_candidates", checked_at:$at}'
   exit 0
 fi
@@ -69,7 +71,8 @@ if [[ -f "$STATE_FILE" ]]; then
       --arg signature "$signature" \
       --argjson stale "$stale_count" \
       --argjson tickets "$ticket_count" \
-      '{ok:true, skipped:"repeat_window", checked_at:$at, signature:$signature, stale_report_count:$stale, open_ticket_count:$tickets}'
+      --argjson anomalies "$anomaly_count" \
+      '{ok:true, skipped:"repeat_window", checked_at:$at, signature:$signature, stale_report_count:$stale, open_ticket_count:$tickets, anomaly_count:$anomalies}'
     exit 0
   fi
 fi
@@ -81,7 +84,8 @@ jq -n \
   --argjson epoch "$now_epoch" \
   --argjson stale "$stale_count" \
   --argjson tickets "$ticket_count" \
-  '{last_started_at:$at,last_started_epoch:$epoch,last_signature:$signature,stale_report_count:$stale,open_ticket_count:$tickets}' \
+  --argjson anomalies "$anomaly_count" \
+  '{last_started_at:$at,last_started_epoch:$epoch,last_signature:$signature,stale_report_count:$stale,open_ticket_count:$tickets,anomaly_count:$anomalies}' \
   > "$tmp_state"
 mv "$tmp_state" "$STATE_FILE"
 
@@ -125,4 +129,5 @@ jq -n \
   --arg signature "$signature" \
   --argjson stale "$stale_count" \
   --argjson tickets "$ticket_count" \
-  '{ok:true, launched:true, completed_at:$at, signature:$signature, stale_report_count:$stale, open_ticket_count:$tickets}'
+  --argjson anomalies "$anomaly_count" \
+  '{ok:true, launched:true, completed_at:$at, signature:$signature, stale_report_count:$stale, open_ticket_count:$tickets, anomaly_count:$anomalies}'

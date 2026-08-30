@@ -196,13 +196,17 @@ def build_message(
     public_base_url: str,
     now: datetime,
     limit: int,
+    anomalies: list[dict[str, Any]] | None = None,
 ) -> str:
+    anomalies = anomalies or []
     lines = [
         "[AIMAX 오류 자동체킹]",
         f"기준: {now.strftime('%Y-%m-%d %H:%M UTC')} / 자동 재알림",
         f"방치 의심 리포트: {len(reports)}건",
         f"열린 자동화 티켓: {len(tickets)}건",
     ]
+    if anomalies:
+        lines.append(f"서버 지표 이상: {len(anomalies)}건")
     if reports:
         lines += ["", "리포트 우선 확인:"]
         for row in reports[:limit]:
@@ -222,6 +226,10 @@ def build_message(
                 f"({row.get('category', '-')}, {row.get('priority', '-')}, {age_label(row['_age'])}) "
                 f"{compact(row.get('visible_error') or row.get('work_context'), 140)}"
             )
+    if anomalies:
+        lines += ["", "지표 이상:"]
+        for row in anomalies[:limit]:
+            lines.append(f"- {row.get('code', '-')}: {compact(row.get('detail'), 160)}")
     lines += ["", f"관리: {public_base_url.rstrip('/')}/admin#reports"]
     return "\n".join(lines)
 
@@ -244,12 +252,22 @@ def telegram_send(token: str, chat_id: str, text: str, thread_id: str = "") -> d
         return json.load(response)
 
 
-def alert_signature(reports: list[dict[str, Any]], tickets: list[dict[str, Any]]) -> str:
+def alert_signature(
+    reports: list[dict[str, Any]],
+    tickets: list[dict[str, Any]],
+    metrics_signature: str = "",
+) -> str:
+    # 서명 입력은 리포트/티켓 id + 지표 anomaly 정체성 서명뿐이다. 절대시각·경과시간을
+    # 섞지 않는다(2026-07-03 수리 에이전트 알림 폭주 원인 — 시각이 들어가면 실행마다
+    # 서명이 달라져 중복 억제가 발동하지 않는다). metrics_signature 자체도
+    # aimax_health_metrics 가 code/kind/stage/worker/platform 만으로 만든 안정 서명이다.
     ids = [
         *(str(row.get("report_id") or "") for row in reports),
         *(str(row.get("ticket_id") or "") for row in tickets),
     ]
     payload = "\n".join(sorted(item for item in ids if item))
+    if metrics_signature:
+        payload = f"{payload}\nmetrics:{metrics_signature}"
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -272,6 +290,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--state-file", type=Path)
     parser.add_argument("--limit", type=int, default=6)
     parser.add_argument("--send", action="store_true", help="Send Telegram alert. Default only prints JSON.")
+    parser.add_argument(
+        "--metrics",
+        dest="metrics",
+        action="store_true",
+        default=True,
+        help="서버 데이터 기반 지표 5종(aimax_health_metrics)을 함께 계산한다(기본 켜짐).",
+    )
+    parser.add_argument("--no-metrics", dest="metrics", action="store_false")
+    parser.add_argument("--downloads-dir", type=Path, default=Path("/home/ubuntu/aimax-downloads"))
     return parser.parse_args(argv)
 
 
@@ -297,11 +324,34 @@ def main(argv: list[str]) -> int:
         report_status_by_id,
     )
     public_base_url = os.environ.get("AIMAX_PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL)
-    message = build_message(reports, tickets, public_base_url=public_base_url, now=now, limit=args.limit)
+    # 지표 계산 실패가 기존 리포트/티켓 감시를 절대 죽이지 않도록 격리한다.
+    anomalies: list[dict[str, Any]] = []
+    metrics_summary: dict[str, Any] = {}
+    metrics_signature = ""
+    metrics_error = ""
+    if args.metrics:
+        try:
+            import aimax_health_metrics
+
+            health = aimax_health_metrics.collect_metrics(
+                data_dir, args.downloads_dir, os.environ, now,
+            )
+            anomalies = list(health.get("anomalies") or [])
+            metrics_summary = dict(health.get("metrics") or {})
+            metrics_signature = str(health.get("signature") or "")
+        except Exception as exc:  # noqa: BLE001 — 격리가 목적
+            anomalies = []
+            metrics_summary = {}
+            metrics_signature = ""
+            metrics_error = type(exc).__name__
+    message = build_message(
+        reports, tickets, public_base_url=public_base_url, now=now, limit=args.limit,
+        anomalies=anomalies,
+    )
     state_file = args.state_file or data_dir / "report-watchdog-state.json"
     state = read_json(state_file)
-    signature = alert_signature(reports, tickets)
-    send_allowed = bool(reports or tickets) and should_send(state, signature, now, repeat_after)
+    signature = alert_signature(reports, tickets, metrics_signature)
+    send_allowed = bool(reports or tickets or anomalies) and should_send(state, signature, now, repeat_after)
 
     result: dict[str, Any] = {
         "ok": True,
@@ -312,12 +362,18 @@ def main(argv: list[str]) -> int:
         "send_allowed": send_allowed,
         "stale_report_count": len(reports),
         "open_ticket_count": len(tickets),
-        # 안정 서명: 리포트/티켓 id 로만 만든다. message 는 현재 시각과 경과시간("3h 42m")을
-        # 포함해 매 실행마다 달라지므로, 소비자가 message 를 해시해 중복을 판정하면 억제가
-        # 절대 발동하지 않는다(2026-07-03 수리 에이전트 알림 폭주의 원인).
+        "anomaly_count": len(anomalies),
+        "anomalies": anomalies,
+        "metrics": metrics_summary,
+        # 안정 서명: 리포트/티켓 id + 지표 anomaly 정체성 서명으로만 만든다. message 는
+        # 현재 시각과 경과시간("3h 42m")을 포함해 매 실행마다 달라지므로, 소비자가
+        # message 를 해시해 중복을 판정하면 억제가 절대 발동하지 않는다
+        # (2026-07-03 수리 에이전트 알림 폭주의 원인).
         "signature": signature,
         "message": message,
     }
+    if metrics_error:
+        result["metrics_error"] = metrics_error
     if args.send and send_allowed:
         token = os.environ.get("AIMAX_TELEGRAM_BOT_TOKEN", "").strip()
         chat_id = os.environ.get("AIMAX_TELEGRAM_CHAT_ID", "").strip()
@@ -333,6 +389,7 @@ def main(argv: list[str]) -> int:
             "last_sent_at": now.isoformat(),
             "stale_report_count": len(reports),
             "open_ticket_count": len(tickets),
+            "anomaly_count": len(anomalies),
         })
     elif args.send:
         result["skipped_reason"] = "no_stale_items_or_repeat_window"
