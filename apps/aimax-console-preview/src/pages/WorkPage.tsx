@@ -3,10 +3,17 @@ import { useEffect, useMemo, useState } from "react";
 import { DeliverableDialog } from "../components/DeliverableDialog";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
+import { Modal } from "../components/Modal";
 import { StatusBadge, TaskStatusBadge } from "../components/StatusBadge";
 import { TaskCard } from "../components/TaskCard";
 import { TaskTimeline } from "../components/TaskTimeline";
 import { getSampleDeliverable } from "../data/sampleDeliverables";
+import {
+  DEFAULT_WRITE_MODE,
+  WRITE_MODES,
+  writeModeMeta,
+  yunmiUpgradeEstimateWon,
+} from "../data/taskOptions";
 import { downloadDeliverable } from "../lib/deliverableFile";
 import type { FixtureSet, TaskStatus } from "../types";
 
@@ -43,6 +50,7 @@ export function WorkPage({
   const [filter, setFilter] = useState<TaskFilter>("all");
   const [confirmed, setConfirmed] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -62,7 +70,21 @@ export function WorkPage({
   useEffect(() => {
     setConfirmed(false);
     setDetailOpen(false);
+    setUpgradeOpen(false);
   }, [selected?.id]);
+
+  /**
+   * 윤미 유료 전환 위치 (2026-08-31 카운슬 종합 승인):
+   * 전환 선택은 폼이 아니라 결과 화면(완료·확인 필요)에서 합니다.
+   * CTA의 예상 비용은 기본값인 표준 모드 기준이고, 확인 다이얼로그에서
+   * 모드별 예상 비용 3종을 함께 보여줍니다. 픽스처라 실제 동작은 없습니다.
+   */
+  const showYunmiUpgrade =
+    employee?.id === "yunmi" &&
+    (selected?.status === "done" || selected?.status === "waiting_user");
+  const yunmiUpgradeLabel =
+    "AI로 완성하기 · 예상 ₩" +
+    yunmiUpgradeEstimateWon(DEFAULT_WRITE_MODE).toLocaleString("ko-KR");
 
   if (!fixture.tasks.length) {
     return (
@@ -181,6 +203,15 @@ export function WorkPage({
                     <span>표시된 범위와 예상 비용을 확인했습니다.</span>
                   </label>
                   <div className="button-row">
+                    {showYunmiUpgrade ? (
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        onClick={() => setUpgradeOpen(true)}
+                      >
+                        {yunmiUpgradeLabel}
+                      </button>
+                    ) : null}
                     <button
                       className="button button--secondary"
                       type="button"
@@ -193,7 +224,11 @@ export function WorkPage({
                       범위 수정
                     </button>
                     <button
-                      className="button button--primary"
+                      className={
+                        showYunmiUpgrade
+                          ? "button button--secondary"
+                          : "button button--primary"
+                      }
                       type="button"
                       disabled={!confirmed}
                       onClick={() => onConfirmTask(selected.id)}
@@ -253,8 +288,21 @@ export function WorkPage({
                   </div>
                   <p>{selected.resultSummary || "검토 가능한 결과가 있습니다."}</p>
                   <div className="button-row">
+                    {showYunmiUpgrade ? (
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        onClick={() => setUpgradeOpen(true)}
+                      >
+                        {yunmiUpgradeLabel}
+                      </button>
+                    ) : null}
                     <button
-                      className="button button--primary"
+                      className={
+                        showYunmiUpgrade
+                          ? "button button--secondary"
+                          : "button button--primary"
+                      }
                       type="button"
                       onClick={() => {
                         if (deliverable) {
@@ -334,6 +382,52 @@ export function WorkPage({
           employee={employee}
           onClose={() => setDetailOpen(false)}
         />
+      ) : null}
+
+      {upgradeOpen && showYunmiUpgrade ? (
+        <Modal
+          title="AI로 완성하기"
+          description="작성 모드별 예상 비용을 확인하는 픽스처 화면입니다."
+          labelId="yunmi-upgrade-title"
+          className="modal-panel--upgrade"
+          onClose={() => setUpgradeOpen(false)}
+        >
+          <div className="upgrade-dialog-stack">
+            <div className="upgrade-mode-list">
+              {WRITE_MODES.map((mode) => (
+                <div className="upgrade-mode-row" key={mode.value}>
+                  <div>
+                    <strong>
+                      {mode.label +
+                        " 모드" +
+                        (mode.value === DEFAULT_WRITE_MODE ? " (기본값)" : "")}
+                    </strong>
+                    <small>{writeModeMeta(mode)}</small>
+                  </div>
+                  <span className="upgrade-mode-row__price">
+                    {"예상 ₩" +
+                      yunmiUpgradeEstimateWon(mode.value).toLocaleString(
+                        "ko-KR",
+                      )}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="preview-disclaimer">
+              실서비스에서는 이 시점에 과금 확인을 거친 뒤 AI 완성을 실행합니다.
+              프리뷰에서는 아무 작업도 실행되지 않고 과금도 없습니다.
+            </p>
+            <div className="dialog-actions">
+              <button
+                className="button button--primary"
+                type="button"
+                onClick={() => setUpgradeOpen(false)}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </Modal>
       ) : null}
     </div>
   );

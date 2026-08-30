@@ -2211,3 +2211,135 @@
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* --- 2026-08-31 카운슬 종합: 작성 모드 카드·미니 와이어프레임·최근 설정 칩 --- */
+
+.option-card__meta {
+  color: var(--color-ink-soft);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+/* 스타일 템플릿 카드 안 작은 그림 (SVG 스켈레톤, 장식용) */
+.tpl-wireframe {
+  display: block;
+  width: min(150px, 100%);
+  height: auto;
+  margin-bottom: var(--space-1);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+}
+
+.tpl-wireframe .wf-bar {
+  fill: var(--color-line-strong);
+}
+
+.tpl-wireframe .wf-soft {
+  fill: var(--color-line);
+}
+
+.tpl-wireframe .wf-soft-fill {
+  fill: var(--color-line);
+  opacity: 0.55;
+}
+
+.tpl-wireframe .wf-soft-dot {
+  fill: var(--color-line-strong);
+  opacity: 0.6;
+}
+
+.tpl-wireframe .wf-accent {
+  fill: var(--color-brand);
+}
+
+.tpl-wireframe .wf-on-accent {
+  fill: var(--color-surface);
+  opacity: 0.92;
+}
+
+.tpl-wireframe .wf-frame {
+  fill: var(--color-surface);
+  stroke: var(--color-line-strong);
+}
+
+.tpl-wireframe .wf-accent-frame {
+  fill: var(--color-brand-faint);
+  stroke: var(--color-brand);
+}
+
+/* "최근 설정 불러오기" 칩 — 자동 복원 없이 누를 때만 복원 */
+.recent-settings-row {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+  word-break: keep-all;
+}
+
+.recent-settings-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-4);
+  border: 1px dashed var(--color-brand);
+  border-radius: var(--radius-pill);
+  color: var(--color-brand-strong);
+  background: var(--color-brand-faint);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 750;
+  word-break: keep-all;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.recent-settings-chip::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-brand);
+}
+
+.recent-settings-chip:hover:not(:disabled) {
+  background: var(--color-brand-soft);
+}
+
+.recent-settings-chip:disabled {
+  border-style: solid;
+  cursor: default;
+  opacity: 0.75;
+}
+
+/* 상수 즉시형 결과 — 다이얼로그 안 완성 견적서 */
+.modal-panel--quote-result {
+  width: min(760px, 100%);
+}
+
+.quote-result {
+  justify-items: stretch;
+}
+
+.dialog-actions--quote-result {
+  align-items: center;
+}
+
+.text-link-button {
+  margin-right: auto;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: none;
+  color: var(--color-brand-strong);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  word-break: keep-all;
+  cursor: pointer;
+}

@@ -185,8 +185,8 @@ test("every form employee exposes a cost estimate that reacts to selections", ()
   assert.ok(yeri);
   const yeriDefaults = buildDefaultOptionValues(yeri);
   const base = yeri.estimateCost(yeriDefaults);
-  const sol = yeri.estimateCost({ ...yeriDefaults, aiModel: "gpt-5.6-sol" });
-  assert.notEqual(base.headline, sol.headline);
+  const premium = yeri.estimateCost({ ...yeriDefaults, writeMode: "premium" });
+  assert.notEqual(base.headline, premium.headline);
 
   const hyunju = getTaskOptions("hyunju");
   assert.ok(hyunju);
@@ -210,8 +210,9 @@ test("yeri style template cards carry toggleable examples", () => {
   }
 });
 
-test("2026-08 writing model lineup is mirrored with prices for yeri and yunmi", () => {
+test("2026-08 model price table stays the pricing source of truth", () => {
   // Gemini 3.7 Flash는 2026-08-13 출시 신형(12/31까지 인트로가 0.75/3.75).
+  // 선택 UI는 작성 모드 3단으로 좁혔지만 단가표는 라인업 기록으로 유지합니다.
   const expectedPrices: Record<string, [number, number]> = {
     "gemini-3.5-flash": [1.5, 9.0],
     "gemini-3.7-flash": [0.75, 3.75],
@@ -229,33 +230,6 @@ test("2026-08 writing model lineup is mirrored with prices for yeri and yunmi", 
     assert.ok(price, model + " 단가가 없습니다");
     assert.equal(price.inputUsdPer1m, input, model + " 입력 단가 불일치");
     assert.equal(price.outputUsdPer1m, output, model + " 출력 단가 불일치");
-  }
-
-  for (const employeeId of ["yeri", "yunmi"]) {
-    const config = getTaskOptions(employeeId);
-    assert.ok(config, employeeId + " 옵션 폼이 없습니다");
-    const modelField = allFields(config).find(
-      (field) => field.id === "aiModel",
-    );
-    assert.ok(modelField && modelField.kind === "select");
-    assert.deepEqual(
-      modelField.choices.map((choice) => choice.value),
-      Object.keys(expectedPrices),
-      employeeId + " 모델 선택지가 라인업과 다릅니다",
-    );
-    // 추천·기본값은 Gemini 3.5 Flash 유지 (변경은 카운슬 결정 대기).
-    assert.equal(modelField.defaultValue, "gemini-3.5-flash");
-    assert.match(modelField.choices[0].label, /추천/);
-    for (const choice of modelField.choices) {
-      assert.ok(choice.hint, choice.label + " 모델 설명 한 줄이 없습니다");
-    }
-    const fresh = modelField.choices.find(
-      (choice) => choice.value === "gemini-3.7-flash",
-    );
-    assert.ok(fresh, employeeId + "에 Gemini 3.7 Flash가 없습니다");
-    assert.match(fresh.label, /신형/);
-    assert.doesNotMatch(fresh.label, /추천/);
-    assert.match(fresh.hint || "", /인트로가/);
   }
 });
 

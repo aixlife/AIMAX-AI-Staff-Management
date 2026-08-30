@@ -13,19 +13,29 @@
  * 고를 수 있게 부가세 토글 1개를 프리뷰 추가 항목으로 뒀고, 윤미 목적은
  * 실서비스 placeholder 예시 3종을 카드로 제공해 목적별 대본 샘플을 엽니다.
  *
- * 글쓰기 모델·단가는 2026-08 라인업(아래 AI_MODEL_PRICES)으로 교체했고,
+ * 글쓰기 단가는 2026-08 라인업(아래 AI_MODEL_PRICES)이 기준이고,
  * 환율 USD_KRW_RATE(1476원)와 토큰 추정식은 기존 그대로입니다.
  * 예약 발행 시각은 네이버 예약 발행과 동일하게 30분 단위만 고를 수 있게
  * 시(select)·분(00/30 select)으로 제공합니다 (2026-08 웹 실측).
  *
  * 2026-08-31 CEO 지시 반영:
  * - 예리 발행 방식 기본값은 임시 저장(save)입니다 (옵션 순서·라벨은 실서비스 미러).
- * - 글쓰기 모델에 Gemini 3.7 Flash(신형, 12/31까지 인트로가)를 추가했습니다.
- *   추천·기본값은 Gemini 3.5 Flash를 유지합니다 (변경은 카운슬 결정 대기).
  * - 이미지 모델은 실서비스 단가를 장당 원화(환율 1476)로 표기하고
  *   gpt-image-2를 추천합니다 (이미지 속 한글 유일 지원, 2026-08-18 실측).
  * - CTA 링크·문구는 상담 유도형/계정 기본 스타일에서만 노출합니다 (값 보존).
  * - 섹션 제목과 같은 필드 라벨 중복은 hideLabel로 제거했습니다 (현주 멘트).
+ *
+ * 2026-08-31 카운슬 종합 6건 CEO 승인분 반영:
+ * - 글쓰기 모델 select는 작성 모드 3단(표준·균형·프리미엄) 카드로 교체했습니다
+ *   (예리·윤미 공통, 모드명 + 실제 모델명·단가 보조 표기, 기본값 표준.
+ *   이미지 모델 select는 그대로 유지). 예상 비용 박스는 모드 기준으로 갱신됩니다.
+ * - 예리 카테고리는 기본 화면에서 빼고, 발행 방식이 즉시(바로)·예약 발행일 때만
+ *   고급 설정 안에 "발행할 네이버 게시판"으로 노출합니다.
+ * - 스타일 템플릿 카드에는 미니 와이어프레임(wireframe 마커)을 붙였습니다
+ *   (계정 기본 카드는 현행 유지 — 와이어프레임 없음).
+ * - 윤미 예상 비용 박스는 "기본 초안은 무료 · AI 완성 전환은 결과 확인 후 선택"을
+ *   명시합니다 (설명 없는 0원 표기 금지). 폼에는 유료 전환 선택이 없고,
+ *   작성 모드는 나중에 AI 완성으로 전환할 때 쓸 모드를 미리 고르는 항목입니다.
  */
 
 export interface OptionChoice {
@@ -39,8 +49,15 @@ export interface StyleExample {
   lines: string[];
 }
 
+/** 스타일 템플릿 카드에 그리는 미니 와이어프레임 종류 (SVG 스켈레톤) */
+export type WireframeKind = "consult" | "info" | "review";
+
 export interface StyleChoice extends OptionChoice {
   example?: StyleExample;
+  /** 모드명 아래에 붙는 보조 표기 (예: 실제 모델명 · 단가) */
+  meta?: string;
+  /** 카드 안 작은 그림 — 계정 기본 카드처럼 없으면 그리지 않습니다 */
+  wireframe?: WireframeKind;
 }
 
 export interface ItemRow {
@@ -313,38 +330,81 @@ function joinParts(parts: string[]): string {
 /* 예리 — app.html yeriJobForm 16개 입력 미러 + 스타일 템플릿(프리뷰 추가)  */
 /* ------------------------------------------------------------------ */
 
-const WRITE_MODEL_CHOICES: OptionChoice[] = [
+/* ------------------------------------------------------------------ */
+/* 작성 모드 3단 (예리·윤미 공통) — 2026-08-31 카운슬 종합 CEO 승인        */
+/* ------------------------------------------------------------------ */
+
+export interface WriteMode {
+  value: string;
+  /** 모드명 (표준·균형·프리미엄) */
+  label: string;
+  /** AI_MODEL_PRICES 키 — 실제 과금 모델 */
+  model: string;
+  /** 모드 성격 한 줄 */
+  character: string;
+}
+
+export const DEFAULT_WRITE_MODE = "standard";
+
+/**
+ * 작성 모드 3단. GPT 포함 3가지 모드로 좁히되 실제 모델명·단가를
+ * 함께 보여줍니다 (CEO: 모델명도 같이 보이게). 기본값은 표준입니다.
+ */
+export const WRITE_MODES: WriteMode[] = [
   {
-    value: "gemini-3.5-flash",
-    label: "Gemini 3.5 Flash (추천)",
-    hint: "품질·속도·비용 균형이 가장 좋아 기본값으로 권장합니다.",
+    value: "standard",
+    label: "표준",
+    model: "gemini-3.7-flash",
+    character: "속도·비용 균형이 좋아 대부분의 글에 맞는 기본 모드입니다.",
   },
   {
-    value: "gemini-3.7-flash",
-    label: "Gemini 3.7 Flash (신형)",
-    hint: "2026-08-13 출시 신형입니다. 12/31까지 인트로가 $0.75/$3.75 (1M 토큰 기준)가 적용됩니다.",
+    value: "balanced",
+    label: "균형",
+    model: "gpt-5.6-terra",
+    character: "문단 구성과 정확도가 한 단계 안정적인 중간 모드입니다.",
   },
   {
-    value: "gpt-5.6-terra",
-    label: "GPT-5.6 Terra",
-    hint: "품질이 안정적인 중간 단가 모델로 일반 글에 무난합니다.",
-  },
-  {
-    value: "claude-sonnet-5",
-    label: "Claude Sonnet 5",
-    hint: "문장 품질이 꾸준한 중상급 단가 모델입니다.",
-  },
-  {
-    value: "gpt-5.6-sol",
-    label: "GPT-5.6 Sol",
-    hint: "품질 최상급 대신 단가가 가장 높습니다 (2026-08-22 인하가 기준).",
-  },
-  {
-    value: "claude-haiku-4.5",
-    label: "Claude Haiku 4.5 (가벼운 글용)",
-    hint: "가장 저렴하고 빠른 모델로 짧고 가벼운 글에 맞습니다.",
+    value: "premium",
+    label: "프리미엄",
+    model: "claude-sonnet-5",
+    character: "문장 품질이 가장 꾸준해 중요한 글에 맞는 상위 모드입니다.",
   },
 ];
+
+export function writeModeById(value: string): WriteMode {
+  return WRITE_MODES.find((mode) => mode.value === value) || WRITE_MODES[0];
+}
+
+function usdLabel(value: number): string {
+  return "$" + value.toFixed(2);
+}
+
+/** 모드 카드 보조 표기: 실제 모델명 · $입력/$출력 (1M 토큰) */
+export function writeModeMeta(mode: WriteMode): string {
+  const price = AI_MODEL_PRICES[mode.model];
+  return (
+    price.label +
+    " · " +
+    usdLabel(price.inputUsdPer1m) +
+    "/" +
+    usdLabel(price.outputUsdPer1m) +
+    " (1M 토큰)"
+  );
+}
+
+/** 작성 모드 기준 글 비용 추정 (예상 비용 박스·윤미 전환 CTA 공용) */
+export function estimateWriteModeCost(modeValue: string, charCount: number) {
+  const mode = writeModeById(modeValue);
+  const cost = estimateTextCostWon(mode.model, charCount);
+  return { ...cost, modeLabel: mode.label, modelLabel: cost.label };
+}
+
+const WRITE_MODE_CARD_CHOICES: StyleChoice[] = WRITE_MODES.map((mode) => ({
+  value: mode.value,
+  label: mode.label + (mode.value === DEFAULT_WRITE_MODE ? " (기본값)" : ""),
+  meta: writeModeMeta(mode),
+  hint: mode.character,
+}));
 
 /** 네이버 예약 발행 미러: 시각은 시 select + 분(00/30) select로만 선택합니다. */
 const SCHEDULE_HOUR_CHOICES: OptionChoice[] = Array.from(
@@ -431,6 +491,7 @@ const yeriOptions: EmployeeTaskOptions = {
               value: "consult",
               label: "상담 유도형",
               hint: "문의·상담 신청으로 자연스럽게 이어지는 흐름입니다.",
+              wireframe: "consult",
               example: {
                 lines: [
                   "제목: 순천 점심 맛집, 모임 장소로 고민된다면",
@@ -445,6 +506,7 @@ const yeriOptions: EmployeeTaskOptions = {
               value: "info",
               label: "정보 정리형",
               hint: "목록과 비교표 중심으로 검색 의도를 채웁니다.",
+              wireframe: "info",
               example: {
                 lines: [
                   "제목: 순천 점심 맛집 5곳 비교 (주차·대기·가격)",
@@ -459,6 +521,7 @@ const yeriOptions: EmployeeTaskOptions = {
               value: "review",
               label: "후기 추천형",
               hint: "직접 써 본 경험담 톤으로 신뢰를 쌓습니다.",
+              wireframe: "review",
               example: {
                 lines: [
                   "제목: 순천 점심 맛집, 직접 다녀온 솔직 후기",
@@ -476,8 +539,7 @@ const yeriOptions: EmployeeTaskOptions = {
     },
     {
       title: "자주 쓰는 설정",
-      description:
-        "실사용률이 높은 항목만 항상 펼쳐 둡니다 (카테고리 44% · CTA 42%).",
+      description: "실사용률이 높은 항목만 항상 펼쳐 둡니다 (CTA 42%).",
       fields: [
         {
           kind: "select",
@@ -526,11 +588,13 @@ const yeriOptions: EmployeeTaskOptions = {
           visibleWhen: { fieldId: "mode", equals: "schedule" },
         },
         {
-          kind: "select",
-          id: "aiModel",
-          label: "글쓰기 모델",
-          choices: WRITE_MODEL_CHOICES,
-          defaultValue: "gemini-3.5-flash",
+          kind: "choice",
+          variant: "cards",
+          id: "writeMode",
+          label: "작성 모드",
+          hint: "모드만 고르면 모델·단가가 함께 맞춰지고, 아래 예상 비용도 모드 기준으로 갱신됩니다.",
+          choices: WRITE_MODE_CARD_CHOICES,
+          defaultValue: DEFAULT_WRITE_MODE,
         },
         {
           kind: "select",
@@ -568,12 +632,6 @@ const yeriOptions: EmployeeTaskOptions = {
         },
         {
           kind: "text",
-          id: "category",
-          label: "카테고리",
-          placeholder: "선택",
-        },
-        {
-          kind: "text",
           id: "ctaLink",
           label: "CTA 링크",
           placeholder: "선택",
@@ -598,9 +656,19 @@ const yeriOptions: EmployeeTaskOptions = {
     {
       title: "고급 설정",
       description:
-        "SEO 참고자료·품질 체크, 기존 작성글 문체 참고(사용률 8%) 같은 세부 옵션입니다.",
+        "발행할 네이버 게시판, SEO 참고자료·품질 체크, 기존 작성글 문체 참고(사용률 8%) 같은 세부 옵션입니다.",
       advanced: true,
       fields: [
+        {
+          // 실서비스 category 항목. 기본 화면에서 빼고, 바로(즉시)·예약 발행일 때만
+          // 고급 설정 안에 노출합니다 (임시 저장에는 게시판 지정이 무의미).
+          kind: "text",
+          id: "category",
+          label: "발행할 네이버 게시판",
+          placeholder: "선택",
+          hint: "비워두면 기본 게시판에 발행됩니다.",
+          visibleWhen: { fieldId: "mode", oneOf: ["publish", "schedule"] },
+        },
         {
           kind: "checkboxGroup",
           id: "quality",
@@ -641,23 +709,24 @@ const yeriOptions: EmployeeTaskOptions = {
     ]);
   },
   estimateCost: (values) => {
-    const model = text(values, "aiModel") || "gemini-3.5-flash";
+    const modeValue = text(values, "writeMode") || DEFAULT_WRITE_MODE;
     const imageModel = text(values, "imageModel") || "gpt-image-1";
     const wordCount = Number(text(values, "wordCount")) || 1500;
     const imageCount = Number(text(values, "imageCount")) || 0;
-    const textCost = estimateTextCostWon(model, wordCount);
+    const textCost = estimateWriteModeCost(modeValue, wordCount);
     const imagePrice =
       IMAGE_MODEL_PRICES[imageModel] || IMAGE_MODEL_PRICES["gpt-image-1"];
     const imageWon = wonFromUsd(imageCount * imagePrice.perImageUsd);
     const totalWon = textCost.won + imageWon;
-    const haiku = estimateTextCostWon("claude-haiku-4.5", wordCount);
     return {
       headline: "예상 원가 약 " + wonLabel(totalWon),
       lines: [
         "글 " +
           wonLabel(textCost.won) +
           " (" +
-          textCost.label +
+          textCost.modeLabel +
+          " 모드 · " +
+          textCost.modelLabel +
           ") + " +
           imagePrice.label +
           " 이미지 " +
@@ -666,9 +735,6 @@ const yeriOptions: EmployeeTaskOptions = {
           wonLabel(imageWon),
         "이미지 단가: 장당 약 " + wonLabel(wonFromUsd(imagePrice.perImageUsd)),
         "환율 " + USD_KRW_RATE.toLocaleString("ko-KR") + "원/USD",
-        "참고: 가벼운 글용 Claude Haiku 4.5 글 비용 " +
-          wonLabel(haiku.won) +
-          " 수준",
       ],
       basis: "live",
       basisLabel: USD_KRW_RATE_LABEL,
@@ -824,8 +890,16 @@ const hyunjuOptions: EmployeeTaskOptions = {
 /* 윤미 — app.html yunmiJobForm 5개 입력 미러                             */
 /* ------------------------------------------------------------------ */
 
-/** 윤미도 2026-08 글쓰기 모델 라인업을 그대로 씁니다 (폼 구조는 기존 유지). */
-const YUNMI_MODEL_CHOICES: OptionChoice[] = WRITE_MODEL_CHOICES;
+/**
+ * 윤미 기본 초안의 기본 글자 수 추정치 (topic 등 입력이 비어 있을 때 기준).
+ * 업무 페이지의 "AI로 완성하기" CTA도 같은 기준으로 모드별 비용을 계산합니다.
+ */
+export const YUNMI_UPGRADE_CHAR_COUNT = 2600;
+
+/** 윤미 AI 완성 전환의 모드별 예상 비용 (업무 페이지 CTA·확인 다이얼로그 공용) */
+export function yunmiUpgradeEstimateWon(modeValue: string): number {
+  return estimateWriteModeCost(modeValue, YUNMI_UPGRADE_CHAR_COUNT).won;
+}
 
 const yunmiOptions: EmployeeTaskOptions = {
   employeeId: "yunmi",
@@ -899,14 +973,19 @@ const yunmiOptions: EmployeeTaskOptions = {
     },
     {
       title: "자주 쓰는 설정",
-      description: "AI 생성으로 전환할 때 쓸 글쓰기 모델입니다 (2026-08 라인업).",
+      description:
+        "결과 확인 후 AI 완성으로 전환할 때 쓸 작성 모드입니다. 기본 초안 생성에는 과금되지 않습니다.",
       fields: [
+        // 유료 전환 여부를 폼에서 미리 고르는 항목이 아닙니다 — 전환 선택은
+        // 업무 페이지의 결과 화면에서만 합니다 (2026-08-31 CEO 승인).
         {
-          kind: "select",
-          id: "aiModel",
-          label: "AI 모델",
-          choices: YUNMI_MODEL_CHOICES,
-          defaultValue: "gemini-3.5-flash",
+          kind: "choice",
+          variant: "cards",
+          id: "writeMode",
+          label: "작성 모드",
+          hint: "모드만 고르면 모델·단가가 함께 맞춰집니다. 전환 여부는 결과 확인 후 업무 페이지에서 선택합니다.",
+          choices: WRITE_MODE_CARD_CHOICES,
+          defaultValue: DEFAULT_WRITE_MODE,
         },
       ],
     },
@@ -932,16 +1011,18 @@ const yunmiOptions: EmployeeTaskOptions = {
   ],
   summarize: (values) => {
     const topic = text(values, "topic");
-    const model = labelOf(yunmiOptions, values, "aiModel");
+    const mode = writeModeById(
+      text(values, "writeMode") || DEFAULT_WRITE_MODE,
+    );
     return joinParts([
       topic ? "주제: " + topic : "",
       labelOf(yunmiOptions, values, "objective"),
       "A/B/C 3안",
-      model,
+      mode.label + " 모드",
     ]);
   },
   estimateCost: (values) => {
-    const model = text(values, "aiModel") || "gemini-3.5-flash";
+    const modeValue = text(values, "writeMode") || DEFAULT_WRITE_MODE;
     const combined = [
       text(values, "topic"),
       text(values, "objective"),
@@ -950,14 +1031,21 @@ const yunmiOptions: EmployeeTaskOptions = {
     ]
       .filter(Boolean)
       .join("\n");
-    const charCount = Math.max(2200, Math.min(7000, combined.length + 2600));
-    const estimate = estimateTextCostWon(model, charCount);
+    const charCount = Math.max(
+      2200,
+      Math.min(7000, combined.length + YUNMI_UPGRADE_CHAR_COUNT),
+    );
+    const estimate = estimateWriteModeCost(modeValue, charCount);
     return {
+      // 설명 없는 0원 금지: 왜 0원인지, 유료 전환은 언제 고르는지 함께 보여줍니다.
       headline: "기본 초안: 외부 AI/API 비용 0원",
       lines: [
-        "AI 생성으로 전환하면 " +
-          estimate.label +
-          " 기준 약 " +
+        "기본 초안은 무료입니다 · AI 완성 전환은 결과 확인 후 선택합니다.",
+        "AI 완성으로 전환하면 " +
+          estimate.modeLabel +
+          " 모드 (" +
+          estimate.modelLabel +
+          ") 기준 약 " +
           wonLabel(estimate.won) +
           " 예상",
         "입력 " +

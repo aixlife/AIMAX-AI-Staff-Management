@@ -209,6 +209,57 @@ export function App() {
     });
   };
 
+  /**
+   * 상수 즉시형 예외 (2026-08-31 카운슬 종합 승인).
+   * 결과는 업무 맡기기 다이얼로그 안에서 바로 보여주므로, 업무 페이지에는
+   * 완료 상태로만 조용히 적재합니다 — 이동·강조·토스트 없음.
+   */
+  const createQuoteDoneTask = (
+    employee: Employee,
+    title: string,
+    optionSummary?: string,
+  ): string => {
+    const taskId = nextPreviewTaskId(tasks);
+    const task: Task = {
+      id: taskId,
+      employeeId: employee.id,
+      title,
+      summary:
+        optionSummary ||
+        "브라우저 안에서 즉시 만든 견적서 픽스처입니다. 외부 전송은 없습니다.",
+      status: "done",
+      progress: 100,
+      updatedAt: "방금",
+      requestId: "LOCAL-" + taskId.toUpperCase(),
+      resultSummary: "생성 화면에서 바로 확인한 완성 견적서 1건 · 다운로드 제공",
+      timeline: [
+        {
+          id: "draft",
+          label: "입력 확인",
+          detail: "받는 곳과 작업 항목·금액을 확인했습니다.",
+          state: "complete",
+          at: "방금",
+        },
+        {
+          id: "render",
+          label: "견적서 생성",
+          detail: "브라우저 안에서 완성 견적서 문서를 즉시 그렸습니다.",
+          state: "complete",
+          at: "방금",
+        },
+        {
+          id: "deliver",
+          label: "완료",
+          detail: "결과는 생성 화면에서 바로 확인·다운로드했습니다.",
+          state: "complete",
+          at: "방금",
+        },
+      ],
+    };
+    setTasks((current) => [task, ...current]);
+    return taskId;
+  };
+
   const confirmTask = (taskId: string) => {
     setTasks((current) =>
       current.map((task) => {
@@ -337,6 +388,8 @@ export function App() {
           onClose={closeNewTask}
           onBack={taskFromPicker ? backToEmployeePicker : undefined}
           onCreate={createPreviewTask}
+          onQuoteCreate={createQuoteDoneTask}
+          onOpenTask={openTask}
         />
       ) : null}
 

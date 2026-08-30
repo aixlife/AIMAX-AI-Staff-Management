@@ -8,6 +8,7 @@ import type {
   StyleChoice,
   TaskOptionField,
 } from "../data/taskOptions";
+import { TemplateWireframe } from "./TemplateWireframe";
 
 interface TaskOptionFieldsProps {
   fields: TaskOptionField[];
@@ -67,7 +68,13 @@ function ChoiceCards({
               onClick={() => clickChoice(choice.value)}
             />
             <span>
+              {choice.wireframe ? (
+                <TemplateWireframe kind={choice.wireframe} />
+              ) : null}
               <strong>{choice.label}</strong>
+              {choice.meta ? (
+                <small className="option-card__meta">{choice.meta}</small>
+              ) : null}
               {choice.hint ? <small>{choice.hint}</small> : null}
               {choice.example ? (
                 <small className="option-card__toggle-hint">

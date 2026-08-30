@@ -352,7 +352,7 @@ const tasks: Task[] = [
     status: "waiting_user",
     progress: 12,
     updatedAt: "7분 전",
-    cost: "예상 약 39원 · Gemini 3.5 Flash",
+    cost: "예상 약 14원 · 표준 모드 (Gemini 3.7 Flash)",
     requestId: "PREVIEW-SCRIPT-017",
     needsConfirmation: true,
     timeline: [

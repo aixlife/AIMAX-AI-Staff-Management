@@ -7,6 +7,12 @@ import {
   type OptionValue,
   type OptionValues,
 } from "../data/taskOptions";
+import { downloadDeliverable } from "../lib/deliverableFile";
+import { buildQuoteDeliverable } from "../lib/quoteDocument";
+import {
+  loadRecentOptionValues,
+  saveRecentOptionValues,
+} from "../lib/recentSettings";
 import type { Employee } from "../types";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
@@ -23,6 +29,23 @@ interface NewTaskDialogProps {
     title: string,
     optionSummary?: string,
   ) => void;
+  /**
+   * 상수 즉시형 예외: 업무를 완료 상태로 조용히 적재하고 taskId를 돌려받습니다.
+   * 이동·강조 없이 다이얼로그 안에서 완성 견적서를 바로 보여줍니다.
+   */
+  onQuoteCreate?: (
+    employee: Employee,
+    title: string,
+    optionSummary?: string,
+  ) => string;
+  /** 결과 화면의 "업무 기록에서 보기" 링크 경로 */
+  onOpenTask?: (taskId: string) => void;
+}
+
+interface QuoteResultState {
+  taskId: string;
+  title: string;
+  values: OptionValues;
 }
 
 function executionLabel(employee: Employee): string {
@@ -240,6 +263,8 @@ export function NewTaskDialog({
   onClose,
   onBack,
   onCreate,
+  onQuoteCreate,
+  onOpenTask,
 }: NewTaskDialogProps) {
   const [title, setTitle] = useState(employee.name + " 새 업무 프리뷰");
   const [acknowledged, setAcknowledged] = useState(false);
@@ -249,12 +274,25 @@ export function NewTaskDialog({
     () => getTaskOptions(employee.id),
     [employee.id],
   );
+  // 폼은 항상 기본값으로 엽니다. 저장분이 있어도 자동 복원하지 않고
+  // 상단 칩을 누를 때만 복원합니다 (2026-08-31 카운슬 종합 승인).
   const [optionValues, setOptionValues] = useState<OptionValues>(() =>
     optionConfig ? buildDefaultOptionValues(optionConfig) : {},
   );
+  const [recentValues] = useState<OptionValues | null>(() =>
+    optionConfig ? loadRecentOptionValues(employee.id, optionConfig) : null,
+  );
+  const [recentApplied, setRecentApplied] = useState(false);
+  const [quoteResult, setQuoteResult] = useState<QuoteResultState | null>(null);
 
   const setOption = (fieldId: string, value: OptionValue) => {
     setOptionValues((current) => ({ ...current, [fieldId]: value }));
+  };
+
+  const applyRecentValues = () => {
+    if (!recentValues) return;
+    setOptionValues({ ...recentValues });
+    setRecentApplied(true);
   };
 
   const missingLabels = optionConfig
@@ -272,7 +310,32 @@ export function NewTaskDialog({
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit) return;
+    // "최근 설정 불러오기" 칩용 저장 — 4개 폼 직원 공통, 키·개인정보성 값 없음.
+    if (optionConfig) {
+      saveRecentOptionValues(employee.id, optionConfig, optionValues);
+    }
+    if (isQuote && onQuoteCreate) {
+      // 상수 즉시형 예외: 업무 페이지로 이동하지 않고 그 자리에서 결과를 엽니다.
+      const taskId = onQuoteCreate(
+        employee,
+        title.trim(),
+        optionSummary || undefined,
+      );
+      setQuoteResult({
+        taskId,
+        title: title.trim(),
+        values: { ...optionValues },
+      });
+      return;
+    }
     onCreate(employee, title.trim(), optionSummary || undefined);
+  };
+
+  const downloadQuote = (result: QuoteResultState) => {
+    downloadDeliverable(
+      buildQuoteDeliverable(result.values, result.title),
+      employee,
+    );
   };
 
   if (employee.id === "songi") {
@@ -284,6 +347,52 @@ export function NewTaskDialog({
         labelId="new-task-title"
       >
         <SongiHandoffPanel onBack={onBack} onClose={onClose} />
+      </Modal>
+    );
+  }
+
+  if (isQuote && quoteResult) {
+    return (
+      <Modal
+        title="견적서가 완성됐습니다"
+        description="입력값으로 즉시 만든 완성 견적서입니다. 업무 페이지로 이동하지 않고 이 자리에서 확인합니다."
+        onClose={onClose}
+        labelId="new-task-title"
+        className="modal-panel--quote-result"
+      >
+        <div className="task-preflight quote-result">
+          <QuotePreview values={quoteResult.values} />
+          <p className="preview-disclaimer">
+            업무 기록에는 완료 상태로 조용히 저장됐습니다. 실서비스에서는 같은
+            화면에서 PDF 저장까지 이어집니다.
+          </p>
+          <div className="dialog-actions dialog-actions--quote-result">
+            <button
+              className="text-link-button"
+              type="button"
+              onClick={() => {
+                onOpenTask?.(quoteResult.taskId);
+                onClose();
+              }}
+            >
+              업무 기록에서 보기
+            </button>
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={onClose}
+            >
+              닫기
+            </button>
+            <button
+              className="button button--primary"
+              type="button"
+              onClick={() => downloadQuote(quoteResult)}
+            >
+              견적서 다운로드
+            </button>
+          </div>
+        </div>
       </Modal>
     );
   }
@@ -318,6 +427,22 @@ export function NewTaskDialog({
         onSubmit={onSubmit}
       >
         <div className="task-preflight__main">
+        {optionConfig && recentValues ? (
+          <div className="recent-settings-row">
+            <button
+              type="button"
+              className="recent-settings-chip"
+              onClick={applyRecentValues}
+              disabled={recentApplied}
+            >
+              {recentApplied ? "최근 설정을 불러왔습니다" : "최근 설정 불러오기"}
+            </button>
+            <span className="field-hint">
+              이 탭에서 마지막으로 맡긴 {employee.name} 업무의 폼 설정입니다.
+              자동으로 적용하지 않고, 칩을 누를 때만 복원합니다.
+            </span>
+          </div>
+        ) : null}
         <div className="field">
           <label htmlFor="preview-task-name">업무 이름</label>
           <input

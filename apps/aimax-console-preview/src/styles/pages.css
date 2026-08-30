@@ -1003,6 +1003,7 @@
 .preview-disclaimer {
   color: var(--color-warning) !important;
   font-size: var(--text-xs);
+  word-break: keep-all;
 }
 
 .failure-panel {
@@ -1661,5 +1662,67 @@
   .connection-stats > div {
     display: flex;
     justify-content: space-between;
+  }
+}
+
+/* --- 2026-08-31 카운슬 종합: 윤미 AI 완성 CTA · 모드별 예상 비용 다이얼로그 --- */
+
+.modal-panel--upgrade {
+  width: min(560px, 100%);
+}
+
+.upgrade-dialog-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.upgrade-mode-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.upgrade-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  word-break: keep-all;
+}
+
+.upgrade-mode-row > div {
+  display: grid;
+  gap: 2px;
+}
+
+.upgrade-mode-row strong {
+  font-size: var(--text-sm);
+  font-weight: 780;
+}
+
+.upgrade-mode-row small {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  line-height: 1.6;
+}
+
+.upgrade-mode-row__price {
+  color: var(--color-brand-strong);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .upgrade-mode-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .upgrade-mode-row__price {
+    white-space: normal;
   }
 }
