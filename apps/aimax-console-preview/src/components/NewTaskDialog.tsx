@@ -1,13 +1,25 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
+import {
+  buildDefaultOptionValues,
+  getTaskOptions,
+  missingRequiredLabels,
+  type OptionValue,
+  type OptionValues,
+} from "../data/taskOptions";
 import type { Employee } from "../types";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { TaskOptionFields } from "./TaskOptionFields";
 
 interface NewTaskDialogProps {
   employee: Employee;
   onClose: () => void;
-  onCreate: (employee: Employee, title: string) => void;
+  onCreate: (
+    employee: Employee,
+    title: string,
+    optionSummary?: string,
+  ) => void;
 }
 
 export function NewTaskDialog({
@@ -17,11 +29,31 @@ export function NewTaskDialog({
 }: NewTaskDialogProps) {
   const [title, setTitle] = useState(employee.name + " 새 업무 프리뷰");
   const [acknowledged, setAcknowledged] = useState(false);
+  const optionConfig = useMemo(
+    () => getTaskOptions(employee.id),
+    [employee.id],
+  );
+  const [optionValues, setOptionValues] = useState<OptionValues>(() =>
+    optionConfig ? buildDefaultOptionValues(optionConfig) : {},
+  );
+
+  const setOption = (fieldId: string, value: OptionValue) => {
+    setOptionValues((current) => ({ ...current, [fieldId]: value }));
+  };
+
+  const missingLabels = optionConfig
+    ? missingRequiredLabels(optionConfig, optionValues)
+    : [];
+  const optionSummary = optionConfig
+    ? optionConfig.summarize(optionValues)
+    : "";
+  const canSubmit =
+    acknowledged && Boolean(title.trim()) && missingLabels.length === 0;
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!acknowledged || !title.trim()) return;
-    onCreate(employee, title.trim());
+    if (!canSubmit) return;
+    onCreate(employee, title.trim(), optionSummary || undefined);
   };
 
   return (
@@ -42,6 +74,58 @@ export function NewTaskDialog({
           />
           <span className="field-hint">대표 결과 목록에서 구분할 수 있게 적어주세요.</span>
         </div>
+
+        {optionConfig ? (
+          <>
+            <section className="option-group" aria-label="필수 입력">
+              <header className="option-group__head">
+                <strong>필수 입력</strong>
+                <span>이것만 채우면 맡길 수 있어요</span>
+              </header>
+              <TaskOptionFields
+                fields={optionConfig.required}
+                values={optionValues}
+                onChange={setOption}
+                idPrefix={"opt-" + employee.id + "-required"}
+              />
+            </section>
+
+            <section className="option-group" aria-label="자주 쓰는 설정">
+              <header className="option-group__head">
+                <strong>자주 쓰는 설정</strong>
+                <span>기본값 그대로 둬도 됩니다</span>
+              </header>
+              <TaskOptionFields
+                fields={optionConfig.frequent}
+                values={optionValues}
+                onChange={setOption}
+                idPrefix={"opt-" + employee.id + "-frequent"}
+              />
+            </section>
+
+            <details className="option-group option-group--advanced">
+              <summary>
+                <strong>고급 설정</strong>
+                <span>필요할 때만 펼치세요</span>
+              </summary>
+              <div className="option-group__fields">
+                <TaskOptionFields
+                  fields={optionConfig.advanced}
+                  values={optionValues}
+                  onChange={setOption}
+                  idPrefix={"opt-" + employee.id + "-advanced"}
+                />
+              </div>
+            </details>
+
+            {optionSummary ? (
+              <p className="option-summary">
+                <span>업무 카드에 표시될 요약</span>
+                <strong data-testid="option-summary-preview">{optionSummary}</strong>
+              </p>
+            ) : null}
+          </>
+        ) : null}
 
         <div className="preflight-summary">
           <div>
@@ -90,7 +174,7 @@ export function NewTaskDialog({
           <button
             className="button button--primary"
             type="submit"
-            disabled={!acknowledged || !title.trim()}
+            disabled={!canSubmit}
           >
             로컬 업무 만들기
           </button>

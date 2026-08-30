@@ -116,13 +116,18 @@ export function App() {
     });
   };
 
-  const createPreviewTask = (employee: Employee, title: string) => {
+  const createPreviewTask = (
+    employee: Employee,
+    title: string,
+    optionSummary?: string,
+  ) => {
     const taskId = nextPreviewTaskId(tasks);
     const task: Task = {
       id: taskId,
       employeeId: employee.id,
       title,
       summary:
+        optionSummary ||
         "로컬 프리뷰에서 만든 fixture 업무입니다. 서버·API·유료 모델에는 전송되지 않았습니다.",
       status: "queued",
       progress: 0,
