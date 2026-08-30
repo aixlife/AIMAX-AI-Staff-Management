@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "./components/AppShell";
+import { EmployeePickerDialog } from "./components/EmployeePickerDialog";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { ResumeDialog } from "./components/ResumeDialog";
 import { Toast } from "./components/Toast";
@@ -42,6 +43,8 @@ export function App() {
     fixture.tasks[0]?.id,
   );
   const [newTaskEmployee, setNewTaskEmployee] = useState<Employee | undefined>();
+  const [employeePickerOpen, setEmployeePickerOpen] = useState(false);
+  const [taskFromPicker, setTaskFromPicker] = useState(false);
   const [resumeEmployee, setResumeEmployee] = useState<Employee | undefined>();
   const [toast, setToast] = useState<ToastState | null>(null);
 
@@ -60,6 +63,8 @@ export function App() {
     setSelectedEmployeeId(fixture.employees[0]?.id);
     setSelectedTaskId(fixture.tasks[0]?.id);
     setNewTaskEmployee(undefined);
+    setEmployeePickerOpen(false);
+    setTaskFromPicker(false);
   }, [fixture]);
 
   useEffect(() => {
@@ -99,7 +104,34 @@ export function App() {
   };
 
   const startTask = (employee: Employee) => {
+    setTaskFromPicker(false);
     setNewTaskEmployee(employee);
+  };
+
+  /** "새 업무" 버튼 공통 진입: 직원 선택 모달을 먼저 엽니다. */
+  const openEmployeePicker = () => {
+    if (!runtimeFixture.employees.length) {
+      navigate("employees");
+      return;
+    }
+    setEmployeePickerOpen(true);
+  };
+
+  const pickEmployeeForTask = (employee: Employee) => {
+    setEmployeePickerOpen(false);
+    setTaskFromPicker(true);
+    setNewTaskEmployee(employee);
+  };
+
+  const backToEmployeePicker = () => {
+    setNewTaskEmployee(undefined);
+    setTaskFromPicker(false);
+    setEmployeePickerOpen(true);
+  };
+
+  const closeNewTask = () => {
+    setNewTaskEmployee(undefined);
+    setTaskFromPicker(false);
   };
 
   const showPreviewNotice = (message: string) => {
@@ -158,6 +190,7 @@ export function App() {
     setTasks((current) => [task, ...current]);
     setSelectedTaskId(taskId);
     setNewTaskEmployee(undefined);
+    setTaskFromPicker(false);
     navigate("work");
     setToast({
       id: Date.now(),
@@ -238,11 +271,7 @@ export function App() {
         onOpenEmployee={openEmployee}
         onOpenEmployees={() => navigate("employees")}
         onOpenConnections={() => navigate("connections")}
-        onNewTask={() => {
-          const employee = runtimeFixture.employees[0];
-          if (employee) startTask(employee);
-          else navigate("employees");
-        }}
+        onNewTask={openEmployeePicker}
       />
     );
   };
@@ -277,22 +306,24 @@ export function App() {
         onScenarioChange={setScenario}
         onNavigate={navigate}
         onOpenLanding={openLanding}
-        onNewTask={() => {
-          const employee =
-            runtimeFixture.employees.find(
-              (item) => item.id === selectedEmployeeId,
-            ) || runtimeFixture.employees[0];
-          if (employee) startTask(employee);
-          else navigate("employees");
-        }}
+        onNewTask={openEmployeePicker}
       >
         {renderPage()}
       </AppShell>
 
+      {employeePickerOpen ? (
+        <EmployeePickerDialog
+          employees={runtimeFixture.employees}
+          onSelect={pickEmployeeForTask}
+          onClose={() => setEmployeePickerOpen(false)}
+        />
+      ) : null}
+
       {newTaskEmployee ? (
         <NewTaskDialog
           employee={newTaskEmployee}
-          onClose={() => setNewTaskEmployee(undefined)}
+          onClose={closeNewTask}
+          onBack={taskFromPicker ? backToEmployeePicker : undefined}
           onCreate={createPreviewTask}
         />
       ) : null}

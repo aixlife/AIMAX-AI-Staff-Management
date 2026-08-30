@@ -10,11 +10,14 @@ import {
 import type { Employee } from "../types";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { QuotePreview } from "./QuotePreview";
 import { TaskOptionFields } from "./TaskOptionFields";
 
 interface NewTaskDialogProps {
   employee: Employee;
   onClose: () => void;
+  /** 직원 선택 모달에서 열렸을 때 다시 선택으로 돌아가는 경로 */
+  onBack?: () => void;
   onCreate: (
     employee: Employee,
     title: string,
@@ -63,7 +66,13 @@ function PreflightSummary({
  * 웹 자료조사 폼은 폐기됐고, 파트너 직원 '훔쳐봐'로 안내합니다.
  * 명칭·제작자·설명·주소는 실서비스 server.js 파트너 카드와 동일합니다.
  */
-function SongiHandoffPanel({ onClose }: { onClose: () => void }) {
+function SongiHandoffPanel({
+  onBack,
+  onClose,
+}: {
+  onBack?: () => void;
+  onClose: () => void;
+}) {
   return (
     <div className="task-preflight">
       <div className="notice notice--info">
@@ -108,6 +117,15 @@ function SongiHandoffPanel({ onClose }: { onClose: () => void }) {
       />
 
       <div className="dialog-actions">
+        {onBack ? (
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={onBack}
+          >
+            다른 직원 선택
+          </button>
+        ) : null}
         <button className="button button--primary" type="button" onClick={onClose}>
           닫기
         </button>
@@ -123,9 +141,11 @@ function SongiHandoffPanel({ onClose }: { onClose: () => void }) {
  */
 function JieunDownloadPanel({
   employee,
+  onBack,
   onClose,
 }: {
   employee: Employee;
+  onBack?: () => void;
   onClose: () => void;
 }) {
   const [notice, setNotice] = useState("");
@@ -198,6 +218,15 @@ function JieunDownloadPanel({
       />
 
       <div className="dialog-actions">
+        {onBack ? (
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={onBack}
+          >
+            다른 직원 선택
+          </button>
+        ) : null}
         <button className="button button--primary" type="button" onClick={onClose}>
           닫기
         </button>
@@ -209,10 +238,13 @@ function JieunDownloadPanel({
 export function NewTaskDialog({
   employee,
   onClose,
+  onBack,
   onCreate,
 }: NewTaskDialogProps) {
   const [title, setTitle] = useState(employee.name + " 새 업무 프리뷰");
   const [acknowledged, setAcknowledged] = useState(false);
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState(false);
+  const isQuote = employee.id === "sangsu";
   const optionConfig = useMemo(
     () => getTaskOptions(employee.id),
     [employee.id],
@@ -251,7 +283,7 @@ export function NewTaskDialog({
         onClose={onClose}
         labelId="new-task-title"
       >
-        <SongiHandoffPanel onClose={onClose} />
+        <SongiHandoffPanel onBack={onBack} onClose={onClose} />
       </Modal>
     );
   }
@@ -264,7 +296,7 @@ export function NewTaskDialog({
         onClose={onClose}
         labelId="new-task-title"
       >
-        <JieunDownloadPanel employee={employee} onClose={onClose} />
+        <JieunDownloadPanel employee={employee} onBack={onBack} onClose={onClose} />
       </Modal>
     );
   }
@@ -272,11 +304,20 @@ export function NewTaskDialog({
   return (
     <Modal
       title={employee.name + "에게 업무 맡기기"}
-      description="실제 실행 전 점검을 검토하는 로컬 fixture 흐름입니다."
+      description={
+        isQuote
+          ? "입력하면 오른쪽 견적서 문서가 즉시 갱신되는 로컬 fixture 흐름입니다."
+          : "실제 실행 전 점검을 검토하는 로컬 fixture 흐름입니다."
+      }
       onClose={onClose}
       labelId="new-task-title"
+      className={isQuote ? "modal-panel--quote" : undefined}
     >
-      <form className="task-preflight" onSubmit={onSubmit}>
+      <form
+        className={"task-preflight" + (isQuote ? " task-preflight--split" : "")}
+        onSubmit={onSubmit}
+      >
+        <div className="task-preflight__main">
         <div className="field">
           <label htmlFor="preview-task-name">업무 이름</label>
           <input
@@ -335,6 +376,20 @@ export function NewTaskDialog({
               ),
             )}
 
+            {isQuote ? (
+              <div className="quote-live-preview quote-live-preview--inline">
+                <button
+                  className="button button--secondary quote-preview-toggle"
+                  type="button"
+                  aria-expanded={mobilePreviewOpen}
+                  onClick={() => setMobilePreviewOpen((open) => !open)}
+                >
+                  {mobilePreviewOpen ? "견적서 미리보기 접기" : "견적서 미리보기"}
+                </button>
+                {mobilePreviewOpen ? <QuotePreview values={optionValues} /> : null}
+              </div>
+            ) : null}
+
             {costEstimate ? (
               <section
                 className="cost-estimate"
@@ -388,6 +443,15 @@ export function NewTaskDialog({
         </label>
 
         <div className="dialog-actions">
+          {onBack ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={onBack}
+            >
+              다른 직원 선택
+            </button>
+          ) : null}
           <button className="button button--secondary" type="button" onClick={onClose}>
             취소
           </button>
@@ -399,6 +463,16 @@ export function NewTaskDialog({
             로컬 업무 만들기
           </button>
         </div>
+        </div>
+
+        {isQuote ? (
+          <aside
+            className="quote-live-preview quote-live-preview--desktop"
+            aria-label="견적서 실시간 미리보기"
+          >
+            <QuotePreview values={optionValues} />
+          </aside>
+        ) : null}
       </form>
     </Modal>
   );

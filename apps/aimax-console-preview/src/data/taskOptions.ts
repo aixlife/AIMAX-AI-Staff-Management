@@ -7,8 +7,11 @@
  * - 현주: app.html hyunjuJobForm (타겟 방식~신청 멘트, 6개 입력)
  * - 윤미: app.html yunmiJobForm (주제~레퍼런스 메모, 5개 입력)
  * - 상수: app.html sangsuJobForm (로고~작성일, 14개 입력)
- * 값은 전부 픽스처이며 어떤 항목도 삭제하지 않습니다. 예리 폼만
+ * 값은 전부 픽스처이며 어떤 항목도 삭제하지 않습니다. 예리·윤미·상수 폼은
  * 필수 / 자주 쓰는 설정 / 고급(토글 1개) 3단으로 재그룹했습니다.
+ * 상수 폼에는 실서비스 견적서 렌더러의 부가세 10% 자동 계산을 화면에서
+ * 고를 수 있게 부가세 토글 1개를 프리뷰 추가 항목으로 뒀고, 윤미 목적은
+ * 실서비스 placeholder 예시 3종을 카드로 제공해 목적별 대본 샘플을 엽니다.
  *
  * 글쓰기 모델·단가는 2026-08 라인업(아래 AI_MODEL_PRICES)으로 교체했고,
  * 환율 USD_KRW_RATE(1476원)와 토큰 추정식은 기존 그대로입니다.
@@ -740,7 +743,7 @@ const yunmiOptions: EmployeeTaskOptions = {
   employeeId: "yunmi",
   sections: [
     {
-      title: "스크립트 브리프",
+      title: "필수 입력",
       description:
         "기본 초안은 외부 AI/API 비용 0원으로 만듭니다. 주제와 목적만 정확히 넣으면 윤미가 A/B/C 타깃별 스크립트를 추천합니다.",
       fields: [
@@ -753,15 +756,62 @@ const yunmiOptions: EmployeeTaskOptions = {
           required: true,
         },
         {
-          kind: "textarea",
+          kind: "choice",
+          variant: "cards",
           id: "objective",
           label: "목적",
-          placeholder: "예: 저장을 유도하기, 상담 전환 만들기, 설명회 기대감 높이기",
+          hint: "실서비스에서는 자유 입력 항목입니다. 프리뷰에서는 대표 목적 3종을 카드로 제공하고, 카드를 누르면 이 설정으로 나오는 짧은 대본 샘플이 열립니다.",
+          choices: [
+            {
+              value: "save-lead",
+              label: "저장을 유도하기",
+              hint: "다시 볼 가치를 앞세워 저장 버튼을 누르게 합니다.",
+              example: {
+                lines: [
+                  "후킹: 피부과 가기 전, 이 3가지는 집에서 끝내세요.",
+                  "전개: 아침·저녁 루틴을 화면 자막 3줄로 끊어 보여줍니다.",
+                  "대사: 둘째, 세안 후 3분 안에 보습까지가 한 세트입니다.",
+                  "자막: 핵심 단계마다 번호 자막을 붙여 저장 캡처를 유도합니다.",
+                  "CTA: 나중에 다시 보게 저장해두세요. (저장 유도형)",
+                ],
+              },
+            },
+            {
+              value: "consult-lead",
+              label: "상담 전환 만들기",
+              hint: "문제를 좁혀 상담 신청으로 자연스럽게 잇습니다.",
+              example: {
+                lines: [
+                  "후킹: 견적 받고 고민만 3주째라면, 순서가 틀린 겁니다.",
+                  "전개: 흔한 실패 사례 1개를 보여주고 판단 기준 2가지로 좁힙니다.",
+                  "대사: 예산보다 먼저 확인할 건 우리 매장 동선입니다.",
+                  "자막: 마지막 3초에 상담 신청 방법을 고정 자막으로 띄웁니다.",
+                  "CTA: 프로필 링크에서 무료 상담을 신청하세요. (댓글 유도 병행)",
+                ],
+              },
+            },
+            {
+              value: "event-hype",
+              label: "설명회 기대감 높이기",
+              hint: "현장에서만 얻는 것을 예고해 참석 동기를 만듭니다.",
+              example: {
+                lines: [
+                  "후킹: 이번 설명회에서 이 질문 하나는 꼭 하세요.",
+                  "전개: 현장에서만 공개하는 자료 목차를 3컷으로 예고합니다.",
+                  "대사: 작년 참석자들이 가장 아까워한 건 질문 시간이었습니다.",
+                  "자막: 날짜·장소는 마지막 컷에 큰 자막 한 줄로 못박습니다.",
+                  "CTA: 참석 전 체크리스트는 팔로우하면 먼저 보내드립니다. (팔로우 유도형)",
+                ],
+              },
+            },
+          ],
+          defaultValue: "save-lead",
         },
       ],
     },
     {
-      title: "생성 설정",
+      title: "자주 쓰는 설정",
+      description: "AI 생성으로 전환할 때 쓸 글쓰기 모델입니다 (2026-08 라인업).",
       fields: [
         {
           kind: "select",
@@ -773,7 +823,9 @@ const yunmiOptions: EmployeeTaskOptions = {
       ],
     },
     {
-      title: "레퍼런스",
+      title: "고급 설정",
+      description: "레퍼런스 참고자료 같은 세부 옵션입니다. 기본 초안에는 없어도 됩니다.",
+      advanced: true,
       fields: [
         {
           kind: "text",
@@ -795,6 +847,7 @@ const yunmiOptions: EmployeeTaskOptions = {
     const model = labelOf(yunmiOptions, values, "aiModel");
     return joinParts([
       topic ? "주제: " + topic : "",
+      labelOf(yunmiOptions, values, "objective"),
       "A/B/C 3안",
       model,
     ]);
@@ -835,36 +888,93 @@ const yunmiOptions: EmployeeTaskOptions = {
 };
 
 /* ------------------------------------------------------------------ */
-/* 상수 — app.html sangsuJobForm 14개 입력 미러                           */
+/* 상수 — app.html sangsuJobForm 14개 미러 + 부가세 토글(프리뷰 추가 1개)   */
 /* ------------------------------------------------------------------ */
+
+/** 실서비스 견적서 렌더러의 부가세 10% 자동 계산을 화면에서 고르는 프리뷰 추가 항목. */
+const VAT_MODE_CHOICES: OptionChoice[] = [
+  { value: "separate", label: "부가세 별도 (10% 추가)" },
+  { value: "none", label: "부가세 미적용" },
+];
+
+export interface QuoteTotals {
+  rows: ItemRow[];
+  filledCount: number;
+  subtotal: number;
+  vat: number;
+  total: number;
+  vatMode: string;
+}
+
+/** 실서비스 sangsuQuoteHtml과 같은 계산: 공급가액 합계에 부가세 10% 반올림. */
+export function computeQuoteTotals(values: OptionValues): QuoteTotals {
+  const rows = Array.isArray(values.items) ? (values.items as ItemRow[]) : [];
+  const vatMode =
+    typeof values.vatMode === "string" ? values.vatMode : "separate";
+  const filled = rows.filter(
+    (row) =>
+      row.category.trim().length > 0 || row.description.trim().length > 0,
+  );
+  let subtotal = 0;
+  for (const row of rows) subtotal += Number(row.price) || 0;
+  const vat = vatMode === "separate" ? Math.round(subtotal * 0.1) : 0;
+  return {
+    rows,
+    filledCount: filled.length,
+    subtotal,
+    vat,
+    total: subtotal + vat,
+    vatMode,
+  };
+}
 
 const sangsuOptions: EmployeeTaskOptions = {
   employeeId: "sangsu",
   sections: [
     {
-      title: "견적 기본 정보",
+      title: "필수 입력",
       description:
         "상수는 브라우저 안에서만 견적서를 생성합니다. 유료 AI/API 호출, 로컬 실행기, 외부 전송 없이 현재 기기에서 PDF 저장 화면을 엽니다.",
       fields: [
-        { kind: "file", id: "logo", label: "로고", accept: "image/*" },
+        {
+          kind: "text",
+          id: "clientName",
+          label: "받는 곳",
+          placeholder: "예: 고객사명 또는 담당자",
+          hint: "견적서를 받을 거래처명 또는 담당자입니다.",
+          required: true,
+        },
+        {
+          kind: "itemTable",
+          id: "items",
+          label: "작업 항목",
+          addLabel: "항목 추가",
+          defaultRows: [
+            { category: "기본안", description: "상세페이지 시안 1종", price: "150000" },
+            { category: "수정", description: "수정 2회 대응", price: "30000" },
+          ],
+        },
+      ],
+    },
+    {
+      title: "자주 쓰는 설정",
+      description: "입력을 바꾸면 견적서 미리보기에 바로 반영됩니다.",
+      fields: [
+        {
+          kind: "choice",
+          variant: "chips",
+          id: "vatMode",
+          label: "부가세",
+          hint: "실서비스 견적서는 공급가액에 부가세 10%를 더해 총액을 계산합니다. 프리뷰 추가 항목입니다.",
+          choices: VAT_MODE_CHOICES,
+          defaultValue: "separate",
+        },
         { kind: "date", id: "quoteDate", label: "견적일" },
         {
           kind: "text",
           id: "issuerName",
           label: "공급자",
           placeholder: "예: 메이크패밀리",
-        },
-        {
-          kind: "text",
-          id: "clientName",
-          label: "받는 곳",
-          placeholder: "예: 고객사명 또는 담당자",
-        },
-        {
-          kind: "text",
-          id: "clientEmail",
-          label: "이메일",
-          placeholder: "예: customer@example.com",
         },
         {
           kind: "text",
@@ -875,8 +985,17 @@ const sangsuOptions: EmployeeTaskOptions = {
       ],
     },
     {
-      title: "거래 조건",
+      title: "고급 설정",
+      description: "안내 문구·서명·납품 조건 같은 세부 항목입니다.",
+      advanced: true,
       fields: [
+        { kind: "file", id: "logo", label: "로고", accept: "image/*" },
+        {
+          kind: "text",
+          id: "clientEmail",
+          label: "이메일",
+          placeholder: "예: customer@example.com",
+        },
         {
           kind: "text",
           id: "validDuration",
@@ -895,26 +1014,6 @@ const sangsuOptions: EmployeeTaskOptions = {
           label: "납품 형식",
           placeholder: "예: PDF, 이미지, 원본 파일",
         },
-      ],
-    },
-    {
-      title: "작업 항목",
-      fields: [
-        {
-          kind: "itemTable",
-          id: "items",
-          label: "작업 항목",
-          addLabel: "항목 추가",
-          defaultRows: [
-            { category: "기본안", description: "상세페이지 시안 1종", price: "150000" },
-            { category: "수정", description: "수정 2회 대응", price: "30000" },
-          ],
-        },
-      ],
-    },
-    {
-      title: "안내·서명",
-      fields: [
         {
           kind: "textarea",
           id: "notes",
@@ -944,30 +1043,34 @@ const sangsuOptions: EmployeeTaskOptions = {
   ],
   summarize: (values) => {
     const client = text(values, "clientName");
-    const rows = Array.isArray(values.items) ? (values.items as ItemRow[]) : [];
-    const filled = rows.filter(
-      (row) => row.category.trim().length > 0 || row.description.trim().length > 0,
-    );
-    let total = 0;
-    for (const row of filled) total += Number(row.price) || 0;
+    const totals = computeQuoteTotals(values);
     return joinParts([
       client,
-      "항목 " + filled.length + "건",
-      "합계 " + total.toLocaleString("ko-KR") + "원",
+      "항목 " + totals.filledCount + "건",
+      "합계 " +
+        totals.total.toLocaleString("ko-KR") +
+        "원" +
+        (totals.vat > 0 ? " (부가세 포함)" : " (부가세 미적용)"),
     ]);
   },
   estimateCost: (values) => {
-    const rows = Array.isArray(values.items) ? (values.items as ItemRow[]) : [];
-    const filled = rows.filter(
-      (row) => row.category.trim().length > 0 || row.description.trim().length > 0,
-    );
-    let total = 0;
-    for (const row of filled) total += Number(row.price) || 0;
+    const totals = computeQuoteTotals(values);
     return {
-      headline: "외부 AI/API 비용 0원 · 견적 합계 " + total.toLocaleString("ko-KR") + "원",
+      headline:
+        "외부 AI/API 비용 0원 · 총 견적 금액 " +
+        totals.total.toLocaleString("ko-KR") +
+        "원" +
+        (totals.vat > 0 ? " (부가세 포함)" : " (부가세 미적용)"),
       lines: [
         "브라우저 안에서만 견적서를 만들어 실행 비용이 들지 않습니다 (실서비스 동일 정책).",
-        "작업 항목 " + filled.length + "건 금액 합계 기준입니다.",
+        "작업 항목 " +
+          totals.filledCount +
+          "건 · 공급가액 " +
+          totals.subtotal.toLocaleString("ko-KR") +
+          "원" +
+          (totals.vat > 0
+            ? " · 부가세 " + totals.vat.toLocaleString("ko-KR") + "원"
+            : ""),
       ],
       basis: "free",
       basisLabel: "브라우저 생성 · 외부 비용 없음",

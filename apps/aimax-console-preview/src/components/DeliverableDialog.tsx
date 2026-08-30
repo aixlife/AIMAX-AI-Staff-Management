@@ -8,7 +8,7 @@ interface DeliverableDialogProps {
   onClose: () => void;
 }
 
-function DeliverableBlockView({ block }: { block: DeliverableBlock }) {
+export function DeliverableBlockView({ block }: { block: DeliverableBlock }) {
   if (block.type === "heading") {
     return <h3>{block.text}</h3>;
   }
