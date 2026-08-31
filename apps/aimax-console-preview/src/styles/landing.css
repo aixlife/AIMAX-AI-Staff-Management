@@ -4,39 +4,13 @@
   overflow-x: clip;
   color: var(--color-forest);
   background: #fbf8f1;
+  /* 한국어는 어절 중간에서 꺾이지 않게 랜딩 전체에 기본값으로 둡니다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 .landing-page button,
 .landing-page a { -webkit-tap-highlight-color: transparent; }
-
-.landing-preview-bar {
-  min-height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-4);
-  padding: 6px clamp(var(--space-4), 4vw, var(--space-8));
-  border-bottom: 1px solid #dec15f;
-  color: #4f3d08;
-  background: #f7d980;
-  font-size: var(--text-xs);
-  text-align: center;
-}
-
-.landing-preview-bar strong {
-  margin-right: 6px;
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
-}
-
-.landing-preview-bar button {
-  padding: 2px 0;
-  border: 0;
-  border-bottom: 1px solid currentColor;
-  color: inherit;
-  background: transparent;
-  font-weight: 850;
-}
 
 .public-header {
   position: sticky;
@@ -138,6 +112,21 @@
   font-size: 0.68rem;
   text-align: center;
 }
+
+/* 이미 구매한 회원이 운영실로 들어가는 텍스트 링크 */
+.landing-login-link {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  color: #4a5c53;
+  font-size: var(--text-xs);
+  font-weight: 780;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(16, 39, 29, 0.28);
+  white-space: nowrap;
+}
+
+.landing-login-link:hover { color: var(--color-forest); border-bottom-color: var(--color-forest); }
 
 .public-cta {
   min-height: 52px;
@@ -542,6 +531,43 @@
 .task-proof-motion__document li:nth-child(3) { animation-delay: 1110ms; }
 .task-proof-motion__document li i { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #63a07e; }
 .task-proof-card__empty { margin: var(--space-7); color: var(--color-muted); text-align: center; }
+
+/* 시연 카드 아래 한 줄: 구매 링크 또는 파트너 안내 */
+.task-proof-motion__foot {
+  grid-column: 1 / -1;
+  margin: 12px 0 0;
+  color: #68736d;
+  font-size: 0.72rem;
+  line-height: 1.7;
+  text-align: center;
+  word-break: keep-all;
+}
+
+.task-proof-motion__foot a {
+  color: var(--color-forest);
+  font-weight: 850;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(16, 39, 29, 0.32);
+}
+
+.task-proof-motion__foot a:hover { border-bottom-color: var(--color-forest); }
+
+/* 파트너 회사가 맡는 일에서 직원 사진 자리에 들어가는 대표 이미지 */
+.partner-portrait {
+  width: 104px;
+  height: 124px;
+  border-radius: 28px;
+  object-fit: cover;
+  background: #fff;
+  border: 1px solid rgba(16, 39, 29, 0.12);
+}
+
+.partner-portrait--dark {
+  width: 94px;
+  height: 112px;
+  border-radius: 25px;
+  border-color: rgba(255, 255, 255, 0.2);
+}
 
 .landing-section {
   width: min(1320px, 100%);
@@ -949,6 +975,106 @@
 .trust-strip__items h3 { margin: var(--space-6) 0 var(--space-3); font-size: 1.15rem; }
 .trust-strip__items p { margin: 0; color: #68736d; font-size: var(--text-xs); line-height: 1.75; word-break: keep-all; }
 
+/* 가격 안내 + 회사 소개 */
+.hire-section {
+  display: grid;
+  gap: clamp(var(--space-7), 4vw, 3.4rem);
+  border-top: 1px solid rgba(16, 39, 29, 0.1);
+  background: #fbf8f1;
+}
+
+.hire-list {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid rgba(16, 39, 29, 0.13);
+  border-radius: 22px;
+  background: rgba(16, 39, 29, 0.13);
+}
+
+.hire-list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 0.7fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  background: #fffdf8;
+}
+
+.hire-list > li.is-partner { background: #f4f7f4; }
+
+.hire-list__who { display: grid; gap: 3px; min-width: 0; }
+.hire-list__who strong { font-size: 1.1rem; letter-spacing: -0.02em; }
+.hire-list__who small { color: #6d7a73; font-size: var(--text-xs); word-break: keep-all; }
+
+.hire-list__job {
+  margin: 0;
+  color: #46564d;
+  font-size: var(--text-sm);
+  word-break: keep-all;
+}
+
+.hire-list__price {
+  margin: 0;
+  color: var(--color-forest);
+  font-size: 1.05rem;
+  font-weight: 880;
+  white-space: nowrap;
+}
+
+.hire-list__cta {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--color-forest);
+  border-radius: var(--radius-pill);
+  color: #fffdf7;
+  background: var(--color-forest);
+  font-size: var(--text-sm);
+  font-weight: 830;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background var(--motion-base) ease;
+}
+
+.hire-list__cta:hover { background: #1b4934; transform: translateY(-1px); }
+.hire-list__cta svg { width: 14px; height: 14px; }
+
+.hire-list > li.is-partner .hire-list__cta {
+  color: var(--color-forest);
+  background: #fff;
+}
+
+.hire-list > li.is-partner .hire-list__cta:hover { background: var(--color-brand-faint); }
+
+.hire-note { display: grid; gap: var(--space-3); }
+
+.hire-note p {
+  max-width: 52em;
+  margin: 0;
+  color: #68736d;
+  font-size: var(--text-xs);
+  line-height: 1.85;
+  word-break: keep-all;
+}
+
+.hire-note a {
+  color: var(--color-forest);
+  font-weight: 850;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(16, 39, 29, 0.32);
+}
+
+.hire-note a:hover { border-bottom-color: var(--color-forest); }
+
 .landing-final-cta {
   width: min(1320px, calc(100% - 40px));
   min-height: 460px;
@@ -971,6 +1097,20 @@
 .landing-final-cta > div:last-child { display: grid; justify-items: start; gap: var(--space-5); }
 .landing-final-cta p { margin: 0; color: #ffe4d8; font-size: var(--text-md); line-height: 1.75; word-break: keep-all; }
 
+.landing-final-cta__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffe4d8;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.landing-final-cta__link:hover { color: #fff; border-bottom-color: #fff; }
+.landing-final-cta__link svg { width: 14px; height: 14px; }
+
 .public-footer {
   min-height: 150px;
   display: grid;
@@ -984,7 +1124,22 @@
 
 .public-footer .public-brand > span { color: var(--color-forest); background: #f7f1e7; }
 .public-footer p { margin: 0; color: #aebeb5; }
-.public-footer button { padding: 5px 0; border: 0; border-bottom: 1px solid currentColor; color: #f8f2e8; background: transparent; font-weight: 780; }
+
+.public-footer__company { display: grid; gap: 6px; min-width: 0; }
+.public-footer__company p { font-size: var(--text-xs); line-height: 1.75; word-break: keep-all; }
+.public-footer__company p:first-child { color: #e6efe9; font-size: var(--text-sm); font-weight: 780; }
+
+.public-footer__links { display: grid; gap: 8px; justify-items: end; }
+
+.public-footer__links a {
+  padding: 3px 0;
+  border-bottom: 1px solid currentColor;
+  color: #f8f2e8;
+  font-size: var(--text-xs);
+  font-weight: 780;
+  text-decoration: none;
+  white-space: nowrap;
+}
 
 .landing-page.is-motion-paused *,
 .landing-page.is-motion-paused *::before,
@@ -1117,6 +1272,13 @@
   .resume-preview-paper { justify-self: center; }
   .trust-strip { grid-template-columns: 1fr; align-items: start; }
   .trust-strip header { max-width: 760px; }
+  /* 헤더가 좁아지면 로그인은 마무리 CTA와 푸터에만 남깁니다. */
+  .landing-login-link { display: none; }
+  .hire-list > li { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-4); }
+  .hire-list__who { grid-column: 1; grid-row: 1; }
+  .hire-list__price { grid-column: 2; grid-row: 1; text-align: right; }
+  .hire-list__job { grid-column: 1; grid-row: 2; }
+  .hire-list__cta { grid-column: 2; grid-row: 2; }
 }
 
 @media (max-width: 900px) {
@@ -1134,9 +1296,6 @@
 }
 
 @media (max-width: 760px) {
-  .landing-preview-bar { justify-content: space-between; text-align: left; }
-  .landing-preview-bar span { max-width: 72%; }
-  .landing-preview-bar strong { display: block; }
   .public-header { min-height: 66px; padding: 0 var(--space-4); }
   .public-brand > strong { font-size: 1rem; }
   .landing-motion-toggle { width: 38px; padding: 0; justify-content: center; }
@@ -1208,6 +1367,12 @@
   .trust-strip { padding-inline: var(--space-4); }
   .trust-strip__items { grid-template-columns: 1fr; }
   .trust-strip__items article { min-height: 0; }
+  .hire-section { padding-inline: var(--space-4); }
+  .hire-list > li { padding: var(--space-5); column-gap: var(--space-3); row-gap: var(--space-3); }
+  .hire-list__who strong { font-size: 1rem; }
+  .hire-list__price { font-size: 0.95rem; }
+  .hire-list__cta { padding-inline: var(--space-4); font-size: var(--text-xs); }
+  .public-footer__links { justify-items: start; }
   .landing-final-cta { width: calc(100% - 24px); margin-block: var(--space-5); padding: 3.2rem var(--space-5); border-radius: 22px; }
   .public-footer { grid-template-columns: 1fr; justify-items: start; padding: var(--space-7) var(--space-5); }
 }
@@ -1224,7 +1389,6 @@
 }
 
 @media (max-width: 430px) {
-  .landing-preview-bar { font-size: 0.64rem; }
   .public-brand > span { width: 34px; height: 34px; }
   .public-header__actions .public-cta { display: none; }
   .landing-hero h1 { font-size: clamp(3rem, 15.6vw, 4.25rem); }
@@ -1281,6 +1445,7 @@
   background: #fff;
   font-size: 0.72rem;
   font-weight: 850;
+  text-decoration: none;
   opacity: 0;
   animation: result-line-in 440ms var(--ease-out) forwards;
   animation-delay: 1240ms;

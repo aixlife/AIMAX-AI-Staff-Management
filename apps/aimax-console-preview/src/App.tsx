@@ -344,7 +344,6 @@ export function App() {
       <>
         <LandingPage
           employees={landingEmployees}
-          onEnterConsole={() => navigate("home")}
           onShowResume={setResumeEmployee}
         />
         {resumeEmployee ? (

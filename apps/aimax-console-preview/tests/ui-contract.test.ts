@@ -28,7 +28,7 @@ test("preview boundary is always visible and explicitly login-free", () => {
   assert.match(shell, /aria-label="로컬 프리뷰 안내"/);
 });
 
-test("preview source contains no runtime network primitive or remote URL", () => {
+test("preview source contains no runtime network primitive", () => {
   const source = sourceFiles(path.join(appRoot, "src"))
     .map((file) => readFileSync(file, "utf8"))
     .join("\n");
@@ -37,7 +37,25 @@ test("preview source contains no runtime network primitive or remote URL", () =>
   assert.doesNotMatch(source, /\bXMLHttpRequest\b/);
   assert.doesNotMatch(source, /\bWebSocket\b/);
   assert.doesNotMatch(source, /\bEventSource\b/);
-  assert.doesNotMatch(source, /https?:\/\//);
+});
+
+/**
+ * 공개 랜딩은 구매·로그인·파트너로 나가는 바깥 주소가 필요합니다.
+ * 대신 어디로 나갈 수 있는지를 이 목록으로 묶어 둡니다.
+ */
+test("outbound links stay inside the allowed hosts", () => {
+  const allowedHosts = ["makefamily.kr", "api.aimax.ai.kr", "hoomcha.com"];
+  const source = sourceFiles(path.join(appRoot, "src"))
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
+
+  const urls = source.match(/https?:\/\/[^\s"'`)]+/g) || [];
+  assert.ok(urls.length > 0, "랜딩에는 구매·로그인 바깥 링크가 있어야 합니다");
+  for (const url of urls) {
+    const host = new URL(url).hostname;
+    assert.ok(allowedHosts.includes(host), `허용하지 않은 주소: ${url}`);
+    assert.doesNotMatch(url, /utm_/, `추적 파라미터가 붙었습니다: ${url}`);
+  }
 });
 
 test("core routes remain present in the shared shell contract", () => {
@@ -92,9 +110,9 @@ test("landing removes public login and keeps employee identity primary", () => {
   assert.doesNotMatch(landing, /onLoginPreview/);
   assert.match(landing, /설명보다/);
   assert.match(landing, /일 하나/);
-  assert.match(landing, /업무 골라보기/);
+  assert.match(landing, /직원 데려오기/);
   assert.match(landing, /입사지원서 전체 보기/);
-  assert.match(landing, /운영실 체험/);
+  assert.match(landing, /이미 회원이라면 로그인/);
   assert.match(landing, /가상의 AI 직원/);
   assert.match(resume, /입 사 지 원 서/);
   assert.match(resume, /인적사항/);
@@ -169,6 +187,85 @@ test("done tasks expose preview and download actions for every employee", () => 
   // 상수만 제출 버튼명이 견적서 생성하기이고, 다른 직원은 유지됩니다.
   const dialog = read("src/components/NewTaskDialog.tsx");
   assert.match(dialog, /isQuote \? "견적서 생성하기" : "로컬 업무 만들기"/);
+});
+
+test("public landing carries no local-preview wording", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const styles = read("src/styles/landing.css");
+
+  for (const banned of [
+    /LOCAL PREVIEW/,
+    /landing-preview-bar/,
+    /로컬 프리뷰/,
+    /운영실 체험/,
+    /프리뷰/,
+    /픽스처/,
+    /fixture/i,
+    /onEnterConsole/,
+  ]) {
+    assert.doesNotMatch(landing, banned, `랜딩에 내부 검토용 문구가 남았습니다: ${banned}`);
+  }
+  assert.doesNotMatch(styles, /landing-preview-bar/);
+});
+
+test("the research demo hands the job to partner 훔쳐봐 with a real outbound link", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const links = read("src/data/purchaseLinks.ts");
+
+  assert.match(landing, /훔쳐봐/);
+  assert.match(landing, /제작 \{?activeTask\.partner\.maker|maker: "정보람"/);
+  assert.match(landing, /partner: \{/);
+  assert.match(landing, /href=\{activeTask\.partner\.url\}/);
+  assert.match(landing, /target="_blank"/);
+  assert.match(landing, /rel="noopener noreferrer"/);
+  assert.match(links, /HOOMCHA_URL = "https:\/\/hoomcha\.com\/aimax"/);
+  // 시연은 5종 구조를 유지합니다.
+  assert.equal((landing.match(/^ {4}id: "/gm) || []).length, 5);
+  assert.doesNotMatch(landing, /경쟁사 조사/);
+});
+
+test("purchase links live in one file and point at real cafe24 products", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const links = read("src/data/purchaseLinks.ts");
+
+  assert.match(landing, /from "\.\.\/data\/purchaseLinks"/);
+  assert.match(landing, /getPurchaseLink/);
+  assert.match(landing, /formatPrice/);
+
+  // 2026-08-31 스토어 실측 상품번호
+  for (const productNo of ["104", "112", "129", "126", "114", "111", "243"]) {
+    assert.match(links, new RegExp(`product_no=${productNo}"`));
+  }
+  assert.match(links, /priceWon: 30000/);
+  // 개별 상품을 못 찾은 직원은 대표 스토어로 보냅니다.
+  assert.match(links, /employeeId: "hyunju"[\s\S]{0,160}verified: false/);
+  assert.match(links, /STORE_URL = "https:\/\/makefamily\.kr\/product\/list\.html\?cate_no=85"/);
+  assert.match(links, /CONSOLE_LOGIN_URL = "https:\/\/api\.aimax\.ai\.kr\/app"/);
+});
+
+test("landing shows price, company identity, and the makefamily link", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const styles = read("src/styles/landing.css");
+
+  assert.match(landing, /id="hire"/);
+  assert.match(landing, /30,000원/);
+  assert.match(landing, /주식회사 메이크패밀리/);
+  assert.match(landing, /사업자등록번호 537-87-01496/);
+  assert.match(landing, /통신판매업신고 제2020-서울금천-0389호/);
+  assert.match(landing, /href=\{COMPANY_URL\}/);
+  assert.match(landing, /스토어에서 확인/);
+  assert.match(styles, /\.hire-list/);
+  assert.match(styles, /\.public-footer__company/);
+});
+
+test("landing copy avoids emoji and the banned metaphor", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const links = read("src/data/purchaseLinks.ts");
+
+  for (const source of [landing, links]) {
+    assert.doesNotMatch(source, /마법/);
+    assert.doesNotMatch(source, /\p{Extended_Pictographic}/u);
+  }
 });
 
 test("shared dialogs restore focus and trap keyboard navigation", () => {

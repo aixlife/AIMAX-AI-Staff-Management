@@ -9,13 +9,30 @@ import {
 import { DeliverableDialog } from "../components/DeliverableDialog";
 import { EmployeePortrait } from "../components/EmployeePortrait";
 import { Icon } from "../components/Icon";
+import {
+  CONSOLE_LOGIN_URL,
+  COMPANY_URL,
+  HOOMCHA_URL,
+  STORE_URL,
+  formatPrice,
+  getPurchaseLink,
+} from "../data/purchaseLinks";
 import { getSampleDeliverable } from "../data/sampleDeliverables";
 import type { Employee } from "../types";
 
 interface LandingPageProps {
   employees: Employee[];
-  onEnterConsole: () => void;
   onShowResume: (employee: Employee) => void;
+}
+
+/** 파트너 회사가 직접 운영하는 직원 (가입·결제·문의를 제작사가 맡습니다) */
+interface TaskPartner {
+  name: string;
+  maker: string;
+  url: string;
+  avatar: string;
+  ctaLabel: string;
+  note: string;
 }
 
 interface TaskChoice {
@@ -26,6 +43,8 @@ interface TaskChoice {
   resultTitle: string;
   resultItems: [string, string, string];
   ownerDecision: string;
+  /** 이 일을 맡는 곳이 파트너 회사일 때만 채웁니다. */
+  partner?: TaskPartner;
 }
 
 interface TaskChoiceWithEmployee extends TaskChoice {
@@ -35,54 +54,65 @@ interface TaskChoiceWithEmployee extends TaskChoice {
 const taskChoices: TaskChoice[] = [
   {
     id: "research",
-    label: "경쟁사 조사",
+    label: "레퍼런스 모으기",
     employeeId: "songi",
-    request: "우리와 비슷한 서비스를 비교해줘",
-    resultTitle: "경쟁사 비교 브리프",
-    resultItems: ["핵심 차이와 포지션", "확인할 수 있는 근거", "다음 행동 후보"],
-    ownerDecision: "어떤 기회를 먼저 볼지만 정합니다.",
+    request: "요즘 잘 되는 콘텐츠를 모아줘",
+    resultTitle: "훔쳐봐가 모아주는 레퍼런스",
+    resultItems: [
+      "유튜브·인스타·틱톡·스레드·X에서 자동 수집",
+      "AI가 요약하고 주제별로 정리",
+      "마음에 든 자료만 골라서 보관",
+    ],
+    ownerDecision: "어떤 자료를 따라 해볼지만 고르시면 됩니다.",
+    partner: {
+      name: "훔쳐봐",
+      maker: "정보람",
+      url: HOOMCHA_URL,
+      avatar: "/assets/partner_hoomcha.png",
+      ctaLabel: "훔쳐봐 보러 가기",
+      note: "가입·결제·문의는 훔쳐봐를 만든 곳에서 직접 맡습니다.",
+    },
   },
   {
     id: "blog",
-    label: "블로그 초안",
+    label: "블로그 글쓰기",
     employeeId: "yeri",
     request: "이번 주 블로그 글을 준비해줘",
     resultTitle: "발행 전 블로그 초안",
-    resultItems: ["독자에게 맞춘 글의 흐름", "제목과 CTA 후보", "발행 전 확인할 부분"],
-    ownerDecision: "브랜드에 맞는지만 확인합니다.",
+    resultItems: ["읽는 사람에 맞춘 글의 흐름", "제목과 마무리 문구 후보", "올리기 전 확인할 부분"],
+    ownerDecision: "우리 가게 말투에 맞는지만 확인하시면 됩니다.",
   },
   {
     id: "quote",
-    label: "견적서 준비",
+    label: "견적서 만들기",
     employeeId: "sangsu",
     request: "보내기 좋은 견적서로 정리해줘",
-    resultTitle: "검토용 견적서",
-    resultItems: ["항목과 금액 구조", "거래처가 볼 안내", "보내기 전 확인 사항"],
-    ownerDecision: "금액과 발송 여부만 승인합니다.",
+    resultTitle: "바로 보낼 수 있는 견적서",
+    resultItems: ["항목과 금액 정리", "거래처가 볼 안내 문구", "보내기 전 확인 사항"],
+    ownerDecision: "금액과 보낼지 여부만 정하시면 됩니다.",
   },
   {
     id: "leads",
-    label: "잠재고객 찾기",
+    label: "고객 찾기",
     employeeId: "hyunju",
     request: "먼저 연락할 고객 후보를 찾아줘",
-    resultTitle: "잠재고객 후보 정리",
-    resultItems: ["우선 볼 고객 후보", "후보를 고른 이유", "접점별 첫 행동"],
-    ownerDecision: "누구에게 먼저 다가갈지 정합니다.",
+    resultTitle: "먼저 연락할 고객 목록",
+    resultItems: ["우선 볼 고객 후보", "그 후보를 고른 이유", "어디로 어떻게 연락할지"],
+    ownerDecision: "누구에게 먼저 연락할지만 정하시면 됩니다.",
   },
   {
     id: "office",
-    label: "사무 지원",
+    label: "사무 정리",
     employeeId: "jieun",
     request: "신청서 캡처를 정리해줘",
-    resultTitle: "사무 지원 처리 결과",
-    resultItems: ["정리된 캡처와 가림 처리", "추출한 텍스트 정리", "원본 보존 안내"],
-    ownerDecision: "정리된 파일을 어디에 쓸지만 정합니다.",
+    resultTitle: "정리가 끝난 서류 묶음",
+    resultItems: ["가릴 곳을 가린 캡처", "글자만 뽑아 정리한 목록", "원본은 그대로 보관"],
+    ownerDecision: "정리된 파일을 어디에 쓸지만 정하시면 됩니다.",
   },
 ];
 
 export function LandingPage({
   employees,
-  onEnterConsole,
   onShowResume,
 }: LandingPageProps) {
   const landingRef = useRef<HTMLDivElement>(null);
@@ -113,7 +143,19 @@ export function LandingPage({
 
   const activeTask =
     availableTasks.find((task) => task.id === selectedTaskId) || availableTasks[0];
-  const activeDeliverable = getSampleDeliverable(activeTask?.employeeId);
+  // 파트너가 맡는 일은 우리 산출물 샘플 대신 파트너 안내와 링크를 보여줍니다.
+  const activeDeliverable = activeTask?.partner
+    ? undefined
+    : getSampleDeliverable(activeTask?.employeeId);
+  const activePurchase = activeTask?.partner ? undefined : getPurchaseLink(activeTask?.employeeId);
+  /** 가격 안내에 쓰는 줄: 우리 직원은 카페24 상품, 파트너는 파트너 안내 */
+  const hireRows = useMemo(
+    () => [
+      ...availableTasks.filter((task) => !task.partner),
+      ...availableTasks.filter((task) => task.partner),
+    ],
+    [availableTasks],
+  );
   const selectedTeamEmployee =
     publicEmployees.find((employee) => employee.id === selectedTeamEmployeeId) ||
     publicEmployees.find((employee) => employee.id === "yeri") ||
@@ -266,11 +308,6 @@ export function LandingPage({
     >
       <a className="skip-link" href="#landing-main">본문으로 건너뛰기</a>
 
-      <div className="landing-preview-bar" aria-label="로컬 프리뷰 안내">
-        <span><strong>LOCAL PREVIEW</strong> 로그인·서버·API 없이 화면과 모션을 검토합니다.</span>
-        <button type="button" onClick={onEnterConsole}>운영실 체험</button>
-      </div>
-
       <header className="public-header public-header--focus">
         <a className="public-brand" href="#/" aria-label="AIMAX 홈">
           <span>AX</span>
@@ -279,7 +316,8 @@ export function LandingPage({
         <nav aria-label="랜딩페이지 메뉴">
           <button type="button" onClick={() => scrollToSection("work-proof")}>일하는 방식</button>
           <button type="button" onClick={() => scrollToSection("team-resume")}>AI 직원</button>
-          <button type="button" onClick={() => scrollToSection("trust")}>운영 기준</button>
+          <button type="button" onClick={() => scrollToSection("trust")}>일하는 기준</button>
+          <button type="button" onClick={() => scrollToSection("hire")}>가격</button>
         </nav>
         <div className="public-header__actions">
           <button
@@ -288,11 +326,14 @@ export function LandingPage({
             aria-pressed={motionPaused}
             onClick={() => setMotionPaused((current) => !current)}
           >
-            <span aria-hidden="true">{motionPaused ? "▶" : "Ⅱ"}</span>
+            <span aria-hidden="true">{motionPaused ? "▸" : "Ⅱ"}</span>
             {motionPaused ? "모션 켜기" : "모션 끄기"}
           </button>
-          <button className="public-cta public-cta--small" type="button" onClick={focusTaskChoices}>
-            업무 골라보기
+          <a className="landing-login-link" href={CONSOLE_LOGIN_URL}>
+            이미 회원이라면 로그인
+          </a>
+          <button className="public-cta public-cta--small" type="button" onClick={() => scrollToSection("hire")}>
+            직원 데려오기
           </button>
         </div>
       </header>
@@ -301,26 +342,28 @@ export function LandingPage({
         <section className="landing-hero landing-hero--proof" aria-labelledby="landing-hero-title">
           <div className="landing-hero__glow" aria-hidden="true"><i /><i /><i /></div>
           <div className="landing-hero__copy hero-entrance">
-            <span className="landing-kicker">START WITH ONE TASK</span>
+            <span className="landing-kicker">AI 직원 인력사무소</span>
             <h1 id="landing-hero-title">
               <span>설명보다,</span>
               <em>일 하나</em>
               <span>맡겨보세요.</span>
             </h1>
+            {/* "AI 직원" 사이는 줄바꿈되지 않게 붙임 공백(U+00A0)을 씁니다. */}
             <p>
-              대표님의 할 일 목록에서 자꾸 밀리는 일을 하나 고르세요. 누가 맡고,
-              어떻게 진행하고, 무엇을 돌려주는지 바로 확인할 수 있습니다.
+              AIMAX는 사장님 손이 계속 가는 일을 대신하는 AI 직원입니다.
+              블로그 글쓰기, 견적서, 고객 찾기, 사무 정리까지
+              필요한 직원만 한 명씩 데려오시면 됩니다.
             </p>
             <div className="landing-hero__actions">
-              <button className="public-cta" type="button" onClick={focusTaskChoices}>
-                이번 주 밀린 일 골라보기 <Icon name="arrow" />
+              <button className="public-cta" type="button" onClick={() => scrollToSection("hire")}>
+                직원 데려오기 · 한 명 30,000원 <Icon name="arrow" />
               </button>
-              <button className="landing-hero__text-link" type="button" onClick={() => scrollToSection("team-resume")}>
-                직원 입사지원서 보기 <Icon name="arrow" />
+              <button className="landing-hero__text-link" type="button" onClick={focusTaskChoices}>
+                무슨 일을 맡길 수 있는지 먼저 보기 <Icon name="arrow" />
               </button>
             </div>
             <p className="landing-hero__honesty">
-              실제 실행 전에는 직원별 환경과 예상 비용을 먼저 안내합니다.
+              직원마다 필요한 준비물과 드는 비용은 일을 시작하기 전에 먼저 알려드립니다.
             </p>
           </div>
 
@@ -348,19 +391,46 @@ export function LandingPage({
             {activeTask ? (
               <div key={`${activeTask.id}-${motionRun}`} className="task-proof-motion">
                 <div className="task-proof-motion__request">
-                  <span>대표님이 맡긴 일</span>
+                  <span>사장님이 맡긴 일</span>
                   <strong>“{activeTask.request}”</strong>
                 </div>
                 <div className="task-proof-motion__beam" aria-hidden="true"><i /></div>
                 <article className="task-proof-motion__result">
                   <div className="task-proof-motion__employee">
-                    <EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus />
-                    <div><span>담당 직원</span><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></div>
+                    {activeTask.partner ? (
+                      <>
+                        <img
+                          className="partner-portrait"
+                          src={activeTask.partner.avatar}
+                          alt={activeTask.partner.name + " 대표 이미지"}
+                        />
+                        <div>
+                          <span>맡는 곳</span>
+                          <strong>{activeTask.partner.name}</strong>
+                          <small>파트너 · 제작 {activeTask.partner.maker}</small>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus />
+                        <div><span>담당 직원</span><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></div>
+                      </>
+                    )}
                   </div>
                   <div className="task-proof-motion__document">
                     <span>받게 될 결과</span>
                     <h2>{activeTask.resultTitle}</h2>
                     <ul>{activeTask.resultItems.map((item) => <li key={item}>{item}<i /></li>)}</ul>
+                    {activeTask.partner ? (
+                      <a
+                        className="landing-detail-open"
+                        href={activeTask.partner.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {activeTask.partner.ctaLabel} <Icon name="arrow" />
+                      </a>
+                    ) : null}
                     {activeDeliverable ? (
                       <button
                         className="landing-detail-open"
@@ -372,12 +442,27 @@ export function LandingPage({
                     ) : null}
                   </div>
                 </article>
+                {activeTask.partner ? (
+                  <p className="task-proof-motion__foot">{activeTask.partner.note}</p>
+                ) : activePurchase ? (
+                  <p className="task-proof-motion__foot">
+                    <a href={activePurchase.url} target="_blank" rel="noopener noreferrer">
+                      {activePurchase.verified
+                        ? `${activeTask.employee.name} 데려오기 · ${formatPrice(activePurchase.priceWon)}`
+                        : `스토어에서 ${activeTask.employee.name} 확인하기`}
+                    </a>
+                  </p>
+                ) : null}
               </div>
             ) : (
               <p className="task-proof-card__empty">공개 준비가 끝난 직원을 연결하고 있습니다.</p>
             )}
             <p className="sr-only" aria-live="polite">
-              {activeTask ? `${activeTask.label} 업무는 ${activeTask.employee.name} ${activeTask.employee.role}이 맡고 ${activeTask.resultTitle}을 준비합니다.` : ""}
+              {activeTask
+                ? activeTask.partner
+                  ? `${activeTask.label} 업무는 파트너 직원 ${activeTask.partner.name}가 맡고 ${activeTask.resultTitle}을 준비합니다.`
+                  : `${activeTask.label} 업무는 ${activeTask.employee.name} ${activeTask.employee.role}이 맡고 ${activeTask.resultTitle}을 준비합니다.`
+                : ""}
             </p>
           </aside>
         </section>
@@ -386,19 +471,19 @@ export function LandingPage({
           <section id="work-proof" className="landing-section work-proof work-proof--focused" aria-labelledby="work-proof-title">
             <header className="landing-section__heading landing-section__heading--light motion-reveal">
               <div>
-                <span className="landing-kicker">FROM REQUEST TO RESULT</span>
+                <span className="landing-kicker">맡기고 받기까지</span>
                 <h2 id="work-proof-title" className="heading-lines">
                   <span>맡기면,</span>
                   <span>다음 확인할 일만</span>
                   <span>남습니다.</span>
                 </h2>
               </div>
-              <p>요청을 남긴 뒤에는 담당 직원이 필요한 단계를 이어갑니다. 대표님에게는 진행 상황과 결정할 부분만 돌아옵니다.</p>
+              <p>요청을 남긴 뒤에는 담당 직원이 필요한 단계를 이어갑니다. 사장님에게는 진행 상황과 결정할 것만 돌아옵니다.</p>
             </header>
 
             <div className="work-journey motion-reveal" aria-label={`${activeTask.label} 업무 진행 예시`}>
               <div className="work-journey__topline">
-                <span><i /> {activeTask.employee.name}가 업무를 이어가는 중</span>
+                <span><i /> {activeTask.partner ? activeTask.partner.name : activeTask.employee.name}가 일을 이어가는 중</span>
                 <strong>{activeTask.label}</strong>
               </div>
               <div key={`${activeTask.id}-${motionRun}`} className="work-journey__scenes">
@@ -409,27 +494,53 @@ export function LandingPage({
                 </article>
                 <div className="work-journey__connector" aria-hidden="true"><i /></div>
                 <article className="work-journey__scene work-journey__scene--employee">
-                  <span>02 · 직원이 처리</span>
-                  <div><EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus /><p><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></p></div>
-                  <small>필요한 근거와 내용을 정리해 결과 형태로 바꿉니다.</small>
+                  <span>02 · {activeTask.partner ? "파트너가 처리" : "직원이 처리"}</span>
+                  {activeTask.partner ? (
+                    <>
+                      <div>
+                        <img
+                          className="partner-portrait partner-portrait--dark"
+                          src={activeTask.partner.avatar}
+                          alt={activeTask.partner.name + " 대표 이미지"}
+                        />
+                        <p><strong>{activeTask.partner.name}</strong><small>파트너 직원 · 제작 {activeTask.partner.maker}</small></p>
+                      </div>
+                      <small>{activeTask.partner.note}</small>
+                    </>
+                  ) : (
+                    <>
+                      <div><EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus /><p><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></p></div>
+                      <small>필요한 자료를 모아서 바로 쓸 수 있는 형태로 정리합니다.</small>
+                    </>
+                  )}
                 </article>
                 <div className="work-journey__connector" aria-hidden="true"><i /></div>
                 <article className="work-journey__scene work-journey__scene--result">
-                  <span>03 · 대표님이 결정</span>
+                  <span>03 · 사장님이 결정</span>
                   <strong>{activeTask.resultTitle}</strong>
                   <small>{activeTask.ownerDecision}</small>
+                  {activeTask.partner ? (
+                    <a
+                      className="landing-detail-open landing-detail-open--dark"
+                      href={activeTask.partner.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {activeTask.partner.ctaLabel} <Icon name="arrow" />
+                    </a>
+                  ) : null}
                   {activeDeliverable ? (
                     <button
                       className="landing-detail-open landing-detail-open--dark"
                       type="button"
                       onClick={() => setDetailOpen(true)}
                     >
-                      산출물 상세 보기 <Icon name="arrow" />
+                      결과물 자세히 보기 <Icon name="arrow" />
                     </button>
                   ) : null}
                 </article>
               </div>
-              <div className="work-journey__decision"><span>대표님에게 돌아오는 것</span><strong>{activeTask.ownerDecision}</strong></div>
+              <div className="work-journey__decision"><span>사장님에게 돌아오는 것</span><strong>{activeTask.ownerDecision}</strong></div>
             </div>
           </section>
         ) : null}
@@ -442,14 +553,14 @@ export function LandingPage({
             <div className="landing-section team-scroll-story__sticky">
               <header className="landing-section__heading motion-reveal">
                 <div>
-                  <span className="landing-kicker">A TEAM WITH NAMES</span>
+                  <span className="landing-kicker">이름이 있는 직원들</span>
                   <h2 id="team-resume-title" className="heading-lines">
                     <span>일이 생길 때마다,</span>
                     <span>맡을 사람이</span>
                     <span>떠오릅니다.</span>
                   </h2>
                 </div>
-                <p>자료조사는 송이, 글은 예리처럼 이름과 역할을 함께 기억합니다. 필요한 직원의 입사지원서를 읽고 우리 회사에 맞는지 판단하세요.</p>
+                <p>자료조사는 송이, 글은 예리처럼 이름과 역할을 함께 기억합니다. 필요한 직원의 입사지원서를 읽어보고 우리 가게에 맞는지 확인해 보세요.</p>
               </header>
 
               <div className="staff-lineup motion-reveal" aria-label="스크롤에 따라 소개되는 AIMAX AI 직원">
@@ -478,7 +589,7 @@ export function LandingPage({
             {selectedTeamEmployee?.resume ? (
               <div key={selectedTeamEmployee.id} className="resume-feature motion-reveal">
               <div className="resume-feature__copy">
-                <span className="landing-kicker">KOREAN-STYLE APPLICATION</span>
+                <span className="landing-kicker">입사지원서</span>
                 <h3 className="heading-lines">
                   <span>어떤 일을</span>
                   <span>맡길지,</span>
@@ -521,24 +632,87 @@ export function LandingPage({
 
         <section id="trust" className="landing-section trust-strip" aria-labelledby="trust-title">
           <header className="motion-reveal">
-            <span className="landing-kicker">BEFORE THE FIRST TASK</span>
+            <span className="landing-kicker">일 맡기기 전에</span>
             <h2 id="trust-title" className="heading-lines">
               <span>친근하게</span>
               <span>보여도,</span>
-              <span>실행 기준은</span>
+              <span>일하는 기준은</span>
               <span>분명하게.</span>
             </h2>
           </header>
           <div className="trust-strip__items motion-reveal">
-            <article><span>환경</span><h3>웹과 로컬을 구분</h3><p>PC 실행기가 필요한 일은 시작 전에 먼저 알려드립니다.</p></article>
-            <article><span>비용</span><h3>유료 작업은 확인 후 실행</h3><p>사용할 모델과 예상 비용을 보고 승인한 뒤 시작합니다.</p></article>
-            <article><span>복구</span><h3>실패해도 결과를 보존</h3><p>작업 번호와 실패 단계를 남겨 필요한 부분부터 이어갑니다.</p></article>
+            <article><span>준비물</span><h3>필요한 것은 미리 알려드립니다</h3><p>PC에 프로그램을 설치해야 하는 일은 시작 전에 먼저 말씀드립니다.</p></article>
+            <article><span>비용</span><h3>돈이 드는 일은 확인 후에</h3><p>얼마가 드는지 보여드리고, 사장님이 좋다고 하신 다음에 시작합니다.</p></article>
+            <article><span>실수</span><h3>중간에 멈춰도 다시 이어갑니다</h3><p>어디까지 했는지 기록으로 남겨서, 처음부터 다시 하지 않아도 됩니다.</p></article>
+          </div>
+        </section>
+
+        <section id="hire" className="landing-section hire-section" aria-labelledby="hire-title">
+          <header className="landing-section__heading motion-reveal">
+            <div>
+              <span className="landing-kicker">직원 데려오기</span>
+              <h2 id="hire-title" className="heading-lines">
+                <span>직원 한 명,</span>
+                <span>30,000원부터.</span>
+              </h2>
+            </div>
+            <p>
+              필요한 직원만 한 명씩 데려오시면 됩니다. 결제하시면 계정과 설치 안내를
+              메일로 보내드립니다. 판매와 결제는 주식회사 메이크패밀리 스토어에서 진행됩니다.
+            </p>
+          </header>
+
+          <ul className="hire-list motion-reveal">
+            {hireRows.map((task) => {
+              const purchase = task.partner ? undefined : getPurchaseLink(task.employeeId);
+              return (
+                <li key={task.id} className={task.partner ? "is-partner" : ""}>
+                  <div className="hire-list__who">
+                    <strong>{task.partner ? task.partner.name : task.employee.name}</strong>
+                    <small>{task.partner ? "파트너 직원 · 제작 " + task.partner.maker : task.employee.role}</small>
+                  </div>
+                  <p className="hire-list__job">{task.label}</p>
+                  <p className="hire-list__price">
+                    {task.partner ? "훔쳐봐에서 안내" : formatPrice(purchase?.priceWon ?? null)}
+                  </p>
+                  <a
+                    className="hire-list__cta"
+                    href={task.partner ? task.partner.url : purchase?.url || STORE_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {task.partner ? "훔쳐봐 보러 가기" : purchase?.verified ? "스토어에서 데려오기" : "스토어에서 확인하기"}
+                    <Icon name="arrow" />
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="hire-note motion-reveal">
+            <p>
+              숏폼작가 윤미, 판서 나경, 자료조사 송이, 알람앱 맥스도 같은 스토어에 있습니다.
+              {" "}
+              <a href={STORE_URL} target="_blank" rel="noopener noreferrer">스토어에서 전체 보기</a>
+            </p>
+            <p>
+              AIMAX는 <strong>주식회사 메이크패밀리</strong>가 만들고 운영합니다.
+              가격은 2026년 8월 스토어 기준이며, 최신 가격은 상품 페이지에서 확인하실 수 있습니다.
+            </p>
           </div>
         </section>
 
         <section className="landing-final-cta motion-reveal">
-          <div><span className="landing-kicker">ONE TASK AT A TIME</span><h2>혼자 다 하던 방식에서,<br />하나씩 맡기는 방식으로.</h2></div>
-          <div><p>첫 업무를 고르고, 맞는 직원을 확인해보세요. 지금 프리뷰에서는 로그인 없이 운영실까지 둘러볼 수 있습니다.</p><button className="public-cta public-cta--light" type="button" onClick={focusTaskChoices}>첫 업무 고르기 <Icon name="arrow" /></button></div>
+          <div><span className="landing-kicker">한 번에 하나씩</span><h2>혼자 다 하던 방식에서,<br />하나씩 맡기는 방식으로.</h2></div>
+          <div>
+            <p>가장 손이 많이 가는 일 하나만 골라서, 그 일을 맡을 직원부터 데려와 보세요.</p>
+            <a className="public-cta public-cta--light" href={STORE_URL} target="_blank" rel="noopener noreferrer">
+              스토어에서 직원 데려오기 <Icon name="arrow" />
+            </a>
+            <a className="landing-final-cta__link" href={CONSOLE_LOGIN_URL}>
+              이미 회원이라면 로그인 <Icon name="arrow" />
+            </a>
+          </div>
         </section>
       </main>
 
@@ -552,8 +726,19 @@ export function LandingPage({
 
       <footer className="public-footer">
         <div className="public-brand"><span>AX</span><strong>AIMAX</strong></div>
-        <p>혼자 하던 일을, 맡길 수 있는 일로.</p>
-        <button type="button" onClick={onEnterConsole}>로컬 운영실 체험</button>
+        <div className="public-footer__company">
+          <p>혼자 하던 일을, 맡길 수 있는 일로.</p>
+          <p>
+            주식회사 메이크패밀리 · 대표 윤동규 · 사업자등록번호 537-87-01496
+          </p>
+          <p>
+            통신판매업신고 제2020-서울금천-0389호 · 고객센터 02-6672-7788
+          </p>
+        </div>
+        <div className="public-footer__links">
+          <a href={COMPANY_URL} target="_blank" rel="noopener noreferrer">메이크패밀리 홈</a>
+          <a href={CONSOLE_LOGIN_URL}>이미 회원이라면 로그인</a>
+        </div>
       </footer>
     </div>
   );
