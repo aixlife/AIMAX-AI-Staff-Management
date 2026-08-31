@@ -26,12 +26,9 @@ interface LandingPageProps {
   onShowResume: (employee: Employee) => void;
 }
 
-/** 파트너 회사가 직접 운영하는 직원 (가입·결제·문의를 제작사가 맡습니다) */
-interface TaskPartner {
-  name: string;
-  maker: string;
+/** AIMAX 직원 이름은 유지하면서 업무 시작만 외부 서비스로 잇는 경로 */
+interface ExternalTaskDestination {
   url: string;
-  avatar: string;
   ctaLabel: string;
   note: string;
 }
@@ -44,23 +41,20 @@ interface TaskChoice {
   resultTitle: string;
   resultItems: [string, string, string];
   ownerDecision: string;
-  /** 이 일을 맡는 곳이 파트너 회사일 때만 채웁니다. */
-  partner?: TaskPartner;
+  /** 외부 서비스에서 실행되는 직원일 때만 채웁니다. */
+  externalDestination?: ExternalTaskDestination;
 }
 
 interface TaskChoiceWithEmployee extends TaskChoice {
   employee: Employee;
 }
 
-const HOOMCHA_SLOT_ID = "hyunju";
+const HYUNJU_ID = "hyunju";
 
-const HOOMCHA_PARTNER: TaskPartner = {
-  name: "훔쳐봐",
-  maker: "정보람",
+const HYUNJU_EXTERNAL_DESTINATION: ExternalTaskDestination = {
   url: HOOMCHA_URL,
-  avatar: "/assets/partner_hoomcha.png",
-  ctaLabel: "훔쳐봐 보러 가기",
-  note: "가입·결제·문의는 훔쳐봐를 만든 곳에서 직접 맡습니다.",
+  ctaLabel: "현주에게 맡기기",
+  note: "현주 업무는 연결된 외부 서비스에서 이어집니다.",
 };
 
 const taskChoices: TaskChoice[] = [
@@ -100,14 +94,14 @@ const taskChoices: TaskChoice[] = [
     label: "레퍼런스 모으기",
     employeeId: "hyunju",
     request: "요즘 잘 되는 콘텐츠를 모아줘",
-    resultTitle: "훔쳐봐가 모아주는 레퍼런스",
+    resultTitle: "현주가 모아주는 레퍼런스",
     resultItems: [
       "유튜브·인스타·틱톡·스레드·X에서 자동 수집",
       "AI가 요약하고 주제별로 정리",
       "마음에 든 자료만 골라서 보관",
     ],
     ownerDecision: "어떤 자료를 따라 해볼지만 고르시면 됩니다.",
-    partner: HOOMCHA_PARTNER,
+    externalDestination: HYUNJU_EXTERNAL_DESTINATION,
   },
   {
     id: "office",
@@ -155,16 +149,18 @@ export function LandingPage({
 
   const activeTask =
     availableTasks.find((task) => task.id === selectedTaskId) || availableTasks[0];
-  // 파트너가 맡는 일은 우리 산출물 샘플 대신 파트너 안내와 링크를 보여줍니다.
-  const activeDeliverable = activeTask?.partner
+  // 외부에서 실행되는 일은 우리 산출물 샘플 대신 실제 이동 링크를 보여줍니다.
+  const activeDeliverable = activeTask?.externalDestination
     ? undefined
     : getSampleDeliverable(activeTask?.employeeId);
-  const activePurchase = activeTask?.partner ? undefined : getPurchaseLink(activeTask?.employeeId);
-  /** 가격 안내에 쓰는 줄: 우리 직원은 카페24 상품, 파트너는 파트너 안내 */
+  const activePurchase = activeTask?.externalDestination
+    ? undefined
+    : getPurchaseLink(activeTask?.employeeId);
+  /** 가격 안내에 쓰는 줄: 카페24 상품을 먼저, 외부 실행 직원을 마지막에 둡니다. */
   const hireRows = useMemo(
     () => [
-      ...availableTasks.filter((task) => !task.partner),
-      ...availableTasks.filter((task) => task.partner),
+      ...availableTasks.filter((task) => !task.externalDestination),
+      ...availableTasks.filter((task) => task.externalDestination),
     ],
     [availableTasks],
   );
@@ -172,8 +168,10 @@ export function LandingPage({
     publicEmployees.find((employee) => employee.id === selectedTeamEmployeeId) ||
     publicEmployees.find((employee) => employee.id === "yeri") ||
     publicEmployees[0];
-  const selectedTeamPartner =
-    selectedTeamEmployee?.id === HOOMCHA_SLOT_ID ? HOOMCHA_PARTNER : undefined;
+  const selectedTeamDestination =
+    selectedTeamEmployee?.id === HYUNJU_ID
+      ? HYUNJU_EXTERNAL_DESTINATION
+      : undefined;
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -439,38 +437,21 @@ export function LandingPage({
                 <div className="task-proof-motion__beam" aria-hidden="true"><i /></div>
                 <article className="task-proof-motion__result">
                   <div className="task-proof-motion__employee">
-                    {activeTask.partner ? (
-                      <>
-                        <img
-                          className="partner-portrait"
-                          src={activeTask.partner.avatar}
-                          alt={activeTask.partner.name + " 대표 이미지"}
-                        />
-                        <div>
-                          <span>맡는 곳</span>
-                          <strong>{activeTask.partner.name}</strong>
-                          <small>파트너 · 제작 {activeTask.partner.maker}</small>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus />
-                        <div><span>담당 직원</span><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></div>
-                      </>
-                    )}
+                    <EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus />
+                    <div><span>담당 직원</span><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></div>
                   </div>
                   <div className="task-proof-motion__document">
                     <span>받게 될 결과</span>
                     <h2>{activeTask.resultTitle}</h2>
                     <ul>{activeTask.resultItems.map((item) => <li key={item}>{item}<i /></li>)}</ul>
-                    {activeTask.partner ? (
+                    {activeTask.externalDestination ? (
                       <a
                         className="landing-detail-open"
-                        href={activeTask.partner.url}
+                        href={activeTask.externalDestination.url}
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {activeTask.partner.ctaLabel} <Icon name="arrow" />
+                        {activeTask.externalDestination.ctaLabel} <Icon name="arrow" />
                       </a>
                     ) : null}
                     {activeDeliverable ? (
@@ -484,8 +465,8 @@ export function LandingPage({
                     ) : null}
                   </div>
                 </article>
-                {activeTask.partner ? (
-                  <p className="task-proof-motion__foot">{activeTask.partner.note}</p>
+                {activeTask.externalDestination ? (
+                  <p className="task-proof-motion__foot">{activeTask.externalDestination.note}</p>
                 ) : activePurchase ? (
                   <p className="task-proof-motion__foot">
                     <a href={activePurchase.url} target="_blank" rel="noopener noreferrer">
@@ -501,9 +482,7 @@ export function LandingPage({
             )}
             <p className="sr-only" aria-live="polite">
               {activeTask
-                ? activeTask.partner
-                  ? `${activeTask.label} 업무를 맡는 곳은 파트너 직원 ${activeTask.partner.name}입니다. 준비할 결과는 ${activeTask.resultTitle}입니다.`
-                  : `${activeTask.label} 업무를 맡는 직원은 ${activeTask.employee.name} ${activeTask.employee.role}입니다. 준비할 결과는 ${activeTask.resultTitle}입니다.`
+                ? `${activeTask.label} 업무를 맡는 직원은 ${activeTask.employee.name} ${activeTask.employee.role}입니다. 준비할 결과는 ${activeTask.resultTitle}입니다.`
                 : ""}
             </p>
           </aside>
@@ -525,7 +504,7 @@ export function LandingPage({
 
             <div className="work-journey motion-reveal" aria-label={`${activeTask.label} 업무 진행 예시`}>
               <div className="work-journey__topline">
-                <span><i /> {activeTask.partner ? activeTask.partner.name : activeTask.employee.name}가 일을 이어가는 중</span>
+                <span><i /> {activeTask.employee.name}가 일을 이어가는 중</span>
                 <strong>{activeTask.label}</strong>
               </div>
               <div key={`${activeTask.id}-${motionRun}`} className="work-journey__scenes">
@@ -536,39 +515,23 @@ export function LandingPage({
                 </article>
                 <div className="work-journey__connector" aria-hidden="true"><i /></div>
                 <article className="work-journey__scene work-journey__scene--employee">
-                  <span>02 · {activeTask.partner ? "파트너가 처리" : "직원이 처리"}</span>
-                  {activeTask.partner ? (
-                    <>
-                      <div>
-                        <img
-                          className="partner-portrait partner-portrait--dark"
-                          src={activeTask.partner.avatar}
-                          alt={activeTask.partner.name + " 대표 이미지"}
-                        />
-                        <p><strong>{activeTask.partner.name}</strong><small>파트너 직원 · 제작 {activeTask.partner.maker}</small></p>
-                      </div>
-                      <small>{activeTask.partner.note}</small>
-                    </>
-                  ) : (
-                    <>
-                      <div><EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus /><p><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></p></div>
-                      <small>필요한 자료를 모아서 바로 쓸 수 있는 형태로 정리합니다.</small>
-                    </>
-                  )}
+                  <span>02 · 직원이 처리</span>
+                  <div><EmployeePortrait employee={activeTask.employee} size="large" decorative={false} showStatus /><p><strong>{activeTask.employee.name}</strong><small>{activeTask.employee.role}</small></p></div>
+                  <small>{activeTask.externalDestination?.note || "필요한 자료를 모아서 바로 쓸 수 있는 형태로 정리합니다."}</small>
                 </article>
                 <div className="work-journey__connector" aria-hidden="true"><i /></div>
                 <article className="work-journey__scene work-journey__scene--result">
                   <span>03 · 사장님이 결정</span>
                   <strong>{activeTask.resultTitle}</strong>
                   <small>{activeTask.ownerDecision}</small>
-                  {activeTask.partner ? (
+                  {activeTask.externalDestination ? (
                     <a
                       className="landing-detail-open landing-detail-open--dark"
-                      href={activeTask.partner.url}
+                      href={activeTask.externalDestination.url}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {activeTask.partner.ctaLabel} <Icon name="arrow" />
+                      {activeTask.externalDestination.ctaLabel} <Icon name="arrow" />
                     </a>
                   ) : null}
                   {activeDeliverable ? (
@@ -602,7 +565,7 @@ export function LandingPage({
                     <span>떠오릅니다.</span>
                   </h2>
                 </div>
-                <p>자료조사는 송이, 레퍼런스 수집은 훔쳐봐, 글은 예리처럼 이름과 역할을 함께 기억합니다. 우리 가게에 맞는 직원과 파트너인지 소개서를 읽어보고 확인해 보세요.</p>
+                <p>자료조사는 송이, 레퍼런스 수집은 현주, 글은 예리처럼 이름과 역할을 함께 기억합니다. 우리 가게에 맞는 직원인지 소개서를 읽어보고 확인해 보세요.</p>
               </header>
 
               <div className="staff-lineup motion-reveal" aria-label="스크롤에 따라 소개되는 AIMAX AI 직원">
@@ -616,27 +579,17 @@ export function LandingPage({
                     aria-pressed={employee.id === selectedTeamEmployee?.id}
                     onClick={() => selectTeamEmployee(employee.id)}
                   >
-                    {employee.id === HOOMCHA_SLOT_ID ? (
-                      <img
-                        className="partner-portrait partner-portrait--lineup"
-                        src={HOOMCHA_PARTNER.avatar}
-                        alt={HOOMCHA_PARTNER.name + " 대표 이미지"}
-                      />
-                    ) : (
-                      <EmployeePortrait employee={employee} size="large" decorative={false} />
-                    )}
+                    <EmployeePortrait employee={employee} size="large" decorative={false} />
                     <span>
-                      <strong>{employee.id === HOOMCHA_SLOT_ID ? HOOMCHA_PARTNER.name : employee.name}</strong>
-                      <small>{employee.id === HOOMCHA_SLOT_ID ? "레퍼런스 수집 직원" : employee.role}</small>
+                      <strong>{employee.name}</strong>
+                      <small>{employee.role}</small>
                     </span>
                   </button>
                 ))}
               </div>
               <p className="sr-only" aria-live="polite">
                 {selectedTeamEmployee
-                  ? selectedTeamPartner
-                    ? `${selectedTeamPartner.name} 레퍼런스 수집 파트너 소개`
-                    : `${selectedTeamEmployee.name} ${selectedTeamEmployee.role} 소개`
+                  ? `${selectedTeamEmployee.name} ${selectedTeamEmployee.role} 소개`
                   : ""}
               </p>
             </div>
@@ -646,55 +599,7 @@ export function LandingPage({
             ref={teamApplicationRef}
             className="landing-section team-resume__application"
           >
-            {selectedTeamPartner ? (
-              <div key={selectedTeamEmployee?.id} className="resume-feature resume-feature--partner motion-reveal">
-                <div className="resume-feature__copy">
-                  <span className="landing-kicker">파트너 소개서</span>
-                  <h3 className="heading-lines">
-                    <span>AIMAX에서</span>
-                    <span>소개하고,</span>
-                    <span>파트너가</span>
-                    <span>직접 운영합니다.</span>
-                  </h3>
-                  <blockquote>레퍼런스 수집은 훔쳐봐가 맡습니다.</blockquote>
-                  <p>유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가 요약·분류해줍니다.</p>
-                  <ul>
-                    <li>레퍼런스 수집</li>
-                    <li>AI 요약</li>
-                    <li>채널 5종</li>
-                  </ul>
-                  <a
-                    className="public-cta"
-                    href={selectedTeamPartner.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {selectedTeamPartner.ctaLabel} <Icon name="arrow" />
-                  </a>
-                  <small>AIMAX는 파트너 서비스를 소개하고 연결합니다. 가입·결제·문의·환불·서비스 운영은 제작사가 맡습니다.</small>
-                </div>
-
-                <article className="resume-preview-paper resume-preview-paper--partner" aria-label="훔쳐봐 파트너 소개서">
-                  <header><span>AIMAX 파트너 직원 소개</span><h3>파트너 소개서</h3><i>외부 서비스</i></header>
-                  <div className="resume-preview-paper__identity">
-                    <img
-                      className="partner-portrait partner-portrait--paper"
-                      src={selectedTeamPartner.avatar}
-                      alt={selectedTeamPartner.name + " 대표 이미지"}
-                    />
-                    <div><span>서비스명</span><strong>{selectedTeamPartner.name}</strong><small>레퍼런스 수집 직원</small></div>
-                  </div>
-                  <dl>
-                    <div><dt>제작자</dt><dd>{selectedTeamPartner.maker}</dd></div>
-                    <div><dt>실행 방식</dt><dd>파트너 사이트</dd></div>
-                    <div><dt>이용 장소</dt><dd>hoomcha.com/aimax</dd></div>
-                    <div><dt>운영 책임</dt><dd>제작사 직접 운영</dd></div>
-                  </dl>
-                  <blockquote>{selectedTeamPartner.note}</blockquote>
-                  <span className="resume-preview-paper__signature">제작 {selectedTeamPartner.maker}</span>
-                </article>
-              </div>
-            ) : selectedTeamEmployee?.resume ? (
+            {selectedTeamEmployee?.resume ? (
               <div key={selectedTeamEmployee.id} className="resume-feature motion-reveal">
                 <div className="resume-feature__copy">
                   <span className="landing-kicker">입사지원서</span>
@@ -707,10 +612,25 @@ export function LandingPage({
                   <blockquote>“{selectedTeamEmployee.voiceLine}”</blockquote>
                   <p>{selectedTeamEmployee.summary}</p>
                   <ul>{selectedTeamEmployee.capabilities.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
-                  <button className="public-cta" type="button" onClick={() => onShowResume(selectedTeamEmployee)}>
-                    {selectedTeamEmployee.name}의 입사지원서 전체 보기 <Icon name="arrow" />
-                  </button>
-                  <small>이름과 사진은 역할을 친숙하게 이해하도록 만든 가상의 AI 직원 설정입니다.</small>
+                  {selectedTeamDestination ? (
+                    <a
+                      className="public-cta"
+                      href={selectedTeamDestination.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {selectedTeamDestination.ctaLabel} <Icon name="arrow" />
+                    </a>
+                  ) : (
+                    <button className="public-cta" type="button" onClick={() => onShowResume(selectedTeamEmployee)}>
+                      {selectedTeamEmployee.name}의 입사지원서 전체 보기 <Icon name="arrow" />
+                    </button>
+                  )}
+                  <small>
+                    {selectedTeamDestination
+                      ? "현주의 업무 시작은 연결된 외부 서비스에서 이어집니다."
+                      : "이름과 사진은 역할을 친숙하게 이해하도록 만든 가상의 AI 직원 설정입니다."}
+                  </small>
                 </div>
 
                 <button
@@ -781,24 +701,28 @@ export function LandingPage({
 
           <ul className="hire-list motion-reveal">
             {hireRows.map((task) => {
-              const purchase = task.partner ? undefined : getPurchaseLink(task.employeeId);
+              const purchase = task.externalDestination
+                ? undefined
+                : getPurchaseLink(task.employeeId);
               return (
-                <li key={task.id} className={task.partner ? "is-partner" : ""}>
+                <li key={task.id} className={task.externalDestination ? "is-partner" : ""}>
                   <div className="hire-list__who">
-                    <strong>{task.partner ? task.partner.name : task.employee.name}</strong>
-                    <small>{task.partner ? "파트너 직원 · 제작 " + task.partner.maker : task.employee.role}</small>
+                    <strong>{task.employee.name}</strong>
+                    <small>{task.employee.role}</small>
                   </div>
                   <p className="hire-list__job">{task.label}</p>
                   <p className="hire-list__price">
-                    {task.partner ? "훔쳐봐에서 안내" : formatPrice(purchase?.priceWon ?? null)}
+                    {task.externalDestination
+                      ? "외부 서비스에서 안내"
+                      : formatPrice(purchase?.priceWon ?? null)}
                   </p>
                   <a
                     className="hire-list__cta"
-                    href={task.partner ? task.partner.url : purchase?.url || STORE_URL}
+                    href={task.externalDestination?.url || purchase?.url || STORE_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {task.partner ? "훔쳐봐 보러 가기" : purchase?.verified ? "스토어에서 데려오기" : "스토어에서 확인하기"}
+                    {task.externalDestination?.ctaLabel || (purchase?.verified ? "스토어에서 데려오기" : "스토어에서 확인하기")}
                     <Icon name="arrow" />
                   </a>
                 </li>

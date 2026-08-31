@@ -8,6 +8,7 @@ import {
   type OptionValue,
   type OptionValues,
 } from "../data/taskOptions";
+import { HOOMCHA_URL } from "../data/purchaseLinks";
 import { downloadDeliverable } from "../lib/deliverableFile";
 import { buildQuoteDeliverable } from "../lib/quoteDocument";
 import {
@@ -86,14 +87,15 @@ function PreflightSummary({
 }
 
 /**
- * 현주 슬롯의 업무 맡기기 대체 화면.
- * CEO 정정에 따라 이 자리는 파트너 직원 '훔쳐봐'로 안내합니다.
- * 명칭·제작자·설명·주소는 실서비스 server.js 파트너 카드와 동일합니다.
+ * 현주의 이름·사진·직무 정체성은 그대로 유지하고,
+ * 업무 시작 버튼만 연결된 외부 서비스로 보냅니다.
  */
-function HoomchaHandoffPanel({
+function HyunjuHandoffPanel({
+  employee,
   onBack,
   onClose,
 }: {
+  employee: Employee;
   onBack?: () => void;
   onClose: () => void;
 }) {
@@ -102,18 +104,18 @@ function HoomchaHandoffPanel({
       <div className="notice notice--info">
         <Icon name="spark" />
         <div>
-          <strong>레퍼런스 수집은 훔쳐봐가 맡습니다</strong>
+          <strong>{employee.name}에게 업무 맡기기</strong>
           <p>
-            이 직원 슬롯은 AIMAX가 소개하는 파트너 서비스 훔쳐봐 안내로
-            이어집니다.
+            {employee.name}의 레퍼런스 수집 업무는 연결된 외부 서비스에서
+            시작합니다.
           </p>
         </div>
       </div>
 
-      <section className="partner-panel" aria-label="훔쳐봐 안내">
+      <section className="partner-panel" aria-label={`${employee.name} 업무 안내`}>
         <header className="partner-panel__head">
-          <strong>훔쳐봐</strong>
-          <span>레퍼런스 수집 직원 · 파트너(제작 정보람)</span>
+          <strong>{employee.name}</strong>
+          <span>{employee.role}</span>
         </header>
         <p>
           유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가
@@ -124,20 +126,15 @@ function HoomchaHandoffPanel({
           <li>AI 요약</li>
           <li>채널 5종</li>
         </ul>
-        <div className="partner-panel__link">
-          <span>훔쳐봐 체험 시작</span>
-          <code>hoomcha.com/aimax</code>
-        </div>
         <p className="preview-disclaimer">
-          프리뷰에서는 외부 링크로 이동하지 않습니다. 실서비스에서는 위 주소의
-          체험 페이지가 새 창으로 열립니다.
+          버튼을 누르면 연결된 서비스의 업무 시작 페이지가 새 창으로 열립니다.
         </p>
       </section>
 
       <PreflightSummary
-        execution="외부 서비스 (파트너)"
-        connections="훔쳐봐 계정"
-        cost="훔쳐봐 요금제 기준"
+        execution="연결된 외부 서비스"
+        connections="외부 서비스 계정"
+        cost="외부 서비스 안내 기준"
       />
 
       <div className="dialog-actions">
@@ -150,9 +147,18 @@ function HoomchaHandoffPanel({
             다른 직원 선택
           </button>
         ) : null}
-        <button className="button button--primary" type="button" onClick={onClose}>
+        <button className="button button--secondary" type="button" onClick={onClose}>
           닫기
         </button>
+        <a
+          className="button button--primary"
+          href={HOOMCHA_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {employee.name}에게 맡기기
+          <Icon name="arrow" className="button__icon button__icon--end" />
+        </a>
       </div>
     </div>
   );
@@ -346,12 +352,12 @@ export function NewTaskDialog({
   if (employee.id === "hyunju") {
     return (
       <Modal
-        title="훔쳐봐 안내"
-        description="레퍼런스 수집은 파트너 직원 훔쳐봐 사이트에서 이어집니다."
+        title={employee.name + "에게 업무 맡기기"}
+        description="현주 업무는 연결된 외부 서비스에서 이어집니다."
         onClose={onClose}
         labelId="new-task-title"
       >
-        <HoomchaHandoffPanel onBack={onBack} onClose={onClose} />
+        <HyunjuHandoffPanel employee={employee} onBack={onBack} onClose={onClose} />
       </Modal>
     );
   }

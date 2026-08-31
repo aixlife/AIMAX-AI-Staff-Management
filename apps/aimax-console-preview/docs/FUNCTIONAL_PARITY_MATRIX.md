@@ -86,7 +86,7 @@ Every existing runnable job kind must get an individual parity row before migrat
 | Employee/workflow | Phase 1 | Required parity before switch |
 |---|---|---|
 | 예리 blog writing | DEFERRED | keywords, CTA, model/image model, local Naver save, schedule/draft safety |
-| 현주 neighbor/customer work | REPLACED | CEO 정정에 따라 이 프리뷰 슬롯은 파트너 직원 훔쳐봐(hoomcha.com/aimax) 안내 화면으로 대체 |
+| 현주 neighbor/customer work | EXTERNAL LINK | 직원명·사진·직무는 현주로 유지하고 업무 시작 CTA만 `hoomcha.com/aimax`로 연결 |
 | 송이 research | PREVIEWED | 실서비스 키워드 찾기·링크 분석 2가지 방식과 실행 전 비용 안내를 픽스처로 복원. 외부 API 호출 없음 |
 | 윤미 analysis | DEFERRED | model selection, estimate, explicit confirmation, result/history |
 | 상수 web module | DEFERRED | worker contract and result behavior |

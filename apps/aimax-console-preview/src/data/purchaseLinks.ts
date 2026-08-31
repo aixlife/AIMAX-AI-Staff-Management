@@ -18,7 +18,7 @@ export const LOUNGE_URL = "https://lounge.aimax.ai.kr";
 /** 이미 구매한 회원이 들어가는 운영실 */
 export const CONSOLE_LOGIN_URL = "https://api.aimax.ai.kr/app";
 
-/** 파트너 직원 훔쳐봐(제작 정보람) 전용 페이지 */
+/** 현주의 레퍼런스 업무가 실제로 시작되는 외부 서비스 페이지 */
 export const HOOMCHA_URL = "https://hoomcha.com/aimax";
 
 export interface PurchaseLink {
@@ -82,9 +82,9 @@ const purchaseLinks: PurchaseLink[] = [
     url: "https://makefamily.kr/product/detail.html?product_no=243",
     verified: true,
   },
-  // 현주 ID는 기존 직원 데이터·화면 슬롯과의 호환을 위해 남깁니다. 2026-08-31 CEO
-  // 정정에 따라 랜딩·콘솔에서는 이 슬롯을 훔쳐봐 파트너 안내로 보여주며, 카페24에는
-  // 현주 개별 상품이 없으므로 직접 조회되는 예외 경로만 대표 주소로 보냅니다.
+  // 현주는 모든 화면에서 직원명·프로필을 그대로 보여줍니다. 카페24에는 개별 상품이
+  // 없어 직접 구매 링크를 조회하는 예외 경로만 대표 스토어로 보내고, 레퍼런스 업무의
+  // 실행 CTA는 HOOMCHA_URL을 별도 목적지로 사용합니다.
   {
     employeeId: "hyunju",
     productName: "AI 영업사원 현주",

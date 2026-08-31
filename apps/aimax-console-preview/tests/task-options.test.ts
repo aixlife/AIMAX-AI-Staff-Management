@@ -173,9 +173,10 @@ test("the new-task entry opens an employee picker that reaches every guidance sc
   const picker = read("src/components/EmployeePickerDialog.tsx");
   assert.match(picker, /employee-picker-grid/);
   assert.match(picker, /EmployeePortrait/);
-  assert.match(picker, /훔쳐봐 안내로 연결/);
+  assert.match(picker, /현주 업무는 외부 서비스로 연결/);
   assert.match(picker, /employee\.id === "hyunju"/);
-  assert.match(picker, /employee\.id !== "hyunju"/);
+  assert.doesNotMatch(picker, /pickerEmployee/);
+  assert.doesNotMatch(picker, /훔쳐봐/);
   assert.match(picker, /다운로드 안내로 연결/);
 });
 
@@ -476,8 +477,9 @@ test("songi is restored, hyunju and jieun hand off, and semu stays retired", () 
   );
 
   const dialog = read("src/components/NewTaskDialog.tsx");
-  assert.match(dialog, /훔쳐봐/);
-  assert.match(dialog, /hoomcha\.com\/aimax/);
+  assert.doesNotMatch(dialog, /훔쳐봐/);
+  assert.match(dialog, /href=\{HOOMCHA_URL\}/);
+  assert.match(dialog, /현주 업무는 연결된 외부 서비스/);
   assert.match(dialog, /employee\.id === "hyunju"/);
   assert.match(dialog, /section\.fields\.some\(\(field\) => fieldVisible/);
   assert.match(dialog, /Windows Setup 다운로드/);

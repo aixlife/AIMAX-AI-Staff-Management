@@ -215,7 +215,7 @@ test("public landing carries no local-preview wording", () => {
   assert.doesNotMatch(styles, /landing-preview-bar/);
 });
 
-test("songi owns research while the hyunju slot hands references to 훔쳐봐", () => {
+test("songi owns research while hyunju stays visible and links to the external service", () => {
   const landing = read("src/pages/LandingPage.tsx");
   const links = read("src/data/purchaseLinks.ts");
 
@@ -228,10 +228,12 @@ test("songi owns research while the hyunju slot hands references to 훔쳐봐", 
     landing,
     /id: "leads"[\s\S]{0,180}label: "레퍼런스 모으기"[\s\S]{0,120}employeeId: "hyunju"/,
   );
-  assert.match(landing, /훔쳐봐/);
-  assert.match(landing, /maker: "정보람"/);
-  assert.match(landing, /partner: HOOMCHA_PARTNER/);
-  assert.match(landing, /href=\{activeTask\.partner\.url\}/);
+  assert.match(landing, /resultTitle: "현주가 모아주는 레퍼런스"/);
+  assert.match(landing, /ctaLabel: "현주에게 맡기기"/);
+  assert.match(landing, /externalDestination: HYUNJU_EXTERNAL_DESTINATION/);
+  assert.match(landing, /href=\{activeTask\.externalDestination\.url\}/);
+  assert.match(landing, /자료조사는 송이, 레퍼런스 수집은 현주/);
+  assert.doesNotMatch(landing, /훔쳐봐/);
   assert.match(landing, /target="_blank"/);
   assert.match(landing, /rel="noopener noreferrer"/);
   assert.match(links, /HOOMCHA_URL = "https:\/\/hoomcha\.com\/aimax"/);
