@@ -50,6 +50,44 @@ Node.js 22 이상이 필요합니다.
 
 스크롤 직원 소개는 Scrollama의 sticky stage + step 패턴을 CSS `sticky`, `requestAnimationFrame` 스크롤 진행률, `IntersectionObserver` 등장 효과로 구현했습니다. Motion·Lenis 등 새 런타임 의존성은 추가하지 않았습니다.
 
+## 정적 프리렌더와 검색 노출
+
+랜딩은 검색엔진(구글·네이버)과 카카오톡 공유 봇이 자바스크립트를 실행하지 않고도 읽을 수 있어야 합니다.
+그래서 빌드 마지막에 랜딩 첫 화면을 HTML 문자열로 만들어 `dist/index.html` 의 `<div id="root">` 안에 심습니다.
+
+    NODE_OPTIONS='--max-old-space-size=6144' npm run build
+
+`npm run build` 는 세 단계입니다.
+
+1. `build:client` — 평소 vite 빌드 (`dist/`)
+2. `build:ssr` — `src/entry-server.tsx` 를 노드용으로 한 번 더 빌드 (`dist-ssr/`)
+3. `prerender` — `scripts/prerender.mjs` 가 랜딩을 문자열로 렌더해 `dist/index.html` 에 심음
+
+새 의존성은 쓰지 않습니다. 이미 있는 vite 의 SSR 빌드와 `react-dom/server` 만 씁니다.
+브라우저 전용 코드(`window`, `IntersectionObserver`, 스크롤 동기화)는 전부 이펙트 안에 있어 서버 렌더에서 실행되지 않습니다.
+
+브라우저에서는 `src/main.tsx` 가 심어 둔 HTML을 지우지 않고 `hydrateRoot` 로 이어받습니다.
+`#/app/...` 로 바로 들어온 경우에만 프리렌더 HTML과 화면이 다르므로 `createRoot` 로 새로 그립니다.
+
+검증 (dist 를 정적으로 띄운 뒤):
+
+    curl -s http://127.0.0.1:4180/ | grep -c "설명보다"     # 자바스크립트 없이 히어로 카피가 들어있는지
+    curl -s http://127.0.0.1:4180/robots.txt
+    curl -s http://127.0.0.1:4180/sitemap.xml
+
+### 검색·공유 메타
+
+- `index.html` 에 title·description·canonical(`https://aimax.ai.kr/`)·Open Graph·트위터 카드·Organization JSON-LD가 있습니다.
+- 공유 미리보기 이미지는 `public/assets/og-cover.png` (1200x630)이고, 원본은 `scripts/og-card.html` 입니다. 다시 만들려면:
+
+        agent-browser set viewport 1200 630
+        agent-browser open "file://$PWD/scripts/og-card.html"
+        agent-browser screenshot public/assets/og-cover.png
+
+- `public/robots.txt`, `public/sitemap.xml` 은 그대로 `dist/` 로 복사됩니다.
+- 네이버 서치어드바이저·구글 서치콘솔 소유 확인 태그는 `index.html` 에 주석 자리로 두었습니다. 발급값을 넣고 주석만 풀면 됩니다.
+- 공개 도메인에 올린 뒤에는 카카오 공유 디버거(`developers.kakao.com/tool/debugger/sharing`)에서 실제 주소로 캐시를 한 번 갱신해야 미리보기가 뜹니다.
+
 ## 경로 구조
 
 - `#/`: 공개 랜딩페이지

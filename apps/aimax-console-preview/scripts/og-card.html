@@ -1,0 +1,58 @@
+<!-- 공유 미리보기(og:image) 원본입니다. 1200x630 그대로 캡처해 public/assets/og-cover.png 로 씁니다.
+     다시 만들 때:
+       agent-browser set viewport 1200 630
+       agent-browser open "file://$PWD/scripts/og-card.html"
+       agent-browser screenshot public/assets/og-cover.png
+-->
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1200px; height:630px; overflow:hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", sans-serif;
+    color:#10271d; word-break: keep-all;
+    background:
+      radial-gradient(circle at 86% 26%, rgba(163,194,207,.36), transparent 30%),
+      radial-gradient(circle at 74% 76%, rgba(240,196,95,.22), transparent 32%),
+      linear-gradient(135deg,#fbf8f1 0%,#f3f5f1 48%,#e9f0f1 100%);
+    display:grid; grid-template-columns: 1fr 470px; align-items:center;
+    padding: 64px 0 64px 76px;
+  }
+  .brand { display:flex; align-items:center; gap:14px; margin-bottom:34px; }
+  .brand span {
+    width:46px;height:46px;border-radius:13px;background:#10271d;color:#fbf8f1;
+    display:grid;place-items:center;font-weight:800;font-size:19px;letter-spacing:-.02em;
+  }
+  .brand strong { font-size:29px; font-weight:800; letter-spacing:-.03em; }
+  .kicker {
+    display:inline-block; font-size:20px; font-weight:700; color:#f1745d;
+    letter-spacing:-.01em; margin-bottom:20px;
+  }
+  h1 { font-size:78px; font-weight:880; line-height:1.02; letter-spacing:-.055em; }
+  h1 em { font-style:normal; color:#f1745d; }
+  p { margin-top:26px; font-size:24px; line-height:1.5; color:#33463d; max-width:none; font-weight:500; }
+  .price {
+    margin-top:32px; display:inline-block; background:#10271d; color:#fbf8f1;
+    padding:14px 26px; border-radius:999px; font-size:23px; font-weight:700; letter-spacing:-.02em;
+  }
+  .art { position:relative; height:100%; }
+  .art img { position:absolute; width:210px; image-rendering:pixelated; filter: drop-shadow(0 18px 36px rgba(16,39,29,.18)); }
+  .a1 { left:44px;  top:44px; width:186px !important; }
+  .a2 { left:238px; top:176px; width:168px !important; }
+  .a3 { left:40px;  top:262px; width:160px !important; }
+</style></head>
+<body>
+  <div>
+    <div class="brand"><span>AX</span><strong>AIMAX</strong></div>
+    <div class="kicker">AI 직원 인력사무소</div>
+    <h1>설명보다,<br><em>일 하나</em> 맡겨보세요.</h1>
+    <p>블로그 글쓰기 · 견적서 · 고객 찾기 · 사무 정리</p>
+    <div class="price">직원 한 명 30,000원</div>
+  </div>
+  <div class="art">
+    <img class="a1" src="../public/assets/pixel_employee_yeri.png" alt="">
+    <img class="a2" src="../public/assets/pixel_employee_sangsu.png" alt="">
+    <img class="a3" src="../public/assets/pixel_employee_jieun.png" alt="">
+  </div>
+</body></html>

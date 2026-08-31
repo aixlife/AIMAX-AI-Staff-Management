@@ -7,6 +7,7 @@ import { ResumeDialog } from "./components/ResumeDialog";
 import { Toast } from "./components/Toast";
 import { buildFixture } from "./data/fixtures";
 import { landingHash, routeHash, routes, viewFromHash } from "./lib/routes";
+import type { AppView } from "./lib/routes";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { EmployeesPage } from "./pages/EmployeesPage";
 import { HelpPage } from "./pages/HelpPage";
@@ -29,8 +30,17 @@ function nextPreviewTaskId(tasks: Task[]): string {
   return "preview-task-" + String(tasks.length + 1).padStart(3, "0");
 }
 
-export function App() {
-  const [view, setView] = useState(() => viewFromHash(window.location.hash));
+interface AppProps {
+  /**
+   * 첫 렌더에 보여줄 화면입니다.
+   * 정적 프리렌더(서버)에는 window가 없으므로 항상 랜딩으로 시작하고,
+   * 브라우저에서는 main.tsx가 주소창 해시로 계산한 값을 넘겨 하이드레이션을 맞춥니다.
+   */
+  initialView?: AppView;
+}
+
+export function App({ initialView = "landing" }: AppProps = {}) {
+  const [view, setView] = useState<AppView>(initialView);
   const route: AppRoute = view === "landing" ? "home" : view;
   const [scenario, setScenario] = useState<PreviewScenario>("normal");
   const fixture = useMemo(() => buildFixture(scenario), [scenario]);
