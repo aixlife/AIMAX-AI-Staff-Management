@@ -351,8 +351,8 @@ export function LandingPage({
             {/* "AI 직원" 사이는 줄바꿈되지 않게 붙임 공백(U+00A0)을 씁니다. */}
             <p>
               AIMAX는 사장님 손이 계속 가는 일을 대신하는 AI 직원입니다.
-              블로그 글쓰기, 견적서, 고객 찾기, 사무 정리까지
-              필요한 직원만 한 명씩 데려오시면 됩니다.
+              블로그 글쓰기, 견적서, 고객 찾기, 사무 정리까지
+              필요한 직원만 한 명씩 데려오시면 됩니다.
             </p>
             <div className="landing-hero__actions">
               <button className="public-cta" type="button" onClick={() => scrollToSection("hire")}>
@@ -657,7 +657,7 @@ export function LandingPage({
               </h2>
             </div>
             <p>
-              필요한 직원만 한 명씩 데려오시면 됩니다. 결제하시면 계정과 설치 안내를
+              필요한 직원만 한 명씩 데려오시면 됩니다. 결제하시면 계정과 설치 안내를
               메일로 보내드립니다. 판매와 결제는 주식회사 메이크패밀리 스토어에서 진행됩니다.
             </p>
           </header>
