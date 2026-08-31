@@ -16,13 +16,31 @@ interface EmployeePickerDialogProps {
 /**
  * "새 업무" 진입용 직원 선택 모달.
  * 카드 그리드로 아바타·이름·한 줄 설명·상태를 보여주고,
- * 훔쳐봐 안내(송이)·다운로드 안내(지은)도 같은 그리드에서
+ * 훔쳐봐 안내(현주 슬롯)·다운로드 안내(지은)도 같은 그리드에서
  * 각자의 안내 화면으로 연결합니다.
  */
 function handoffNote(employee: Employee): string | null {
-  if (employee.id === "songi") return "파트너 직원 훔쳐봐 안내로 연결";
+  if (employee.id === "hyunju") return "파트너 직원 훔쳐봐 안내로 연결";
   if (employee.id === "jieun") return "설치형 앱 다운로드 안내로 연결";
   return null;
+}
+
+function pickerEmployee(employee: Employee): Employee {
+  if (employee.id !== "hyunju") return employee;
+  return {
+    ...employee,
+    name: "훔쳐봐",
+    role: "레퍼런스 수집 직원",
+    team: "파트너",
+    initials: "훔",
+    photo: "/assets/partner_hoomcha.png",
+    summary: "유튜브·인스타·틱톡·스레드·X 레퍼런스를 모아 AI가 요약·분류합니다.",
+    execution: "external",
+    requiredConnections: ["훔쳐봐 계정"],
+    inputSummary: "찾을 주제와 채널",
+    outputSummary: "요약·분류된 레퍼런스 모음",
+    costSummary: "훔쳐봐 요금제 기준",
+  };
 }
 
 export function EmployeePickerDialog({
@@ -41,6 +59,7 @@ export function EmployeePickerDialog({
       <div className="employee-picker-grid" aria-label="업무를 맡길 직원 선택">
         {employees.map((employee) => {
           const note = handoffNote(employee);
+          const displayed = pickerEmployee(employee);
           return (
             <button
               key={employee.id}
@@ -48,17 +67,17 @@ export function EmployeePickerDialog({
               className="employee-card employee-picker-card"
               onClick={() => onSelect(employee)}
             >
-              <EmployeePortrait employee={employee} size="medium" showStatus />
+              <EmployeePortrait employee={displayed} size="medium" showStatus />
               <span className="employee-card__body">
                 <span className="employee-card__heading">
-                  <strong>{employee.name}</strong>
+                  <strong>{displayed.name}</strong>
                   {employee.beta ? (
                     <StatusBadge label="BETA" tone="info" />
                   ) : null}
                 </span>
-                <span className="employee-card__role">{employee.role}</span>
+                <span className="employee-card__role">{displayed.role}</span>
                 <span className="employee-picker-card__summary">
-                  {employee.summary}
+                  {displayed.summary}
                 </span>
                 <span className="employee-card__meta">
                   <StatusBadge

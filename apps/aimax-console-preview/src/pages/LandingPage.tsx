@@ -13,6 +13,7 @@ import {
   CONSOLE_LOGIN_URL,
   COMPANY_URL,
   HOOMCHA_URL,
+  LOUNGE_URL,
   STORE_URL,
   formatPrice,
   getPurchaseLink,
@@ -51,27 +52,30 @@ interface TaskChoiceWithEmployee extends TaskChoice {
   employee: Employee;
 }
 
+const HOOMCHA_SLOT_ID = "hyunju";
+
+const HOOMCHA_PARTNER: TaskPartner = {
+  name: "훔쳐봐",
+  maker: "정보람",
+  url: HOOMCHA_URL,
+  avatar: "/assets/partner_hoomcha.png",
+  ctaLabel: "훔쳐봐 보러 가기",
+  note: "가입·결제·문의는 훔쳐봐를 만든 곳에서 직접 맡습니다.",
+};
+
 const taskChoices: TaskChoice[] = [
   {
     id: "research",
-    label: "레퍼런스 모으기",
+    label: "경쟁사 조사",
     employeeId: "songi",
-    request: "요즘 잘 되는 콘텐츠를 모아줘",
-    resultTitle: "훔쳐봐가 모아주는 레퍼런스",
+    request: "경쟁사 자료를 조사해서 비교해줘",
+    resultTitle: "송이 경쟁사 조사 브리프",
     resultItems: [
-      "유튜브·인스타·틱톡·스레드·X에서 자동 수집",
-      "AI가 요약하고 주제별로 정리",
-      "마음에 든 자료만 골라서 보관",
+      "공개 자료와 출처 링크 정리",
+      "경쟁사별 강점과 빈틈 비교",
+      "다음 제작 직원에게 넘길 조사 브리프",
     ],
-    ownerDecision: "어떤 자료를 따라 해볼지만 고르시면 됩니다.",
-    partner: {
-      name: "훔쳐봐",
-      maker: "정보람",
-      url: HOOMCHA_URL,
-      avatar: "/assets/partner_hoomcha.png",
-      ctaLabel: "훔쳐봐 보러 가기",
-      note: "가입·결제·문의는 훔쳐봐를 만든 곳에서 직접 맡습니다.",
-    },
+    ownerDecision: "어느 빈틈부터 공략할지만 정하시면 됩니다.",
   },
   {
     id: "blog",
@@ -93,12 +97,17 @@ const taskChoices: TaskChoice[] = [
   },
   {
     id: "leads",
-    label: "고객 찾기",
+    label: "레퍼런스 모으기",
     employeeId: "hyunju",
-    request: "먼저 연락할 고객 후보를 찾아줘",
-    resultTitle: "먼저 연락할 고객 목록",
-    resultItems: ["우선 볼 고객 후보", "그 후보를 고른 이유", "어디로 어떻게 연락할지"],
-    ownerDecision: "누구에게 먼저 연락할지만 정하시면 됩니다.",
+    request: "요즘 잘 되는 콘텐츠를 모아줘",
+    resultTitle: "훔쳐봐가 모아주는 레퍼런스",
+    resultItems: [
+      "유튜브·인스타·틱톡·스레드·X에서 자동 수집",
+      "AI가 요약하고 주제별로 정리",
+      "마음에 든 자료만 골라서 보관",
+    ],
+    ownerDecision: "어떤 자료를 따라 해볼지만 고르시면 됩니다.",
+    partner: HOOMCHA_PARTNER,
   },
   {
     id: "office",
@@ -119,6 +128,9 @@ export function LandingPage({
   const taskProofRef = useRef<HTMLElement>(null);
   const taskSelectorRef = useRef<HTMLDivElement>(null);
   const teamStoryRef = useRef<HTMLDivElement>(null);
+  const teamApplicationRef = useRef<HTMLDivElement>(null);
+  const manualTeamSelectionRef = useRef<string | null>(null);
+  const manualTeamSelectionTimerRef = useRef<number | undefined>(undefined);
   const publicEmployees = useMemo(
     () => employees.filter((employee) => employee.photo && employee.resume).slice(0, 5),
     [employees],
@@ -160,6 +172,8 @@ export function LandingPage({
     publicEmployees.find((employee) => employee.id === selectedTeamEmployeeId) ||
     publicEmployees.find((employee) => employee.id === "yeri") ||
     publicEmployees[0];
+  const selectedTeamPartner =
+    selectedTeamEmployee?.id === HOOMCHA_SLOT_ID ? HOOMCHA_PARTNER : undefined;
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -244,6 +258,7 @@ export function LandingPage({
     let frame = 0;
     const syncEmployeeToScroll = () => {
       frame = 0;
+      if (manualTeamSelectionRef.current) return;
       const rect = story.getBoundingClientRect();
       const stickyTop = window.innerWidth <= 760 ? 66 : 76;
       const stickyHeight = Math.max(1, window.innerHeight - stickyTop);
@@ -276,6 +291,15 @@ export function LandingPage({
     };
   }, [publicEmployees]);
 
+  useEffect(
+    () => () => {
+      if (manualTeamSelectionTimerRef.current) {
+        window.clearTimeout(manualTeamSelectionTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const scrollToSection = (sectionId: string) => {
     document.getElementById(sectionId)?.scrollIntoView({
       behavior: prefersReducedMotion || motionPaused ? "auto" : "smooth",
@@ -295,6 +319,24 @@ export function LandingPage({
   const selectTask = (task: TaskChoiceWithEmployee) => {
     setSelectedTaskId(task.id);
     setMotionRun((current) => current + 1);
+  };
+
+  const selectTeamEmployee = (employeeId: string) => {
+    manualTeamSelectionRef.current = employeeId;
+    if (manualTeamSelectionTimerRef.current) {
+      window.clearTimeout(manualTeamSelectionTimerRef.current);
+    }
+    setSelectedTeamEmployeeId(employeeId);
+    window.requestAnimationFrame(() => {
+      teamApplicationRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion || motionPaused ? "auto" : "smooth",
+        block: "start",
+      });
+      manualTeamSelectionTimerRef.current = window.setTimeout(() => {
+        manualTeamSelectionRef.current = null;
+        manualTeamSelectionTimerRef.current = undefined;
+      }, prefersReducedMotion || motionPaused ? 250 : 900);
+    });
   };
 
   return (
@@ -460,8 +502,8 @@ export function LandingPage({
             <p className="sr-only" aria-live="polite">
               {activeTask
                 ? activeTask.partner
-                  ? `${activeTask.label} 업무는 파트너 직원 ${activeTask.partner.name}가 맡고 ${activeTask.resultTitle}을 준비합니다.`
-                  : `${activeTask.label} 업무는 ${activeTask.employee.name} ${activeTask.employee.role}이 맡고 ${activeTask.resultTitle}을 준비합니다.`
+                  ? `${activeTask.label} 업무를 맡는 곳은 파트너 직원 ${activeTask.partner.name}입니다. 준비할 결과는 ${activeTask.resultTitle}입니다.`
+                  : `${activeTask.label} 업무를 맡는 직원은 ${activeTask.employee.name} ${activeTask.employee.role}입니다. 준비할 결과는 ${activeTask.resultTitle}입니다.`
                 : ""}
             </p>
           </aside>
@@ -560,7 +602,7 @@ export function LandingPage({
                     <span>떠오릅니다.</span>
                   </h2>
                 </div>
-                <p>자료조사는 송이, 글은 예리처럼 이름과 역할을 함께 기억합니다. 필요한 직원의 입사지원서를 읽어보고 우리 가게에 맞는지 확인해 보세요.</p>
+                <p>자료조사는 송이, 레퍼런스 수집은 훔쳐봐, 글은 예리처럼 이름과 역할을 함께 기억합니다. 우리 가게에 맞는 직원과 파트너인지 소개서를 읽어보고 확인해 보세요.</p>
               </header>
 
               <div className="staff-lineup motion-reveal" aria-label="스크롤에 따라 소개되는 AIMAX AI 직원">
@@ -572,59 +614,125 @@ export function LandingPage({
                     className={employee.id === selectedTeamEmployee?.id ? "is-active" : ""}
                     style={{ "--staff-index": index } as CSSProperties}
                     aria-pressed={employee.id === selectedTeamEmployee?.id}
-                    onClick={() => setSelectedTeamEmployeeId(employee.id)}
+                    onClick={() => selectTeamEmployee(employee.id)}
                   >
-                    <EmployeePortrait employee={employee} size="large" decorative={false} />
-                    <span><strong>{employee.name}</strong><small>{employee.role}</small></span>
+                    {employee.id === HOOMCHA_SLOT_ID ? (
+                      <img
+                        className="partner-portrait partner-portrait--lineup"
+                        src={HOOMCHA_PARTNER.avatar}
+                        alt={HOOMCHA_PARTNER.name + " 대표 이미지"}
+                      />
+                    ) : (
+                      <EmployeePortrait employee={employee} size="large" decorative={false} />
+                    )}
+                    <span>
+                      <strong>{employee.id === HOOMCHA_SLOT_ID ? HOOMCHA_PARTNER.name : employee.name}</strong>
+                      <small>{employee.id === HOOMCHA_SLOT_ID ? "레퍼런스 수집 직원" : employee.role}</small>
+                    </span>
                   </button>
                 ))}
               </div>
               <p className="sr-only" aria-live="polite">
-                {selectedTeamEmployee ? `${selectedTeamEmployee.name} ${selectedTeamEmployee.role} 소개` : ""}
+                {selectedTeamEmployee
+                  ? selectedTeamPartner
+                    ? `${selectedTeamPartner.name} 레퍼런스 수집 파트너 소개`
+                    : `${selectedTeamEmployee.name} ${selectedTeamEmployee.role} 소개`
+                  : ""}
               </p>
             </div>
           </div>
 
-          <div className="landing-section team-resume__application">
-            {selectedTeamEmployee?.resume ? (
-              <div key={selectedTeamEmployee.id} className="resume-feature motion-reveal">
-              <div className="resume-feature__copy">
-                <span className="landing-kicker">입사지원서</span>
-                <h3 className="heading-lines">
-                  <span>어떤 일을</span>
-                  <span>맡길지,</span>
-                  <span>이력서부터</span>
-                  <span>읽어보세요.</span>
-                </h3>
-                <blockquote>“{selectedTeamEmployee.voiceLine}”</blockquote>
-                <p>{selectedTeamEmployee.summary}</p>
-                <ul>{selectedTeamEmployee.capabilities.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
-                <button className="public-cta" type="button" onClick={() => onShowResume(selectedTeamEmployee)}>
-                  {selectedTeamEmployee.name}의 입사지원서 전체 보기 <Icon name="arrow" />
-                </button>
-                <small>이름과 사진은 역할을 친숙하게 이해하도록 만든 가상의 AI 직원 설정입니다.</small>
-              </div>
-
-              <button
-                className="resume-preview-paper"
-                type="button"
-                onClick={() => onShowResume(selectedTeamEmployee)}
-                aria-label={`${selectedTeamEmployee.name}의 전체 입사지원서 열기`}
-              >
-                <header><span>AIMAX AI 직원 채용 서류</span><h3>입 사 지 원 서</h3><i>AI 직원</i></header>
-                <div className="resume-preview-paper__identity">
-                  <EmployeePortrait employee={selectedTeamEmployee} size="hero" className="resume-preview-photo" decorative={false} />
-                  <div><span>성명</span><strong>{selectedTeamEmployee.name}</strong><small>{selectedTeamEmployee.role}</small></div>
+          <div
+            ref={teamApplicationRef}
+            className="landing-section team-resume__application"
+          >
+            {selectedTeamPartner ? (
+              <div key={selectedTeamEmployee?.id} className="resume-feature resume-feature--partner motion-reveal">
+                <div className="resume-feature__copy">
+                  <span className="landing-kicker">파트너 소개서</span>
+                  <h3 className="heading-lines">
+                    <span>AIMAX에서</span>
+                    <span>소개하고,</span>
+                    <span>파트너가</span>
+                    <span>직접 운영합니다.</span>
+                  </h3>
+                  <blockquote>레퍼런스 수집은 훔쳐봐가 맡습니다.</blockquote>
+                  <p>유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가 요약·분류해줍니다.</p>
+                  <ul>
+                    <li>레퍼런스 수집</li>
+                    <li>AI 요약</li>
+                    <li>채널 5종</li>
+                  </ul>
+                  <a
+                    className="public-cta"
+                    href={selectedTeamPartner.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {selectedTeamPartner.ctaLabel} <Icon name="arrow" />
+                  </a>
+                  <small>AIMAX는 파트너 서비스를 소개하고 연결합니다. 가입·결제·문의·환불·서비스 운영은 제작사가 맡습니다.</small>
                 </div>
-                <dl>
-                  <div><dt>지원분야</dt><dd>{selectedTeamEmployee.role}</dd></div>
-                  <div><dt>사번</dt><dd>{selectedTeamEmployee.resume.employeeNo}</dd></div>
-                  <div><dt>경력</dt><dd>{selectedTeamEmployee.resume.experience}</dd></div>
-                  <div><dt>소속</dt><dd>{selectedTeamEmployee.resume.team}</dd></div>
-                </dl>
-                <blockquote>“{selectedTeamEmployee.resume.interviewLine}”</blockquote>
-                <span className="resume-preview-paper__signature">지원자 {selectedTeamEmployee.name}</span>
-              </button>
+
+                <article className="resume-preview-paper resume-preview-paper--partner" aria-label="훔쳐봐 파트너 소개서">
+                  <header><span>AIMAX 파트너 직원 소개</span><h3>파트너 소개서</h3><i>외부 서비스</i></header>
+                  <div className="resume-preview-paper__identity">
+                    <img
+                      className="partner-portrait partner-portrait--paper"
+                      src={selectedTeamPartner.avatar}
+                      alt={selectedTeamPartner.name + " 대표 이미지"}
+                    />
+                    <div><span>서비스명</span><strong>{selectedTeamPartner.name}</strong><small>레퍼런스 수집 직원</small></div>
+                  </div>
+                  <dl>
+                    <div><dt>제작자</dt><dd>{selectedTeamPartner.maker}</dd></div>
+                    <div><dt>실행 방식</dt><dd>파트너 사이트</dd></div>
+                    <div><dt>이용 장소</dt><dd>hoomcha.com/aimax</dd></div>
+                    <div><dt>운영 책임</dt><dd>제작사 직접 운영</dd></div>
+                  </dl>
+                  <blockquote>{selectedTeamPartner.note}</blockquote>
+                  <span className="resume-preview-paper__signature">제작 {selectedTeamPartner.maker}</span>
+                </article>
+              </div>
+            ) : selectedTeamEmployee?.resume ? (
+              <div key={selectedTeamEmployee.id} className="resume-feature motion-reveal">
+                <div className="resume-feature__copy">
+                  <span className="landing-kicker">입사지원서</span>
+                  <h3 className="heading-lines">
+                    <span>어떤 일을</span>
+                    <span>맡길지,</span>
+                    <span>이력서부터</span>
+                    <span>읽어보세요.</span>
+                  </h3>
+                  <blockquote>“{selectedTeamEmployee.voiceLine}”</blockquote>
+                  <p>{selectedTeamEmployee.summary}</p>
+                  <ul>{selectedTeamEmployee.capabilities.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>
+                  <button className="public-cta" type="button" onClick={() => onShowResume(selectedTeamEmployee)}>
+                    {selectedTeamEmployee.name}의 입사지원서 전체 보기 <Icon name="arrow" />
+                  </button>
+                  <small>이름과 사진은 역할을 친숙하게 이해하도록 만든 가상의 AI 직원 설정입니다.</small>
+                </div>
+
+                <button
+                  className="resume-preview-paper"
+                  type="button"
+                  onClick={() => onShowResume(selectedTeamEmployee)}
+                  aria-label={`${selectedTeamEmployee.name}의 전체 입사지원서 열기`}
+                >
+                  <header><span>AIMAX AI 직원 채용 서류</span><h3>입 사 지 원 서</h3><i>AI 직원</i></header>
+                  <div className="resume-preview-paper__identity">
+                    <EmployeePortrait employee={selectedTeamEmployee} size="hero" className="resume-preview-photo" decorative={false} />
+                    <div><span>성명</span><strong>{selectedTeamEmployee.name}</strong><small>{selectedTeamEmployee.role}</small></div>
+                  </div>
+                  <dl>
+                    <div><dt>지원분야</dt><dd>{selectedTeamEmployee.role}</dd></div>
+                    <div><dt>사번</dt><dd>{selectedTeamEmployee.resume.employeeNo}</dd></div>
+                    <div><dt>경력</dt><dd>{selectedTeamEmployee.resume.experience}</dd></div>
+                    <div><dt>소속</dt><dd>{selectedTeamEmployee.resume.team}</dd></div>
+                  </dl>
+                  <blockquote>“{selectedTeamEmployee.resume.interviewLine}”</blockquote>
+                  <span className="resume-preview-paper__signature">지원자 {selectedTeamEmployee.name}</span>
+                </button>
               </div>
             ) : null}
           </div>
@@ -645,6 +753,15 @@ export function LandingPage({
             <article><span>비용</span><h3>돈이 드는 일은 확인 후에</h3><p>얼마가 드는지 보여드리고, 사장님이 좋다고 하신 다음에 시작합니다.</p></article>
             <article><span>실수</span><h3>중간에 멈춰도 다시 이어갑니다</h3><p>어디까지 했는지 기록으로 남겨서, 처음부터 다시 하지 않아도 됩니다.</p></article>
           </div>
+          <aside className="trust-strip__learning motion-reveal" aria-label="수강생 라운지 안내">
+            <div>
+              <strong>AI 직원이 아직 낯설다면</strong>
+              <p>메이크패밀리 라운지에서 강의와 바로 쓰는 가이드를 먼저 살펴보세요.</p>
+            </div>
+            <a href={LOUNGE_URL} target="_blank" rel="noopener noreferrer">
+              수강생 라운지 보기 <Icon name="arrow" />
+            </a>
+          </aside>
         </section>
 
         <section id="hire" className="landing-section hire-section" aria-labelledby="hire-title">
@@ -691,7 +808,7 @@ export function LandingPage({
 
           <div className="hire-note motion-reveal">
             <p>
-              숏폼작가 윤미, 판서 나경, 자료조사 송이, 알람앱 맥스도 같은 스토어에 있습니다.
+              숏폼작가 윤미, 판서 나경, 알람앱 맥스도 같은 스토어에 있습니다.
               {" "}
               <a href={STORE_URL} target="_blank" rel="noopener noreferrer">스토어에서 전체 보기</a>
             </p>

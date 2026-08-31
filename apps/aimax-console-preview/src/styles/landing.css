@@ -832,7 +832,13 @@
     staff-select-pop 480ms var(--ease-spring) both,
     staff-breathe 3.2s 900ms ease-in-out infinite;
 }
+.staff-lineup > button.is-active .partner-portrait--lineup {
+  animation:
+    staff-select-pop 480ms var(--ease-spring) both,
+    staff-breathe 3.2s 900ms ease-in-out infinite;
+}
 .staff-lineup > button .employee-portrait { width: 76px; height: 90px; border-radius: 23px; }
+.staff-lineup > button .partner-portrait--lineup { width: 76px; height: 90px; border-radius: 23px; }
 .staff-lineup > button > span { min-width: 0; display: grid; gap: 3px; text-align: center; }
 .staff-lineup > button strong { font-size: 1.08rem; }
 .staff-lineup > button small { overflow: hidden; color: #68786f; font-size: 0.68rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -929,6 +935,8 @@
 
 .resume-preview-photo.employee-portrait { width: 118px; height: 158px; border: 1px solid #8f8679; border-radius: 2px; background: #e6e2d9; }
 .resume-preview-photo.employee-portrait img { border: 0; border-radius: 1px; box-shadow: none; object-position: center top; }
+.partner-portrait--paper { width: 118px; height: 158px; border: 1px solid #8f8679; border-radius: 2px; background: #e6e2d9; }
+.resume-preview-paper--partner { cursor: default; }
 .resume-preview-paper__identity > div { display: grid; align-content: center; }
 .resume-preview-paper__identity span { color: #777970; font-size: 0.68rem; font-weight: 800; }
 .resume-preview-paper__identity strong { margin-top: 6px; font-size: 3rem; line-height: 1; letter-spacing: -0.06em; }
@@ -974,6 +982,41 @@
 .trust-strip__items article > span { color: #bd5c48; font-size: 0.68rem; font-weight: 900; letter-spacing: 0.08em; }
 .trust-strip__items h3 { margin: var(--space-6) 0 var(--space-3); font-size: 1.15rem; }
 .trust-strip__items p { margin: 0; color: #68736d; font-size: var(--text-xs); line-height: 1.75; word-break: keep-all; }
+
+.trust-strip__learning {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid rgba(16, 39, 29, 0.13);
+  border-radius: 18px;
+  color: var(--color-forest);
+  background: rgba(255, 253, 248, 0.72);
+}
+
+.trust-strip__learning > div { display: grid; gap: 5px; }
+.trust-strip__learning strong { font-size: var(--text-sm); }
+.trust-strip__learning p { margin: 0; color: #68736d; font-size: var(--text-xs); line-height: 1.7; word-break: keep-all; }
+.trust-strip__learning a {
+  min-height: 42px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 var(--space-4);
+  border: 1px solid rgba(16, 39, 29, 0.18);
+  border-radius: var(--radius-pill);
+  color: var(--color-forest);
+  background: #fff;
+  font-size: var(--text-xs);
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.trust-strip__learning a:hover { border-color: rgba(16, 39, 29, 0.36); background: var(--color-brand-faint); }
+.trust-strip__learning svg { width: 14px; height: 14px; }
 
 /* 가격 안내 + 회사 소개 */
 .hire-section {
@@ -1350,6 +1393,7 @@
   .staff-lineup > button { min-height: 112px; gap: 7px; padding: 9px; }
   .staff-lineup > button:last-child { grid-column: 1 / -1; }
   .staff-lineup > button .employee-portrait { width: 52px; height: 62px; border-radius: 17px; }
+  .staff-lineup > button .partner-portrait--lineup { width: 52px; height: 62px; border-radius: 17px; }
   .staff-lineup > button strong { font-size: 0.92rem; }
   .staff-lineup > button small { font-size: 0.61rem; }
   .staff-lineup > button::after { inset: 6px; border-radius: 15px; }
@@ -1363,10 +1407,12 @@
   .resume-preview-paper header h3 { font-size: 1.35rem; letter-spacing: 0.22em; text-indent: 0.22em; }
   .resume-preview-paper__identity { grid-template-columns: 90px minmax(0, 1fr); gap: var(--space-3); }
   .resume-preview-photo.employee-portrait { width: 90px; height: 120px; }
+  .partner-portrait--paper { width: 90px; height: 120px; }
   .resume-preview-paper__identity strong { font-size: 2.35rem; }
   .trust-strip { padding-inline: var(--space-4); }
   .trust-strip__items { grid-template-columns: 1fr; }
   .trust-strip__items article { min-height: 0; }
+  .trust-strip__learning { align-items: flex-start; flex-direction: column; padding: var(--space-5); }
   .hire-section { padding-inline: var(--space-4); }
   .hire-list > li { padding: var(--space-5); column-gap: var(--space-3); row-gap: var(--space-3); }
   .hire-list__who strong { font-size: 1rem; }
@@ -1401,6 +1447,7 @@
   .resume-preview-paper header i { top: 0; right: 0; bottom: auto; }
   .resume-preview-paper__identity { grid-template-columns: 82px minmax(0, 1fr); }
   .resume-preview-photo.employee-portrait { width: 82px; height: 110px; }
+  .partner-portrait--paper { width: 82px; height: 110px; }
   .resume-preview-paper dl { grid-template-columns: 1fr; }
   .resume-preview-paper__signature { right: 22px; bottom: 22px; }
 }

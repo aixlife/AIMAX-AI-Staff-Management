@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 
 import {
   buildDefaultOptionValues,
+  fieldVisible,
   getTaskOptions,
   missingRequiredLabels,
   type OptionValue,
@@ -85,11 +86,11 @@ function PreflightSummary({
 }
 
 /**
- * 송이(자료조사) 업무 맡기기 대체 화면.
- * 웹 자료조사 폼은 폐기됐고, 파트너 직원 '훔쳐봐'로 안내합니다.
+ * 현주 슬롯의 업무 맡기기 대체 화면.
+ * CEO 정정에 따라 이 자리는 파트너 직원 '훔쳐봐'로 안내합니다.
  * 명칭·제작자·설명·주소는 실서비스 server.js 파트너 카드와 동일합니다.
  */
-function SongiHandoffPanel({
+function HoomchaHandoffPanel({
   onBack,
   onClose,
 }: {
@@ -101,10 +102,10 @@ function SongiHandoffPanel({
       <div className="notice notice--info">
         <Icon name="spark" />
         <div>
-          <strong>웹 자료조사 업무는 종료됐습니다</strong>
+          <strong>레퍼런스 수집은 훔쳐봐가 맡습니다</strong>
           <p>
-            웹에서 진행하던 자료조사 폼 대신, 레퍼런스 수집은 파트너 직원
-            훔쳐봐가 이어받습니다.
+            이 직원 슬롯은 AIMAX가 소개하는 파트너 서비스 훔쳐봐 안내로
+            이어집니다.
           </p>
         </div>
       </div>
@@ -342,15 +343,15 @@ export function NewTaskDialog({
     );
   };
 
-  if (employee.id === "songi") {
+  if (employee.id === "hyunju") {
     return (
       <Modal
-        title={employee.name + "에게 업무 맡기기"}
-        description="자료조사 업무는 파트너 직원 훔쳐봐 안내로 대체됐습니다."
+        title="훔쳐봐 안내"
+        description="레퍼런스 수집은 파트너 직원 훔쳐봐 사이트에서 이어집니다."
         onClose={onClose}
         labelId="new-task-title"
       >
-        <SongiHandoffPanel onBack={onBack} onClose={onClose} />
+        <HoomchaHandoffPanel onBack={onBack} onClose={onClose} />
       </Modal>
     );
   }
@@ -464,7 +465,11 @@ export function NewTaskDialog({
 
         {optionConfig ? (
           <>
-            {optionConfig.sections.map((section) =>
+            {optionConfig.sections
+              .filter((section) =>
+                section.fields.some((field) => fieldVisible(field, optionValues)),
+              )
+              .map((section) =>
               section.advanced ? (
                 <details
                   className="option-group option-group--advanced"

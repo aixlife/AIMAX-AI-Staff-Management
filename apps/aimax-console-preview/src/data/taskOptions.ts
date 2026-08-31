@@ -5,6 +5,7 @@
  * 직원별 폼을 항목·라벨 단위로 그대로 미러링합니다.
  * - 예리: app.html yeriJobForm (키워드~기존 작성글 스타일, 16개 입력)
  * - 현주: app.html hyunjuJobForm (타겟 방식~신청 멘트, 6개 입력)
+ * - 송이: app.html songiJobForm (키워드 찾기·링크 분석, 13개 입력)
  * - 윤미: app.html yunmiJobForm (주제~레퍼런스 메모, 5개 입력)
  * - 상수: app.html sangsuJobForm (로고~작성일, 14개 입력)
  * 값은 전부 픽스처이며 어떤 항목도 삭제하지 않습니다. 예리·윤미·상수 폼은
@@ -50,6 +51,11 @@
  *   초안을 만드는 것을 폼 안에서 완결되게 미러링합니다. 멘트 초안 만들기는
  *   입력한 소개를 반영한 픽스처 멘트를 만들고, 소개가 비면 일반 멘트 + 안내를
  *   보여줍니다.
+ *
+ * 2026-08-31 CEO 정정 반영:
+ * - 직원 선택·맡기기 화면의 훔쳐봐 파트너 안내는 송이가 아니라 현주 슬롯에 붙습니다.
+ * - 송이는 실서비스의 독립된 자료조사/잡 폼이 살아 있으므로 키워드 찾기와 링크 분석
+ *   두 작업 방식을 픽스처 옵션으로 복원합니다. 여기서는 외부 API를 호출하지 않습니다.
  */
 
 export interface OptionChoice {
@@ -83,12 +89,20 @@ export interface ItemRow {
 export type OptionValue = string | string[] | boolean | ItemRow[];
 export type OptionValues = Record<string, OptionValue>;
 
+interface VisibilityCondition {
+  fieldId: string;
+  equals?: string;
+  oneOf?: string[];
+}
+
 interface BaseField {
   id: string;
   label: string;
   hint?: string;
   /** 실서비스처럼 다른 값 선택 시에만 노출되는 항목 (equals 또는 oneOf 하나만 사용) */
-  visibleWhen?: { fieldId: string; equals?: string; oneOf?: string[] };
+  visibleWhen?: VisibilityCondition;
+  /** 작업 방식과 하위 선택처럼 조건이 둘 이상이면 모든 조건을 만족해야 합니다. */
+  visibleWhenAll?: VisibilityCondition[];
   /** 섹션 제목과 라벨이 같을 때 화면 라벨만 숨깁니다 (aria-label은 유지) */
   hideLabel?: boolean;
 }
@@ -291,14 +305,17 @@ export function fieldVisible(
   field: TaskOptionField,
   values: OptionValues,
 ): boolean {
-  if (!field.visibleWhen) return true;
-  const current = values[field.visibleWhen.fieldId];
-  if (field.visibleWhen.oneOf) {
-    return (
-      typeof current === "string" && field.visibleWhen.oneOf.includes(current)
-    );
-  }
-  return current === field.visibleWhen.equals;
+  const conditions = [
+    ...(field.visibleWhen ? [field.visibleWhen] : []),
+    ...(field.visibleWhenAll || []),
+  ];
+  return conditions.every((condition) => {
+    const current = values[condition.fieldId];
+    if (condition.oneOf) {
+      return typeof current === "string" && condition.oneOf.includes(current);
+    }
+    return current === condition.equals;
+  });
 }
 
 export function missingRequiredLabels(
@@ -796,6 +813,291 @@ const yeriOptions: EmployeeTaskOptions = {
           " 모드 · 이미지 " +
           imageCount +
           "장 포함)",
+      ],
+    };
+  },
+};
+
+/* ------------------------------------------------------------------ */
+/* 송이 — app.html songiJobForm 13개 입력 + 작업 방식(프리뷰 추가)         */
+/* ------------------------------------------------------------------ */
+
+const SONGI_DISCOVERY_PRICING_USD: Record<
+  string,
+  { start: number; perResult: number }
+> = {
+  instagram: { start: 0.005, perResult: 0.0026 },
+  tiktok: { start: 0.012, perResult: 0.0017 },
+  threads: { start: 0.01, perResult: 0.002 },
+  meta_ads: { start: 0.005, perResult: 0.00075 },
+};
+
+function songiUrlCount(values: OptionValues): number {
+  return text(values, "urls")
+    .split(/\n+/)
+    .map((url) => url.trim())
+    .filter(Boolean).length;
+}
+
+const songiOptions: EmployeeTaskOptions = {
+  employeeId: "songi",
+  sections: [
+    {
+      title: "작업 방식",
+      description:
+        "실서비스 송이 폼의 두 작업을 그대로 고릅니다. 이 화면은 입력과 비용 안내만 재현하며 외부 API를 호출하지 않습니다.",
+      fields: [
+        {
+          kind: "choice",
+          variant: "chips",
+          id: "taskMode",
+          label: "자료조사 방식",
+          choices: [
+            {
+              value: "discover",
+              label: "키워드로 찾기",
+              hint: "플랫폼 후보를 모아 반응을 비교합니다.",
+            },
+            {
+              value: "links",
+              label: "링크로 분석",
+              hint: "지정한 영상·웹 링크로 기획 브리프를 만듭니다.",
+            },
+          ],
+          defaultValue: "discover",
+        },
+      ],
+    },
+    {
+      title: "키워드로 찾기",
+      description:
+        "유튜브 공개 검색은 무료이며, 다른 플랫폼은 실행 전 Apify 예상 비용을 확인합니다.",
+      fields: [
+        {
+          kind: "select",
+          id: "discoveryProject",
+          label: "저장할 프로젝트",
+          choices: [
+            { value: "current", label: "현재 프로젝트" },
+            { value: "new", label: "새 프로젝트" },
+          ],
+          defaultValue: "current",
+          visibleWhen: { fieldId: "taskMode", equals: "discover" },
+        },
+        {
+          kind: "text",
+          id: "discoveryProjectName",
+          label: "새 프로젝트명",
+          placeholder: "예: AI 직원 벤치마킹",
+          hint: "새 프로젝트로 저장할 때만 입력합니다.",
+          visibleWhenAll: [
+            { fieldId: "taskMode", equals: "discover" },
+            { fieldId: "discoveryProject", equals: "new" },
+          ],
+        },
+        {
+          kind: "text",
+          id: "discoveryKeyword",
+          label: "찾고 싶은 키워드",
+          placeholder: "예: 30대 피부관리 쇼츠, AI 직원",
+          required: true,
+          visibleWhen: { fieldId: "taskMode", equals: "discover" },
+        },
+        {
+          kind: "select",
+          id: "discoveryPlatform",
+          label: "플랫폼",
+          choices: [
+            { value: "youtube", label: "유튜브 (무료)" },
+            { value: "instagram", label: "인스타그램 (Apify 유료)" },
+            { value: "tiktok", label: "틱톡 (Apify 유료)" },
+            { value: "threads", label: "스레드 (Apify 유료)" },
+            { value: "meta_ads", label: "메타 광고 (Apify 유료)" },
+          ],
+          defaultValue: "youtube",
+          visibleWhen: { fieldId: "taskMode", equals: "discover" },
+        },
+        {
+          kind: "select",
+          id: "discoverySort",
+          label: "수집 모드",
+          choices: [
+            { value: "top", label: "인기 우선" },
+            { value: "recent", label: "최신 우선" },
+          ],
+          defaultValue: "top",
+          visibleWhen: { fieldId: "taskMode", equals: "discover" },
+        },
+        {
+          kind: "select",
+          id: "discoveryDays",
+          label: "최근성 기준",
+          choices: [
+            { value: "7", label: "최근 7일" },
+            { value: "30", label: "최근 30일" },
+            { value: "90", label: "최근 90일" },
+          ],
+          defaultValue: "30",
+          visibleWhen: { fieldId: "taskMode", equals: "discover" },
+        },
+        {
+          kind: "select",
+          id: "discoveryMaxResults",
+          label: "후보 수",
+          choices: [
+            { value: "8", label: "8개" },
+            { value: "12", label: "12개" },
+            { value: "20", label: "20개" },
+          ],
+          defaultValue: "12",
+          visibleWhen: { fieldId: "taskMode", equals: "discover" },
+        },
+      ],
+    },
+    {
+      title: "링크로 분석",
+      description:
+        "링크와 내 채널 맥락을 함께 넣으면 성과 해석과 적용 포인트를 담은 브리프를 준비합니다.",
+      fields: [
+        {
+          kind: "select",
+          id: "linkProject",
+          label: "프로젝트",
+          choices: [
+            { value: "current", label: "현재 프로젝트" },
+            { value: "new", label: "새 프로젝트" },
+          ],
+          defaultValue: "current",
+          visibleWhen: { fieldId: "taskMode", equals: "links" },
+        },
+        {
+          kind: "text",
+          id: "linkProjectName",
+          label: "새 프로젝트명",
+          placeholder: "예: 뷰티 릴스 후킹 연구",
+          hint: "새 프로젝트로 저장할 때만 입력합니다.",
+          visibleWhenAll: [
+            { fieldId: "taskMode", equals: "links" },
+            { fieldId: "linkProject", equals: "new" },
+          ],
+        },
+        {
+          kind: "text",
+          id: "instagramProfile",
+          label: "내 인스타그램 프로필 링크",
+          placeholder: "instagram.com/your_account",
+          visibleWhen: { fieldId: "taskMode", equals: "links" },
+        },
+        {
+          kind: "text",
+          id: "contentCategory",
+          label: "영상 카테고리",
+          placeholder: "예: 뷰티, 교육, 부동산",
+          visibleWhen: { fieldId: "taskMode", equals: "links" },
+        },
+        {
+          kind: "text",
+          id: "contentTopic",
+          label: "만들고 싶은 주제",
+          placeholder: "예: 30대 피부관리 루틴",
+          visibleWhen: { fieldId: "taskMode", equals: "links" },
+        },
+        {
+          kind: "textarea",
+          id: "urls",
+          label: "벤치마킹하고 싶은 링크",
+          placeholder:
+            "YouTube, Instagram Reels, TikTok 링크를 붙여넣으세요. 여러 개는 줄바꿈으로 입력합니다.",
+          required: true,
+          visibleWhen: { fieldId: "taskMode", equals: "links" },
+        },
+      ],
+    },
+  ],
+  summarize: (values) => {
+    const taskMode = text(values, "taskMode") || "discover";
+    if (taskMode === "links") {
+      const count = songiUrlCount(values);
+      return joinParts([
+        "링크로 분석",
+        count ? "링크 " + count + "개" : "링크 입력 대기",
+        text(values, "contentTopic"),
+      ]);
+    }
+    return joinParts([
+      "키워드로 찾기",
+      labelOf(songiOptions, values, "discoveryPlatform"),
+      text(values, "discoveryKeyword"),
+      labelOf(songiOptions, values, "discoveryMaxResults"),
+    ]);
+  },
+  estimateCost: (values) => {
+    const taskMode = text(values, "taskMode") || "discover";
+    if (taskMode === "links") {
+      const count = songiUrlCount(values);
+      return {
+        headline: count
+          ? "링크 " + count + "개 · 실서비스 실행 전 비용 확인"
+          : "링크를 넣으면 예상 비용을 안내합니다",
+        lines: [
+          "링크별 Gemini 분석과 SNS 원문 수집 필요 여부에 따라 비용이 달라집니다.",
+          "이 프리뷰는 외부 API를 호출하지 않으며 실제 실행 전 확인 절차를 재현합니다.",
+        ],
+        basis: "estimate",
+        basisLabel: "실서비스 링크 분석 비용 안내 미러",
+        submitRecap: [
+          count
+            ? "링크 " + count + "개 · 실제 실행 전 Gemini·Apify 비용 확인"
+            : "링크 입력 후 실제 실행 전 Gemini·Apify 비용 확인",
+        ],
+      };
+    }
+
+    const platform = text(values, "discoveryPlatform") || "youtube";
+    const requestedCount = Math.max(
+      1,
+      Number(text(values, "discoveryMaxResults")) || 12,
+    );
+    const count = platform === "meta_ads" ? Math.max(10, requestedCount) : requestedCount;
+    const platformLabel =
+      labelOf(songiOptions, values, "discoveryPlatform").replace(/\s*\(.+\)$/, "") ||
+      platform;
+    if (platform === "youtube") {
+      return {
+        headline: "유튜브 공개 검색: 무료",
+        lines: [
+          "AIMAX 공개 검색으로 후보 " + count + "개를 찾으며 외부 API 비용은 0원입니다.",
+          "이 프리뷰에서는 검색을 실행하지 않고 입력과 결과 흐름만 확인합니다.",
+        ],
+        basis: "free",
+        basisLabel: "실서비스 무료 공개 검색 정책",
+        submitRecap: [
+          "외부 AI/API 비용 0원 (무료 공개 검색) · 후보 " + count + "개",
+        ],
+      };
+    }
+    const pricing = SONGI_DISCOVERY_PRICING_USD[platform];
+    const usd = pricing
+      ? pricing.start + count * pricing.perResult
+      : 0;
+    const won = wonFromUsd(usd);
+    return {
+      headline: platformLabel + " 예상 최대 비용 약 " + wonLabel(won),
+      lines: [
+        "후보 " +
+          count +
+          "개 기준 · 내 Apify 크레딧에서 차감 · 실행 시작 고정비 포함",
+        "프리뷰에서는 비용만 계산하고 Apify를 호출하지 않습니다.",
+      ],
+      basis: "estimate",
+      basisLabel: "실서비스 Apify 폴백 단가 미러",
+      submitRecap: [
+        platformLabel +
+          " 후보 " +
+          count +
+          "개 · 예상 최대 비용 약 " +
+          wonLabel(won) +
+          " (Apify)",
       ],
     };
   },
@@ -1369,6 +1671,7 @@ const sangsuOptions: EmployeeTaskOptions = {
 
 const optionConfigs: EmployeeTaskOptions[] = [
   yeriOptions,
+  songiOptions,
   hyunjuOptions,
   yunmiOptions,
   sangsuOptions,

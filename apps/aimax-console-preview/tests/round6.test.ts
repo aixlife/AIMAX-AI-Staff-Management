@@ -97,7 +97,7 @@ test("yunmi estimate is two-line free/upgrade and never a bare zero", () => {
 });
 
 test("every form employee shows a pre-submit cost recap with a reason", () => {
-  for (const employeeId of ["yeri", "hyunju", "yunmi", "sangsu"]) {
+  for (const employeeId of ["yeri", "songi", "hyunju", "yunmi", "sangsu"]) {
     const config = getTaskOptions(employeeId);
     assert.ok(config, employeeId + " 옵션 폼이 없습니다");
     const estimate = config.estimateCost(buildDefaultOptionValues(config));

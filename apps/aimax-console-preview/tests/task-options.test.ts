@@ -24,16 +24,18 @@ function read(relativePath: string): string {
 
 /**
  * 실서비스(oracle/aimax-reports-api/static/app.html) 폼의 입력 컨트롤 수.
- * 예리 yeriJobForm 16개, 현주 hyunjuJobForm 6개, 윤미 yunmiJobForm 5개,
+ * 예리 yeriJobForm 16개, 송이 songiJobForm 13개, 현주 hyunjuJobForm 6개, 윤미 yunmiJobForm 5개,
  * 상수 sangsuJobForm 14개.
  * 예리 프리뷰 추가 2개: 스타일 템플릿 카드 1 + 예약 분(00/30) select 1
  * (실서비스 예약 시간 입력 1개를 네이버 예약 발행과 같은
  * 시·분 select 2개로 나눠 제공하면서 분 select가 추가 항목이 됨).
  * 상수 프리뷰 추가 1개: 부가세 토글(실서비스 견적서 렌더러의
  * 부가세 10% 자동 계산을 화면에서 고르게 한 항목).
+ * 송이 프리뷰 추가 1개: 실서비스 탭 버튼 2개를 작업 방식 choice 1개로 제공합니다.
  */
 const LIVE_CONTROL_COUNTS: Record<string, number> = {
   yeri: 16,
+  songi: 13,
   hyunju: 6,
   yunmi: 5,
   sangsu: 14,
@@ -41,6 +43,7 @@ const LIVE_CONTROL_COUNTS: Record<string, number> = {
 
 const PREVIEW_EXTRA_CONTROLS: Record<string, number> = {
   yeri: 2,
+  songi: 1,
   // 현주 프리뷰 추가 1개: 내 블로그 소개 textarea (실서비스는 웹 작업 설정의
   // blog_profile을 쓰지만, 프리뷰는 폼 안에서 완결되게 멘트 위에 둡니다).
   hyunju: 1,
@@ -171,6 +174,8 @@ test("the new-task entry opens an employee picker that reaches every guidance sc
   assert.match(picker, /employee-picker-grid/);
   assert.match(picker, /EmployeePortrait/);
   assert.match(picker, /훔쳐봐 안내로 연결/);
+  assert.match(picker, /employee\.id === "hyunju"/);
+  assert.match(picker, /employee\.id !== "hyunju"/);
   assert.match(picker, /다운로드 안내로 연결/);
 });
 
@@ -197,6 +202,27 @@ test("every form employee exposes a cost estimate that reacts to selections", ()
   const ten = hyunju.estimateCost(hyunjuDefaults);
   const thirty = hyunju.estimateCost({ ...hyunjuDefaults, count: "30" });
   assert.notEqual(ten.headline, thirty.headline);
+
+  const songi = getTaskOptions("songi");
+  assert.ok(songi);
+  const songiDefaults = buildDefaultOptionValues(songi);
+  const youtube = songi.estimateCost(songiDefaults);
+  const instagram = songi.estimateCost({
+    ...songiDefaults,
+    discoveryPlatform: "instagram",
+  });
+  assert.notEqual(youtube.headline, instagram.headline);
+  const oneLink = songi.estimateCost({
+    ...songiDefaults,
+    taskMode: "links",
+    urls: "https://example.com/one",
+  });
+  const twoLinks = songi.estimateCost({
+    ...songiDefaults,
+    taskMode: "links",
+    urls: "https://example.com/one\nhttps://example.com/two",
+  });
+  assert.notEqual(oneLink.headline, twoLinks.headline);
 });
 
 test("yeri style template cards carry toggleable examples", () => {
@@ -328,7 +354,7 @@ test("yeri CTA fields show only for consult-style templates and keep values", ()
 });
 
 test("no visible field label duplicates its section title", () => {
-  for (const employeeId of ["yeri", "hyunju", "yunmi", "sangsu"]) {
+  for (const employeeId of ["yeri", "songi", "hyunju", "yunmi", "sangsu"]) {
     const config = getTaskOptions(employeeId);
     assert.ok(config, employeeId + " 옵션 폼이 없습니다");
     for (const section of config.sections) {
@@ -404,14 +430,56 @@ test("yeri schedule area shows only for reserved publishing with naver 30-minute
   );
 });
 
-test("songi and jieun replaced their forms and semu is fully retired", () => {
-  assert.equal(getTaskOptions("songi"), undefined);
+test("songi is restored, hyunju and jieun hand off, and semu stays retired", () => {
+  const songi = getTaskOptions("songi");
+  assert.ok(songi);
   assert.equal(getTaskOptions("jieun"), undefined);
   assert.equal(getTaskOptions("semu"), undefined);
+
+  assert.deepEqual(
+    songi.sections.map((section) => section.title),
+    ["작업 방식", "키워드로 찾기", "링크로 분석"],
+  );
+  assert.deepEqual(
+    allFields(songi).map((field) => field.id),
+    [
+      "taskMode",
+      "discoveryProject",
+      "discoveryProjectName",
+      "discoveryKeyword",
+      "discoveryPlatform",
+      "discoverySort",
+      "discoveryDays",
+      "discoveryMaxResults",
+      "linkProject",
+      "linkProjectName",
+      "instagramProfile",
+      "contentCategory",
+      "contentTopic",
+      "urls",
+    ],
+  );
+  const defaults = buildDefaultOptionValues(songi);
+  assert.equal(fieldVisible(allFields(songi)[1], defaults), true);
+  assert.equal(fieldVisible(allFields(songi)[2], defaults), false);
+  assert.equal(
+    fieldVisible(allFields(songi)[2], {
+      ...defaults,
+      discoveryProject: "new",
+    }),
+    true,
+  );
+  assert.equal(fieldVisible(allFields(songi)[8], defaults), false);
+  assert.equal(
+    fieldVisible(allFields(songi)[8], { ...defaults, taskMode: "links" }),
+    true,
+  );
 
   const dialog = read("src/components/NewTaskDialog.tsx");
   assert.match(dialog, /훔쳐봐/);
   assert.match(dialog, /hoomcha\.com\/aimax/);
+  assert.match(dialog, /employee\.id === "hyunju"/);
+  assert.match(dialog, /section\.fields\.some\(\(field\) => fieldVisible/);
   assert.match(dialog, /Windows Setup 다운로드/);
   assert.match(dialog, /Apple Silicon Mac 앱 다운로드/);
 

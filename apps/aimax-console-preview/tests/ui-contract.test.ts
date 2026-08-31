@@ -44,7 +44,12 @@ test("preview source contains no runtime network primitive", () => {
  * 대신 어디로 나갈 수 있는지를 이 목록으로 묶어 둡니다.
  */
 test("outbound links stay inside the allowed hosts", () => {
-  const allowedHosts = ["makefamily.kr", "api.aimax.ai.kr", "hoomcha.com"];
+  const allowedHosts = [
+    "makefamily.kr",
+    "api.aimax.ai.kr",
+    "hoomcha.com",
+    "lounge.aimax.ai.kr",
+  ];
   const source = sourceFiles(path.join(appRoot, "src"))
     .map((file) => readFileSync(file, "utf8"))
     .join("\n");
@@ -136,6 +141,8 @@ test("landing keeps one task-to-result-to-team story with accessible motion", ()
   assert.match(landing, /staff-lineup/);
   assert.match(landing, /team-scroll-story/);
   assert.match(landing, /syncEmployeeToScroll/);
+  assert.match(landing, /selectTeamEmployee/);
+  assert.match(landing, /teamApplicationRef\.current\?\.scrollIntoView/);
   assert.match(landing, /window\.addEventListener\("scroll"/);
   assert.match(landing, /window\.requestAnimationFrame/);
   assert.match(landing, /resume-preview-paper/);
@@ -208,20 +215,28 @@ test("public landing carries no local-preview wording", () => {
   assert.doesNotMatch(styles, /landing-preview-bar/);
 });
 
-test("the research demo hands the job to partner 훔쳐봐 with a real outbound link", () => {
+test("songi owns research while the hyunju slot hands references to 훔쳐봐", () => {
   const landing = read("src/pages/LandingPage.tsx");
   const links = read("src/data/purchaseLinks.ts");
 
+  assert.match(
+    landing,
+    /id: "research"[\s\S]{0,180}label: "경쟁사 조사"[\s\S]{0,120}employeeId: "songi"/,
+  );
+  assert.match(landing, /resultTitle: "송이 경쟁사 조사 브리프"/);
+  assert.match(
+    landing,
+    /id: "leads"[\s\S]{0,180}label: "레퍼런스 모으기"[\s\S]{0,120}employeeId: "hyunju"/,
+  );
   assert.match(landing, /훔쳐봐/);
-  assert.match(landing, /제작 \{?activeTask\.partner\.maker|maker: "정보람"/);
-  assert.match(landing, /partner: \{/);
+  assert.match(landing, /maker: "정보람"/);
+  assert.match(landing, /partner: HOOMCHA_PARTNER/);
   assert.match(landing, /href=\{activeTask\.partner\.url\}/);
   assert.match(landing, /target="_blank"/);
   assert.match(landing, /rel="noopener noreferrer"/);
   assert.match(links, /HOOMCHA_URL = "https:\/\/hoomcha\.com\/aimax"/);
   // 시연은 5종 구조를 유지합니다.
   assert.equal((landing.match(/^ {4}id: "/gm) || []).length, 5);
-  assert.doesNotMatch(landing, /경쟁사 조사/);
 });
 
 test("purchase links live in one file and point at real cafe24 products", () => {
@@ -256,6 +271,18 @@ test("landing shows price, company identity, and the makefamily link", () => {
   assert.match(landing, /스토어에서 확인/);
   assert.match(styles, /\.hire-list/);
   assert.match(styles, /\.public-footer__company/);
+});
+
+test("landing offers a contextual learner bridge to the lounge", () => {
+  const landing = read("src/pages/LandingPage.tsx");
+  const links = read("src/data/purchaseLinks.ts");
+  const styles = read("src/styles/landing.css");
+
+  assert.match(links, /LOUNGE_URL = "https:\/\/lounge\.aimax\.ai\.kr"/);
+  assert.match(landing, /href=\{LOUNGE_URL\}/);
+  assert.match(landing, /AI 직원이 아직 낯설다면/);
+  assert.match(landing, /수강생 라운지 보기/);
+  assert.match(styles, /\.trust-strip__learning/);
 });
 
 test("landing copy avoids emoji and the banned metaphor", () => {

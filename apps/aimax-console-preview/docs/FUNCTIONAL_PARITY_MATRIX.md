@@ -86,8 +86,8 @@ Every existing runnable job kind must get an individual parity row before migrat
 | Employee/workflow | Phase 1 | Required parity before switch |
 |---|---|---|
 | 예리 blog writing | DEFERRED | keywords, CTA, model/image model, local Naver save, schedule/draft safety |
-| 현주 neighbor/customer work | DEFERRED | saved messages, local execution, stop/guard behavior |
-| 송이 research | REPLACED | 웹 자료조사 폼 폐기(CEO 지시). 맡기기 창은 파트너 직원 훔쳐봐(hoomcha.com/aimax) 안내 화면으로 대체 |
+| 현주 neighbor/customer work | REPLACED | CEO 정정에 따라 이 프리뷰 슬롯은 파트너 직원 훔쳐봐(hoomcha.com/aimax) 안내 화면으로 대체 |
+| 송이 research | PREVIEWED | 실서비스 키워드 찾기·링크 분석 2가지 방식과 실행 전 비용 안내를 픽스처로 복원. 외부 API 호출 없음 |
 | 윤미 analysis | DEFERRED | model selection, estimate, explicit confirmation, result/history |
 | 상수 web module | DEFERRED | worker contract and result behavior |
 | 세무 invoice draft/issue | RETIRED | 프리뷰에서 세무 직원·업무 픽스처 전면 제거(CEO 지시) |
