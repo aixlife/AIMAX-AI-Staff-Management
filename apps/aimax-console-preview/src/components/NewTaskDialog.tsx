@@ -87,10 +87,10 @@ function PreflightSummary({
 }
 
 /**
- * 현주의 이름·사진·직무 정체성은 그대로 유지하고,
+ * 송이의 이름·사진·직무 정체성은 그대로 유지하고,
  * 업무 시작 버튼만 연결된 외부 서비스로 보냅니다.
  */
-function HyunjuHandoffPanel({
+function SongiHandoffPanel({
   employee,
   onBack,
   onClose,
@@ -349,15 +349,15 @@ export function NewTaskDialog({
     );
   };
 
-  if (employee.id === "hyunju") {
+  if (employee.id === "songi") {
     return (
       <Modal
         title={employee.name + "에게 업무 맡기기"}
-        description="현주 업무는 연결된 외부 서비스에서 이어집니다."
+        description="송이 업무는 연결된 외부 서비스에서 이어집니다."
         onClose={onClose}
         labelId="new-task-title"
       >
-        <HyunjuHandoffPanel employee={employee} onBack={onBack} onClose={onClose} />
+        <SongiHandoffPanel employee={employee} onBack={onBack} onClose={onClose} />
       </Modal>
     );
   }

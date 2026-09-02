@@ -18,7 +18,7 @@ export const LOUNGE_URL = "https://lounge.aimax.ai.kr";
 /** 이미 구매한 회원이 들어가는 운영실 */
 export const CONSOLE_LOGIN_URL = "https://api.aimax.ai.kr/app";
 
-/** 현주의 레퍼런스 업무가 실제로 시작되는 외부 서비스 페이지 */
+/** 송이의 레퍼런스 업무가 실제로 시작되는 외부 서비스 페이지 */
 export const HOOMCHA_URL = "https://hoomcha.com/aimax";
 
 export interface PurchaseLink {
@@ -82,9 +82,9 @@ const purchaseLinks: PurchaseLink[] = [
     url: "https://makefamily.kr/product/detail.html?product_no=243",
     verified: true,
   },
-  // 현주는 모든 화면에서 직원명·프로필을 그대로 보여줍니다. 카페24에는 개별 상품이
-  // 없어 직접 구매 링크를 조회하는 예외 경로만 대표 스토어로 보내고, 레퍼런스 업무의
-  // 실행 CTA는 HOOMCHA_URL을 별도 목적지로 사용합니다.
+  // 현주는 모든 화면에서 직원명·프로필·영업개척 업무를 그대로 보여줍니다.
+  // 카페24에 개별 상품이 없어 구매 링크는 대표 스토어 폴백만 씁니다.
+  // 레퍼런스 업무의 실행 CTA(HOOMCHA_URL)는 송이 소유이며 이 폴백과 무관합니다.
   {
     employeeId: "hyunju",
     productName: "AI 영업사원 현주",

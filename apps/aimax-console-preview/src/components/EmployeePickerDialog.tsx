@@ -16,11 +16,11 @@ interface EmployeePickerDialogProps {
 /**
  * "새 업무" 진입용 직원 선택 모달.
  * 카드 그리드로 아바타·이름·한 줄 설명·상태를 보여주고,
- * 외부 실행 안내(현주)·다운로드 안내(지은)도 같은 그리드에서
+ * 외부 실행 안내(송이)·다운로드 안내(지은)도 같은 그리드에서
  * 각자의 안내 화면으로 연결합니다.
  */
 function handoffNote(employee: Employee): string | null {
-  if (employee.id === "hyunju") return "현주 업무는 외부 서비스로 연결";
+  if (employee.id === "songi") return "송이 업무는 외부 서비스로 연결";
   if (employee.id === "jieun") return "설치형 앱 다운로드 안내로 연결";
   return null;
 }

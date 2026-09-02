@@ -52,7 +52,7 @@ export function HelpPage({ fixture, onPreviewNotice }: HelpPageProps) {
                 id="support-context"
                 name="context"
                 required
-                placeholder="예: 송이 경쟁사 조사 결과를 열던 중"
+                placeholder="예: 송이에게 맡기기로 외부 서비스가 열리지 않을 때"
               />
             </div>
             <div className="field">

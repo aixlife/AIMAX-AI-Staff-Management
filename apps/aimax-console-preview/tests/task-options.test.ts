@@ -173,8 +173,9 @@ test("the new-task entry opens an employee picker that reaches every guidance sc
   const picker = read("src/components/EmployeePickerDialog.tsx");
   assert.match(picker, /employee-picker-grid/);
   assert.match(picker, /EmployeePortrait/);
-  assert.match(picker, /현주 업무는 외부 서비스로 연결/);
-  assert.match(picker, /employee\.id === "hyunju"/);
+  assert.match(picker, /송이 업무는 외부 서비스로 연결/);
+  assert.match(picker, /employee\.id === "songi"/);
+  assert.doesNotMatch(picker, /employee\.id === "hyunju"/);
   assert.doesNotMatch(picker, /pickerEmployee/);
   assert.doesNotMatch(picker, /훔쳐봐/);
   assert.match(picker, /다운로드 안내로 연결/);
@@ -431,7 +432,7 @@ test("yeri schedule area shows only for reserved publishing with naver 30-minute
   );
 });
 
-test("songi is restored, hyunju and jieun hand off, and semu stays retired", () => {
+test("songi hands off externally, hyunju keeps her form, and semu stays retired", () => {
   const songi = getTaskOptions("songi");
   assert.ok(songi);
   assert.equal(getTaskOptions("jieun"), undefined);
@@ -479,8 +480,10 @@ test("songi is restored, hyunju and jieun hand off, and semu stays retired", () 
   const dialog = read("src/components/NewTaskDialog.tsx");
   assert.doesNotMatch(dialog, /훔쳐봐/);
   assert.match(dialog, /href=\{HOOMCHA_URL\}/);
-  assert.match(dialog, /현주 업무는 연결된 외부 서비스/);
-  assert.match(dialog, /employee\.id === "hyunju"/);
+  assert.match(dialog, /송이 업무는 연결된 외부 서비스/);
+  assert.match(dialog, /employee\.id === "songi"/);
+  // 현주는 외부 이동 없이 기존 영업개척 폼으로 들어갑니다.
+  assert.doesNotMatch(dialog, /employee\.id === "hyunju"/);
   assert.match(dialog, /section\.fields\.some\(\(field\) => fieldVisible/);
   assert.match(dialog, /Windows Setup 다운로드/);
   assert.match(dialog, /Apple Silicon Mac 앱 다운로드/);

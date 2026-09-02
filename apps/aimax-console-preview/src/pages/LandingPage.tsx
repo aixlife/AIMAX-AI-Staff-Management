@@ -49,27 +49,28 @@ interface TaskChoiceWithEmployee extends TaskChoice {
   employee: Employee;
 }
 
-const HYUNJU_ID = "hyunju";
+const SONGI_ID = "songi";
 
-const HYUNJU_EXTERNAL_DESTINATION: ExternalTaskDestination = {
+const SONGI_EXTERNAL_DESTINATION: ExternalTaskDestination = {
   url: HOOMCHA_URL,
-  ctaLabel: "현주에게 맡기기",
-  note: "현주 업무는 연결된 외부 서비스에서 이어집니다.",
+  ctaLabel: "송이에게 맡기기",
+  note: "송이 업무는 연결된 외부 서비스에서 이어집니다.",
 };
 
 const taskChoices: TaskChoice[] = [
   {
     id: "research",
-    label: "경쟁사 조사",
+    label: "레퍼런스 모으기",
     employeeId: "songi",
-    request: "경쟁사 자료를 조사해서 비교해줘",
-    resultTitle: "송이 경쟁사 조사 브리프",
+    request: "요즘 잘 되는 콘텐츠를 모아줘",
+    resultTitle: "송이가 모아주는 레퍼런스",
     resultItems: [
-      "공개 자료와 출처 링크 정리",
-      "경쟁사별 강점과 빈틈 비교",
-      "다음 제작 직원에게 넘길 조사 브리프",
+      "유튜브·인스타·틱톡·스레드·X에서 자동 수집",
+      "AI가 요약하고 주제별로 정리",
+      "마음에 든 자료만 골라서 보관",
     ],
-    ownerDecision: "어느 빈틈부터 공략할지만 정하시면 됩니다.",
+    ownerDecision: "어떤 자료를 따라 해볼지만 고르시면 됩니다.",
+    externalDestination: SONGI_EXTERNAL_DESTINATION,
   },
   {
     id: "blog",
@@ -91,17 +92,12 @@ const taskChoices: TaskChoice[] = [
   },
   {
     id: "leads",
-    label: "레퍼런스 모으기",
+    label: "고객 찾기",
     employeeId: "hyunju",
-    request: "요즘 잘 되는 콘텐츠를 모아줘",
-    resultTitle: "현주가 모아주는 레퍼런스",
-    resultItems: [
-      "유튜브·인스타·틱톡·스레드·X에서 자동 수집",
-      "AI가 요약하고 주제별로 정리",
-      "마음에 든 자료만 골라서 보관",
-    ],
-    ownerDecision: "어떤 자료를 따라 해볼지만 고르시면 됩니다.",
-    externalDestination: HYUNJU_EXTERNAL_DESTINATION,
+    request: "먼저 연락할 고객 후보를 찾아줘",
+    resultTitle: "먼저 연락할 고객 목록",
+    resultItems: ["우선 볼 고객 후보", "그 후보를 고른 이유", "어디로 어떻게 연락할지"],
+    ownerDecision: "누구에게 먼저 연락할지만 정하시면 됩니다.",
   },
   {
     id: "office",
@@ -169,8 +165,8 @@ export function LandingPage({
     publicEmployees.find((employee) => employee.id === "yeri") ||
     publicEmployees[0];
   const selectedTeamDestination =
-    selectedTeamEmployee?.id === HYUNJU_ID
-      ? HYUNJU_EXTERNAL_DESTINATION
+    selectedTeamEmployee?.id === SONGI_ID
+      ? SONGI_EXTERNAL_DESTINATION
       : undefined;
 
   useEffect(() => {
@@ -565,7 +561,7 @@ export function LandingPage({
                     <span>떠오릅니다.</span>
                   </h2>
                 </div>
-                <p>자료조사는 송이, 레퍼런스 수집은 현주, 글은 예리처럼 이름과 역할을 함께 기억합니다. 우리 가게에 맞는 직원인지 소개서를 읽어보고 확인해 보세요.</p>
+                <p>레퍼런스 수집은 송이, 고객 찾기는 현주, 글은 예리처럼 이름과 역할을 함께 기억합니다. 우리 가게에 맞는 직원인지 소개서를 읽어보고 확인해 보세요.</p>
               </header>
 
               <div className="staff-lineup motion-reveal" aria-label="스크롤에 따라 소개되는 AIMAX AI 직원">
@@ -628,7 +624,7 @@ export function LandingPage({
                   )}
                   <small>
                     {selectedTeamDestination
-                      ? "현주의 업무 시작은 연결된 외부 서비스에서 이어집니다."
+                      ? "송이의 업무 시작은 연결된 외부 서비스에서 이어집니다."
                       : "이름과 사진은 역할을 친숙하게 이해하도록 만든 가상의 AI 직원 설정입니다."}
                   </small>
                 </div>

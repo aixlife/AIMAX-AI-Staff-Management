@@ -215,25 +215,33 @@ test("public landing carries no local-preview wording", () => {
   assert.doesNotMatch(styles, /landing-preview-bar/);
 });
 
-test("songi owns research while hyunju stays visible and links to the external service", () => {
+test("songi links to the external service while hyunju keeps her own job", () => {
   const landing = read("src/pages/LandingPage.tsx");
   const links = read("src/data/purchaseLinks.ts");
 
+  // 송이는 자기 이름·프로필 그대로, 레퍼런스 업무만 외부 서비스로 이동합니다.
   assert.match(
     landing,
-    /id: "research"[\s\S]{0,180}label: "경쟁사 조사"[\s\S]{0,120}employeeId: "songi"/,
+    /id: "research"[\s\S]{0,180}label: "레퍼런스 모으기"[\s\S]{0,120}employeeId: "songi"/,
   );
-  assert.match(landing, /resultTitle: "송이 경쟁사 조사 브리프"/);
+  assert.match(landing, /resultTitle: "송이가 모아주는 레퍼런스"/);
+  assert.match(landing, /ctaLabel: "송이에게 맡기기"/);
+  assert.match(landing, /externalDestination: SONGI_EXTERNAL_DESTINATION/);
+  // 현주는 외부 이동 없이 영업개척(고객 찾기) 업무를 유지합니다.
   assert.match(
     landing,
-    /id: "leads"[\s\S]{0,180}label: "레퍼런스 모으기"[\s\S]{0,120}employeeId: "hyunju"/,
+    /id: "leads"[\s\S]{0,180}label: "고객 찾기"[\s\S]{0,120}employeeId: "hyunju"/,
   );
-  assert.match(landing, /resultTitle: "현주가 모아주는 레퍼런스"/);
-  assert.match(landing, /ctaLabel: "현주에게 맡기기"/);
-  assert.match(landing, /externalDestination: HYUNJU_EXTERNAL_DESTINATION/);
+  assert.match(landing, /resultTitle: "먼저 연락할 고객 목록"/);
+  assert.doesNotMatch(landing, /HYUNJU_EXTERNAL_DESTINATION/);
+  assert.doesNotMatch(landing, /현주에게 맡기기/);
   assert.match(landing, /href=\{activeTask\.externalDestination\.url\}/);
-  assert.match(landing, /자료조사는 송이, 레퍼런스 수집은 현주/);
-  assert.doesNotMatch(landing, /훔쳐봐/);
+  assert.match(landing, /레퍼런스 수집은 송이, 고객 찾기는 현주/);
+  // 별도 훔쳐봐 직원명은 사용자 UI 소스 어디에도 없어야 합니다.
+  const allSource = sourceFiles(path.join(appRoot, "src"))
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
+  assert.doesNotMatch(allSource, /훔쳐봐/);
   assert.match(landing, /target="_blank"/);
   assert.match(landing, /rel="noopener noreferrer"/);
   assert.match(links, /HOOMCHA_URL = "https:\/\/hoomcha\.com\/aimax"/);
