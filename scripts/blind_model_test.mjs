@@ -928,8 +928,14 @@ async function runLive(rows, outDir) {
   // 성공분을 다시 과금하지 않게 한다. 재개 여부와 무관하게 "실패 시 즉시 멈춤"은 유지한다.
   const partialDir = path.join(outDir, "articles-partial");
   fs.mkdirSync(partialDir, { recursive: true });
+  // 2026-09-02 실측: gemini-3.7-flash 만 지속 503(과부하). 과부하 모델을 맨 뒤로 보내
+  // 실패해도 다른 모델 분량은 그 실행에서 전부 끝나게 한다. 생성 순서는 평가에 영향 없다 —
+  // 블라인드 시트 순서는 키워드 ID+시드로 따로 섞는다.
+  const orderedRows = [...rows].sort(
+    (a, b) => Number(a.model_id === "gemini-3.7-flash") - Number(b.model_id === "gemini-3.7-flash"),
+  );
   const articles = [];
-  for (const row of rows) {
+  for (const row of orderedRows) {
     const partialPath = path.join(partialDir, `${row.run_id}.json`);
     if (fs.existsSync(partialPath)) {
       articles.push(JSON.parse(fs.readFileSync(partialPath, "utf8")));

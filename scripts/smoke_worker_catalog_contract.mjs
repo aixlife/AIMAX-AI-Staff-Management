@@ -98,12 +98,18 @@ const productCatalog = __catalogTest.adminProductCatalog();
 const publicWorkers = Object.values(workers).map(__catalogTest.publicWorker);
 const publicJobKinds = Object.entries(jobKinds).map(([kind, config]) => __catalogTest.publicJobKind(kind, config));
 
-assert(publicWorkers.some((worker) => worker.staff_code === "songi" && worker.job_kind === "songi_research"), "songi_worker_job_kind_missing");
-assert(publicJobKinds.some((jobKind) => jobKind.kind === "songi_research" && jobKind.api_mode === "research_api" && jobKind.queue === false), "songi_job_kind_contract_missing");
+// 2026-09-02 CEO 최종 정정: 송이는 이름·프로필 유지 + 파트너 외부 연결(잡 없음), 별도 훔쳐봐 직원 금지.
+const songiWorker = publicWorkers.find((worker) => worker.staff_code === "songi");
+assert(songiWorker?.name === "송이", "songi_worker_name_missing");
+assert(songiWorker?.execution === "partner_external" && !songiWorker.job_kind, "songi_partner_execution_missing");
+assert(songiWorker?.external_url === "https://hoomcha.com/aimax" || songiWorker?.externalUrl === "https://hoomcha.com/aimax", "songi_external_url_missing");
+assert(songiWorker?.profile_image === "/assets/avatar_songi.jpg", "songi_profile_image_missing");
+assert(!publicWorkers.some((worker) => worker.name === "훔쳐봐" || worker.staff_code === "hoomcha"), "hoomcha_worker_should_be_removed");
+assert(!publicJobKinds.some((jobKind) => jobKind.kind === "songi_research"), "songi_research_job_kind_should_be_removed");
 assert(publicJobKinds.some((jobKind) => jobKind.kind === "yunmi_script" && jobKind.execution === "web_module"), "yunmi_job_kind_contract_missing");
 assert(publicJobKinds.some((jobKind) => jobKind.kind === "sangsu_quote" && jobKind.api_mode === "client_only" && jobKind.queue === false), "sangsu_job_kind_contract_missing");
 assert(publicJobKinds.some((jobKind) => jobKind.kind === "semu_tax_invoice" && jobKind.api_mode === "tax_api" && jobKind.queue === false), "semu_job_kind_contract_missing");
-assert(productCatalog.some((product) => product.product === "songi" && product.job_kinds.includes("songi_research")), "songi_product_job_kind_missing");
+assert(productCatalog.some((product) => product.product === "songi" && (product.job_kinds || []).length === 0), "songi_product_should_have_no_job_kinds");
 assert(productCatalog.some((product) => product.product === "yunmi" && product.price_won === 9900 && product.job_kinds.includes("yunmi_script")), "yunmi_product_catalog_missing");
 assert(productCatalog.some((product) => product.product === "jieun" && product.price_won === 5500), "jieun_product_catalog_missing");
 assert(productCatalog.some((product) => product.product === "nakyung" && product.price_won === 9900), "nakyung_product_catalog_missing");

@@ -464,6 +464,10 @@ const WORKERS = {
       },
     ],
   },
+  // 2026-09-02 CEO 최종 정정: 별도 '훔쳐봐' 직원 카드를 없애고, 송이가 자기 이름·프로필
+  // 그대로 레퍼런스 수집 외부 서비스(Hoomcha)로 연결하는 창구가 된다. 자료조사 웹 모듈은
+  // 실측상 이용자가 없어(사용자 336명 중 송이 보유 0명, 전체 잡 1,029건 중 songi_research 0건)
+  // 카드에서 내리고, 서버 쪽 research API·JOB_KINDS 정의는 그대로 둔다.
   songi_data_research: {
     code: "songi_data_research",
     staffCode: "songi",
@@ -472,17 +476,23 @@ const WORKERS = {
     role: "자료조사원",
     category: "research",
     product: "songi",
-    jobKind: "songi_research",
-    execution: "web_module",
-    type: "web_module",
+    jobKind: "",
+    execution: PARTNER_EXECUTION,
+    type: PARTNER_EXECUTION,
     status: "available",
+    accessPolicy: "partner",
     requiredSettings: [],
-    moduleKey: "research",
     profileImage: "/assets/avatar_songi.jpg",
     avatarImage: "/assets/avatar_songi.jpg",
-    repoUrl: "https://github.com/makefamily/data-research",
-    shortDescription: "URL과 메모를 읽고 근거, 태그, 핵심 포인트를 정리해 다음 제작 직원이 바로 쓰는 브리프로 넘깁니다.",
-    capabilities: ["자료조사", "태그 정리", "브리프 생성"],
+    externalUrl: "https://hoomcha.com/aimax",
+    ctaLabel: "송이에게 맡기기",
+    partner: {
+      name: "정보람",
+      maker: "정보람",
+      supportNote: "가입, 결제, 고객 문의, 환불, 서비스 운영은 제작사가 담당합니다.",
+    },
+    shortDescription: "유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가 요약·분류해줍니다.",
+    capabilities: ["레퍼런스 수집", "AI 요약", "채널 5종"],
   },
   jieun_office_support: {
     code: "jieun_office_support",
@@ -671,34 +681,6 @@ const WORKERS = {
       },
     ],
   },
-  boram_hoomcha: {
-    code: "boram_hoomcha",
-    staffCode: "hoomcha",
-    name: "훔쳐봐",
-    label: "훔쳐봐",
-    role: "레퍼런스 수집 직원",
-    category: "content",
-    product: "hoomcha",
-    jobKind: "",
-    execution: PARTNER_EXECUTION,
-    type: PARTNER_EXECUTION,
-    status: "available",
-    accessPolicy: "partner",
-    requiredSettings: [],
-    // 동물 캐릭터 통일안(7/8 예람 제안 → 동규 승인 → 7/24 상철 확인)의 1호.
-    // 나머지 직원 아바타 교체 시 이 이미지의 규격을 기준으로 맞춘다.
-    profileImage: "/assets/avatar_hoomcha.png",
-    avatarImage: "/assets/avatar_hoomcha.png",
-    externalUrl: "https://hoomcha.com/aimax",
-    ctaLabel: "훔쳐봐 체험 시작",
-    partner: {
-      name: "훔쳐봐",
-      maker: "정보람",
-      supportNote: "가입, 결제, 고객 문의, 환불, 서비스 운영은 제작사가 담당합니다.",
-    },
-    shortDescription: "유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가 요약·분류해줍니다.",
-    capabilities: ["레퍼런스 수집", "AI 요약", "채널 5종"],
-  },
 };
 const JOB_KINDS = {
   yeri_write: {
@@ -717,13 +699,8 @@ const JOB_KINDS = {
     workerCode: "yunmi_script_writer",
     apiMode: "job_api",
   },
-  songi_research: {
-    label: "송이 자료조사",
-    requiredProduct: "songi",
-    workerCode: "songi_data_research",
-    apiMode: "research_api",
-    queue: false,
-  },
+  // songi_research 잡 정의는 2026-09-02 정정으로 제거 — 송이는 파트너 외부 연결이라
+  // 콘솔 잡을 만들지 않는다. 리서치 API 코드는 남아 있지만 잡 종류 없이는 생성되지 않는다.
   semu_tax_invoice: {
     label: "세무 직원 전자세금계산서",
     requiredProduct: "semu",
@@ -4255,7 +4232,8 @@ function adminProductCatalog() {
       label: "송이",
       price_won: 3300,
       products: productList("songi"),
-      job_kinds: ["songi_research"],
+      // 2026-09-02 정정: 송이 업무 시작은 외부 서비스 연결이라 콘솔 잡이 없다.
+      job_kinds: [],
       download_product: "",
     },
     {
