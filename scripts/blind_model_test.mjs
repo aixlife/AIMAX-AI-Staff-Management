@@ -935,6 +935,7 @@ async function runLive(rows, outDir) {
     (a, b) => Number(a.model_id === "gemini-3.7-flash") - Number(b.model_id === "gemini-3.7-flash"),
   );
   const articles = [];
+  const skipped = [];
   for (const row of orderedRows) {
     const partialPath = path.join(partialDir, `${row.run_id}.json`);
     if (fs.existsSync(partialPath)) {
@@ -954,9 +955,17 @@ async function runLive(rows, outDir) {
     const response = await fetch(request.url, { method: "POST", headers, body: JSON.stringify(request.body) });
     const json = await response.json().catch(() => null);
     if (!response.ok) {
-      // 재시도하지 않는다. 이미 과금됐을 수 있으므로 응답을 남기고 멈춘다.
+      // 재시도하지 않는다. 이미 과금됐을 수 있으므로 응답을 남긴다.
       const failPath = path.join(outDir, `live_fail_${row.run_id}.json`);
       fs.writeFileSync(failPath, JSON.stringify({ status: response.status, json }, null, 2), "utf8");
+      // 503(과부하)은 과금 없는 실패이므로 그 편만 건너뛰고 나머지 수집을 계속한다.
+      // (2026-09-02 실측: k07 한 건만 1시간 내 10연속 503 — 전체를 멈추면 원인 분리가 안 된다.)
+      // 그 밖의 오류는 과금·계약 문제일 수 있으니 종전대로 즉시 멈춘다.
+      if (response.status === 503) {
+        skipped.push(row.run_id);
+        console.error(`실패 (HTTP 503) — 이 편만 건너뜀. 응답 저장: ${failPath}`);
+        continue;
+      }
       console.error(`실패 (HTTP ${response.status}). 응답 저장: ${failPath}`);
       process.exit(1);
     }
@@ -987,6 +996,13 @@ async function runLive(rows, outDir) {
     fs.writeFileSync(partialPath, JSON.stringify(article, null, 2), "utf8");
     articles.push(article);
     console.log("완료");
+  }
+  if (skipped.length) {
+    // 60편이 다 모이기 전에는 articles.json을 확정하지 않는다 — 불완전 시트로
+    // 평가가 시작되는 것을 막는다. 재실행하면 저장분은 재과금 없이 이어진다.
+    console.error(`\n미완: 503으로 건너뛴 편 ${skipped.length}건 — ${skipped.join(", ")}`);
+    console.error("잠시 뒤 같은 명령으로 재실행하면 저장분은 과금 없이 재사용됩니다.");
+    process.exit(1);
   }
   const articlesPath = path.join(outDir, "articles.json");
   fs.writeFileSync(articlesPath, JSON.stringify(articles, null, 2), "utf8");
