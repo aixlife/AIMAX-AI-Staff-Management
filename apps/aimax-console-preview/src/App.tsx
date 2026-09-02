@@ -17,6 +17,7 @@ import { WorkPage } from "./pages/WorkPage";
 import type {
   AppRoute,
   Employee,
+  FixtureSet,
   PreviewScenario,
   Task,
 } from "./types";
@@ -30,6 +31,15 @@ function nextPreviewTaskId(tasks: Task[]): string {
   return "preview-task-" + String(tasks.length + 1).padStart(3, "0");
 }
 
+/** 라이브 운영실 베타 모드 정보 — 없으면 기존 로컬 프리뷰 그대로 동작합니다. */
+export interface AppLiveMode {
+  data: FixtureSet;
+  userEmail: string;
+  userName?: string;
+  onLogout: () => void;
+  onRefresh: () => void;
+}
+
 interface AppProps {
   /**
    * 첫 렌더에 보여줄 화면입니다.
@@ -37,13 +47,19 @@ interface AppProps {
    * 브라우저에서는 main.tsx가 주소창 해시로 계산한 값을 넘겨 하이드레이션을 맞춥니다.
    */
   initialView?: AppView;
+  live?: AppLiveMode;
 }
 
-export function App({ initialView = "landing" }: AppProps = {}) {
+export function App({ initialView = "landing", live }: AppProps = {}) {
   const [view, setView] = useState<AppView>(initialView);
-  const route: AppRoute = view === "landing" ? "home" : view;
+  // 라이브 베타에는 공개 랜딩이 없으므로 랜딩 해시는 홈으로 취급합니다.
+  const effectiveView: AppView = live && view === "landing" ? "home" : view;
+  const route: AppRoute = effectiveView === "landing" ? "home" : effectiveView;
   const [scenario, setScenario] = useState<PreviewScenario>("normal");
-  const fixture = useMemo(() => buildFixture(scenario), [scenario]);
+  const fixture = useMemo(
+    () => (live ? live.data : buildFixture(scenario)),
+    [live, scenario],
+  );
   const landingEmployees = useMemo(() => buildFixture("normal").employees, []);
   const [tasks, setTasks] = useState<Task[]>(fixture.tasks);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | undefined>(
@@ -173,6 +189,15 @@ export function App({ initialView = "landing" }: AppProps = {}) {
     title: string,
     optionSummary?: string,
   ) => {
+    if (live) {
+      // Phase 1 베타는 조회 전용 — 실행 흐름은 Phase 2에서 실 API로 연결합니다.
+      setToast({
+        id: Date.now(),
+        message: "베타는 조회 전용입니다. 업무 실행은 기존 운영실에서 해주세요.",
+      });
+      closeNewTask();
+      return;
+    }
     const taskId = nextPreviewTaskId(tasks);
     const task: Task = {
       id: taskId,
@@ -349,7 +374,7 @@ export function App({ initialView = "landing" }: AppProps = {}) {
     );
   };
 
-  if (view === "landing") {
+  if (effectiveView === "landing") {
     return (
       <>
         <LandingPage
@@ -379,6 +404,16 @@ export function App({ initialView = "landing" }: AppProps = {}) {
         onNavigate={navigate}
         onOpenLanding={openLanding}
         onNewTask={openEmployeePicker}
+        live={
+          live
+            ? {
+                userEmail: live.userEmail,
+                userName: live.userName,
+                onLogout: live.onLogout,
+                onRefresh: live.onRefresh,
+              }
+            : undefined
+        }
       >
         {renderPage()}
       </AppShell>
@@ -397,7 +432,7 @@ export function App({ initialView = "landing" }: AppProps = {}) {
           onClose={closeNewTask}
           onBack={taskFromPicker ? backToEmployeePicker : undefined}
           onCreate={createPreviewTask}
-          onQuoteCreate={createQuoteDoneTask}
+          onQuoteCreate={live ? undefined : createQuoteDoneTask}
           onOpenTask={openTask}
         />
       ) : null}

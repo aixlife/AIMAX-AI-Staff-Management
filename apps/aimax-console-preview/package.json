@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:live": "VITE_CONSOLE_MODE=live vite --host 127.0.0.1",
     "build": "tsc --noEmit && npm run build:client && npm run build:ssr && npm run prerender",
+    "build:live": "tsc --noEmit && VITE_CONSOLE_MODE=live vite build",
     "build:client": "vite build",
     "build:ssr": "vite build --ssr src/entry-server.tsx --outDir dist-ssr --emptyOutDir",
     "prerender": "node scripts/prerender.mjs",

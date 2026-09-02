@@ -304,7 +304,8 @@ test("sangsu quote finishes in place and lands silently as a done task", () => {
   assert.doesNotMatch(quoteBlock[0], /navigate\(/);
   assert.doesNotMatch(quoteBlock[0], /setHighlightTaskId/);
   assert.doesNotMatch(quoteBlock[0], /setToast/);
-  assert.match(app, /onQuoteCreate=\{createQuoteDoneTask\}/);
+  // 라이브 베타(조회 전용)에서는 즉시 견적 적재를 끄고, 프리뷰에서만 연결합니다.
+  assert.match(app, /onQuoteCreate=\{live \? undefined : createQuoteDoneTask\}/);
   assert.match(app, /onOpenTask=\{openTask\}/);
 
   const dialog = read("src/components/NewTaskDialog.tsx");
