@@ -923,8 +923,19 @@ async function runLive(rows, outDir) {
   }
   for (const provider of providers) console.log(`키 확인: ${provider} <- ${keys[provider].name} (값은 출력하지 않습니다)`);
 
+  // 편당 결과를 그 자리에서 파일로 남기고, 재실행 시 이미 있는 편은 호출 없이 건너뛴다.
+  // 유료 플로우 idempotency 규칙 — 중간 실패(2026-09-02 gemini-3.7 503) 뒤 재실행이
+  // 성공분을 다시 과금하지 않게 한다. 재개 여부와 무관하게 "실패 시 즉시 멈춤"은 유지한다.
+  const partialDir = path.join(outDir, "articles-partial");
+  fs.mkdirSync(partialDir, { recursive: true });
   const articles = [];
   for (const row of rows) {
+    const partialPath = path.join(partialDir, `${row.run_id}.json`);
+    if (fs.existsSync(partialPath)) {
+      articles.push(JSON.parse(fs.readFileSync(partialPath, "utf8")));
+      console.log(`생성 ${row.run_id} ... 저장분 재사용 (호출·과금 없음)`);
+      continue;
+    }
     const request = row.request;
     const headers = { "content-type": "application/json" };
     if (row.provider === "claude") {
@@ -955,7 +966,7 @@ async function runLive(rows, outDir) {
       console.error(`실패: ${row.run_id} 응답에 content_markdown 이 없습니다.`);
       process.exit(1);
     }
-    articles.push({
+    const article = {
       run_id: row.run_id,
       keyword_id: row.keyword_id,
       keyword: row.keyword,
@@ -965,7 +976,10 @@ async function runLive(rows, outDir) {
       title: String(parsed.title || ""),
       content_markdown: String(parsed.content_markdown || ""),
       usage: json?.usageMetadata || json?.usage || null,
-    });
+    };
+    // 과금된 결과는 즉시 디스크에 — 이후 어떤 실패에도 이 편은 재과금 없이 재사용된다.
+    fs.writeFileSync(partialPath, JSON.stringify(article, null, 2), "utf8");
+    articles.push(article);
     console.log("완료");
   }
   const articlesPath = path.join(outDir, "articles.json");
