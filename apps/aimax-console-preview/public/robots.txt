@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# 운영실 화면은 해시 주소라 크롤러가 따라가지 않습니다.
+Sitemap: https://aimax.ai.kr/sitemap.xml
