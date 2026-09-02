@@ -5,6 +5,14 @@ import { routes } from "../lib/routes";
 import type { AppRoute, PreviewScenario } from "../types";
 import { Icon } from "./Icon";
 
+/** 라이브 운영실 베타에서만 채워지는 셸 정보 (프리뷰에서는 undefined) */
+export interface AppShellLiveInfo {
+  userEmail: string;
+  userName?: string;
+  onLogout: () => void;
+  onRefresh: () => void;
+}
+
 interface AppShellProps {
   activeRoute: AppRoute;
   pageTitle: string;
@@ -14,6 +22,7 @@ interface AppShellProps {
   onNavigate: (route: AppRoute) => void;
   onOpenLanding: () => void;
   onNewTask: () => void;
+  live?: AppShellLiveInfo;
   children: ReactNode;
 }
 
@@ -26,6 +35,7 @@ export function AppShell({
   onNavigate,
   onOpenLanding,
   onNewTask,
+  live,
   children,
 }: AppShellProps) {
   return (
@@ -64,44 +74,62 @@ export function AppShell({
 
         <div className="sidebar-account">
           <div className="avatar avatar--account" aria-hidden="true">
-            민
+            {(live?.userName || live?.userEmail || "민").slice(0, 1)}
           </div>
           <div>
-            <strong>민수님</strong>
-            <span>로컬 검토자</span>
+            <strong>{live ? live.userName || live.userEmail : "민수님"}</strong>
+            <span>{live ? live.userEmail : "로컬 검토자"}</span>
           </div>
+          {live ? (
+            <button className="sidebar-account__logout" type="button" onClick={live.onLogout}>
+              로그아웃
+            </button>
+          ) : null}
         </div>
       </aside>
 
       <div className="app-main">
-        <section className="preview-banner" aria-label="로컬 프리뷰 안내">
-          <div className="preview-banner__message">
-            <span className="preview-banner__flag">LOCAL PREVIEW</span>
-            <span>로그인·서버·API 연결 없음 · 모든 변경은 브라우저 메모리에만 유지</span>
-          </div>
-          <div className="preview-banner__controls">
-            <button type="button" onClick={onOpenLanding}>랜딩으로</button>
-            <label className="scenario-control">
-              <span>화면 상태</span>
-              <select
-                value={scenario}
-                onChange={(event) =>
-                  onScenarioChange(event.target.value as PreviewScenario)
-                }
-              >
-                {scenarioOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        </section>
+        {live ? (
+          <section className="preview-banner preview-banner--live" aria-label="베타 운영실 안내">
+            <div className="preview-banner__message">
+              <span className="preview-banner__flag">BETA</span>
+              <span>새 운영실 미리보기 · 조회 전용 · 업무 실행은 기존 운영실에서</span>
+            </div>
+            <div className="preview-banner__controls">
+              <button type="button" onClick={live.onRefresh}>새로고침</button>
+              <a className="preview-banner__legacy-link" href="/app">기존 운영실</a>
+            </div>
+          </section>
+        ) : (
+          <section className="preview-banner" aria-label="로컬 프리뷰 안내">
+            <div className="preview-banner__message">
+              <span className="preview-banner__flag">LOCAL PREVIEW</span>
+              <span>로그인·서버·API 연결 없음 · 모든 변경은 브라우저 메모리에만 유지</span>
+            </div>
+            <div className="preview-banner__controls">
+              <button type="button" onClick={onOpenLanding}>랜딩으로</button>
+              <label className="scenario-control">
+                <span>화면 상태</span>
+                <select
+                  value={scenario}
+                  onChange={(event) =>
+                    onScenarioChange(event.target.value as PreviewScenario)
+                  }
+                >
+                  {scenarioOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
+        )}
 
         <header className="page-header">
           <div>
-            <p className="page-kicker">AIMAX CONSOLE · REBUILD</p>
+            <p className="page-kicker">{live ? "AIMAX CONSOLE · BETA" : "AIMAX CONSOLE · REBUILD"}</p>
             <h1>{pageTitle}</h1>
             <p>{pageDescription}</p>
           </div>

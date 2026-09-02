@@ -28,15 +28,42 @@ test("preview boundary is always visible and explicitly login-free", () => {
   assert.match(shell, /aria-label="로컬 프리뷰 안내"/);
 });
 
-test("preview source contains no runtime network primitive", () => {
-  const source = sourceFiles(path.join(appRoot, "src"))
-    .map((file) => readFileSync(file, "utf8"))
-    .join("\n");
+/**
+ * 네트워크 계약 (2026-09-02 실전환 Phase 1 개정):
+ * - fetch는 라이브 운영실 데이터 계층인 src/api/client.ts 한 곳에서만 허용한다.
+ * - 호출 가능한 엔드포인트는 client.ts의 ALLOWED_API_PATHS 화이트리스트뿐이고,
+ *   api/ 밖의 화면 코드는 여전히 네트워크 원시 호출을 가질 수 없다.
+ * - 프리뷰(랜딩) 모드는 이 계층을 호출하지 않으므로 종전의 "네트워크 0" 성질을 유지한다.
+ */
+test("network calls stay inside the api client with a whitelisted endpoint list", () => {
+  const files = sourceFiles(path.join(appRoot, "src"));
+  const clientPath = path.join(appRoot, "src/api/client.ts");
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    if (path.resolve(file) !== path.resolve(clientPath)) {
+      assert.doesNotMatch(source, /\bfetch\s*\(/, `fetch는 api/client.ts에서만: ${file}`);
+    }
+    assert.doesNotMatch(source, /\bXMLHttpRequest\b/, file);
+    assert.doesNotMatch(source, /\bWebSocket\b/, file);
+    assert.doesNotMatch(source, /\bEventSource\b/, file);
+  }
 
-  assert.doesNotMatch(source, /\bfetch\s*\(/);
-  assert.doesNotMatch(source, /\bXMLHttpRequest\b/);
-  assert.doesNotMatch(source, /\bWebSocket\b/);
-  assert.doesNotMatch(source, /\bEventSource\b/);
+  const client = readFileSync(clientPath, "utf8");
+  assert.match(client, /ALLOWED_API_PATHS = \[/);
+  // Phase 1 허용 목록: 인증·직원 카탈로그·잡 조회뿐. 늘릴 때는 여기와 client.ts를 함께 고친다.
+  for (const allowed of [
+    '"/api/auth/login"',
+    '"/api/auth/me"',
+    '"/api/auth/logout"',
+    '"/api/workers"',
+    '"/api/jobs"',
+  ]) {
+    assert.ok(client.includes(allowed), `허용 목록 누락: ${allowed}`);
+  }
+  const listed = (client.match(/"\/api\/[a-z0-9/_-]+"/g) || []).filter(
+    (value, index, all) => all.indexOf(value) === index,
+  );
+  assert.equal(listed.length, 5, `허용 엔드포인트가 5개를 넘었습니다: ${listed.join(", ")}`);
 });
 
 /**
