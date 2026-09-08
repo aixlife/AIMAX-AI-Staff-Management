@@ -206,8 +206,8 @@ if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
     "$REMOTE_APP_DIR/static/assets/avatar_jieun.jpg" \
     "avatar jieun"
   add_file \
-    "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_jiwon.png" \
-    "$REMOTE_APP_DIR/static/assets/avatar_jiwon.png" \
+    "$ROOT_DIR/oracle/aimax-reports-api/static/assets/avatar_jiwon.jpg" \
+    "$REMOTE_APP_DIR/static/assets/avatar_jiwon.jpg" \
     "avatar jiwon"
   add_file \
     "$ROOT_DIR/oracle/aimax-reports-api/static/assets/aimax-brain-preview.mp4" \

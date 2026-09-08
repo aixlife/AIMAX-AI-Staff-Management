@@ -512,8 +512,8 @@ const WORKERS = {
     status: "available",
     accessPolicy: "partner",
     requiredSettings: [],
-    profileImage: "/assets/avatar_jiwon.png",
-    avatarImage: "/assets/avatar_jiwon.png",
+    profileImage: "/assets/avatar_jiwon.jpg",
+    avatarImage: "/assets/avatar_jiwon.jpg",
     externalUrl: "https://ddakfit.bccconsulting.kr/aimax",
     ctaLabel: "오지원에게 맡기기",
     partner: {
