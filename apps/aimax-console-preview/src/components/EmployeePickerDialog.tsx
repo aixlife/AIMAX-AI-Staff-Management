@@ -2,7 +2,7 @@ import type { Employee } from "../types";
 import { EmployeePortrait } from "./EmployeePortrait";
 import { Modal } from "./Modal";
 import {
-  employeeStatusLabel,
+  employeeDisplayStatusLabel,
   employeeStatusTone,
   StatusBadge,
 } from "./StatusBadge";
@@ -22,6 +22,7 @@ interface EmployeePickerDialogProps {
 function handoffNote(employee: Employee): string | null {
   if (employee.id === "songi") return "송이 업무는 외부 서비스로 연결";
   if (employee.id === "jieun") return "설치형 앱 다운로드 안내로 연결";
+  if (employee.execution === "external" && employee.externalUrl) return employee.name + " 업무는 외부 서비스로 연결";
   return null;
 }
 
@@ -62,7 +63,7 @@ export function EmployeePickerDialog({
                 </span>
                 <span className="employee-card__meta">
                   <StatusBadge
-                    label={employeeStatusLabel(employee.status)}
+                    label={employeeDisplayStatusLabel(employee)}
                     tone={employeeStatusTone(employee.status)}
                     dot
                   />

@@ -92,6 +92,8 @@ const employees: Employee[] = [
     summary: "사업 이야기만 들려주면 지금 신청할 수 있는 정부지원사업을 찾고, 신청 가능 여부와 준비할 자료를 쉬운 말로 확인해줍니다.",
     execution: "external",
     status: "ready",
+    externalUrl: "https://ddakfit.bccconsulting.kr/aimax",
+    ctaLabel: "지원에게 맡기기",
     capabilities: ["지원사업 찾기", "신청 자격 확인", "사업계획서 초안"],
     requiredConnections: [],
     inputSummary: "사업 시작 시기, 지역, 지금 하는 일, 필요한 도움",

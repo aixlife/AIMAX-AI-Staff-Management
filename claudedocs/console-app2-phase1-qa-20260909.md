@@ -53,3 +53,11 @@ Phase 1의 목표(로그인·세션·직원 카탈로그·업무 목록 조회)�
 4. 위 반영 후 같은 QA 스크립트 재실행(스크립트: apps/aimax-console-preview/scripts/qa/app2_phase1_flows.mjs · app2_phase1_wording.mjs (로컬 server.js 18899 + `VITE_CONSOLE_MODE=live npx vite preview --outDir dist-live`, 환경변수 PW_ROOT=`npm root -g`, SP=결과 저장 경로)).
 
 증적: 스크린샷 app2_home.png, app2_employees.png, app2_work.png, app2_submit.png, app2_mobile_*.png (세션 스크래치패드).
+
+## 2026-09-09 수정 반영 (결함 1~3)
+
+- 결함 1: 서버 `/api/workers` 가 직원마다 `access {can_use, state, label, reason}` 를 내려준다(`workerAccessInfo`, 기존 app.html `employeeStatusInfo` 와 같은 우선순위: 파트너 → 로그인 → 비밀번호 변경 → 권한(원회원 전용/권한 없음) → 실행 권한 → 다중 실행 방법 → 설치형 기기 지원 → 실행기 연결). 클라이언트 `live.ts` 의 보유 재계산(`isWorkerOwned`)은 삭제하고 `access.state` 만 매핑한다. 기존 운영실은 이 필드를 읽지 않아 영향 없음(실브라우저 확인).
+- 결함 2: 라이브 모드에서는 "업무 맡기기"·"새 업무 → 직원 선택" 모두 대화상자를 열지 않고 즉시 "베타는 조회 전용입니다" 안내. 외부 연결 직원(externalUrl 보유)은 공용 안내 화면(`ExternalHandoffPanel`)으로 새 탭 이동 — 지원은 ddakfit, 송이는 기존 패널 그대로.
+- 결함 3: 카드·상세 라벨이 서버 라벨(연결 필요·권한 없음·원회원 전용·Windows 전용·비밀번호 변경 등)을 그대로 쓰고, 상세 화면에 사유 한 줄을 보여준다.
+- 재검증: 같은 스크립트로 4계정 직원 상태가 기존 운영실과 **전부 일치**, 조회 전용 차단·파트너 이동 링크(noopener) 확인, 허용 API 5종 유지, 계약 테스트 61/61·tsc PASS.
+- 남은 것: 결함 4(업무 상세·연결·도움말의 프리뷰 문구, 실패 사유 원문 코드)와 5(이메일 2줄 중복)는 미수정. 플랫폼 판정은 서버가 User-Agent 로 추정(Windows/Mac 외 기기는 미판정 → 설치형 직원은 다운로드 가능으로 표시).

@@ -64,6 +64,11 @@ export function employeeStatusLabel(status: Employee["status"]): string {
   return labels[status];
 }
 
+/** 서버가 준 라벨(연결 필요·원회원 전용·Windows 전용 등)이 있으면 그것을, 없으면 기본 라벨을 씁니다. */
+export function employeeDisplayStatusLabel(employee: Pick<Employee, "status" | "statusLabel">): string {
+  return employee.statusLabel || employeeStatusLabel(employee.status);
+}
+
 export function employeeStatusTone(
   status: Employee["status"],
 ): StatusTone {

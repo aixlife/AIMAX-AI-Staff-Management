@@ -165,6 +165,84 @@ function SongiHandoffPanel({
 }
 
 /**
+ * 송이 외의 외부 연결 직원(지원 등) 공용 안내 화면.
+ * 직원의 이름·사진·직무는 그대로 두고, 업무 시작 버튼만 서버가 준 externalUrl 로 보냅니다.
+ */
+function ExternalHandoffPanel({
+  employee,
+  href,
+  ctaLabel,
+  onBack,
+  onClose,
+}: {
+  employee: Employee;
+  href: string;
+  ctaLabel: string;
+  onBack?: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="task-preflight">
+      <div className="notice notice--info">
+        <Icon name="spark" />
+        <div>
+          <strong>{employee.name}에게 업무 맡기기</strong>
+          <p>{employee.name}의 업무는 연결된 외부 서비스에서 시작합니다.</p>
+        </div>
+      </div>
+
+      <section className="partner-panel" aria-label={`${employee.name} 업무 안내`}>
+        <header className="partner-panel__head">
+          <strong>{employee.name}</strong>
+          <span>{employee.role}</span>
+        </header>
+        <p>{employee.summary}</p>
+        {employee.capabilities.length ? (
+          <ul className="partner-panel__meta">
+            {employee.capabilities.slice(0, 3).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+        <p className="preview-disclaimer">
+          버튼을 누르면 연결된 서비스의 업무 시작 페이지가 새 창으로 열립니다.
+        </p>
+      </section>
+
+      <PreflightSummary
+        execution="연결된 외부 서비스"
+        connections="외부 서비스 계정"
+        cost={employee.costSummary || "외부 서비스 안내 기준"}
+      />
+
+      <div className="dialog-actions">
+        {onBack ? (
+          <button
+            className="button button--secondary"
+            type="button"
+            onClick={onBack}
+          >
+            다른 직원 선택
+          </button>
+        ) : null}
+        <button className="button button--secondary" type="button" onClick={onClose}>
+          닫기
+        </button>
+        <a
+          className="button button--primary"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {ctaLabel}
+          <Icon name="arrow" className="button__icon button__icon--end" />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/**
  * 지은(설치형 오피스 지원) 업무 맡기기 대체 화면.
  * 업무 지시 폼 없이 다운로드 안내만 제공합니다.
  * 라벨·버전·설명은 실서비스 지은 executionOptions와 동일합니다.
@@ -358,6 +436,26 @@ export function NewTaskDialog({
         labelId="new-task-title"
       >
         <SongiHandoffPanel employee={employee} onBack={onBack} onClose={onClose} />
+      </Modal>
+    );
+  }
+
+  // 송이 외의 외부 연결 직원(지원 등)도 같은 안내 화면으로 외부 서비스에 잇는다.
+  if (employee.execution === "external" && employee.externalUrl) {
+    return (
+      <Modal
+        title={employee.name + "에게 업무 맡기기"}
+        description={employee.name + " 업무는 연결된 외부 서비스에서 이어집니다."}
+        onClose={onClose}
+        labelId="new-task-title"
+      >
+        <ExternalHandoffPanel
+          employee={employee}
+          href={employee.externalUrl}
+          ctaLabel={employee.ctaLabel || employee.name + "에게 맡기기"}
+          onBack={onBack}
+          onClose={onClose}
+        />
       </Modal>
     );
   }

@@ -5,7 +5,7 @@ import { EmployeePortrait } from "../components/EmployeePortrait";
 import { EmptyState } from "../components/EmptyState";
 import { Icon } from "../components/Icon";
 import {
-  employeeStatusLabel,
+  employeeDisplayStatusLabel,
   employeeStatusTone,
   StatusBadge,
 } from "../components/StatusBadge";
@@ -131,7 +131,7 @@ export function EmployeesPage({
                 <div>
                   <div className="badge-row">
                     <StatusBadge
-                      label={employeeStatusLabel(selected.status)}
+                      label={employeeDisplayStatusLabel(selected)}
                       tone={employeeStatusTone(selected.status)}
                       dot
                     />
@@ -148,6 +148,9 @@ export function EmployeesPage({
                 </div>
               </header>
 
+              {selected.statusNote ? (
+                <p className="employee-detail-status-note">{selected.statusNote}</p>
+              ) : null}
               <p className="employee-detail-summary">{selected.summary}</p>
 
               {selected.voiceLine ? (

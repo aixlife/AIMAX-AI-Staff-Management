@@ -1,6 +1,6 @@
 import type { Employee } from "../types";
 import {
-  employeeStatusLabel,
+  employeeDisplayStatusLabel,
   employeeStatusTone,
   StatusBadge,
 } from "./StatusBadge";
@@ -38,7 +38,7 @@ export function EmployeeCard({
         ) : null}
         <span className="employee-card__meta">
           <StatusBadge
-            label={employeeStatusLabel(employee.status)}
+            label={employeeDisplayStatusLabel(employee)}
             tone={employeeStatusTone(employee.status)}
             dot
           />

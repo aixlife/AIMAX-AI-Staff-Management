@@ -3,7 +3,7 @@ import { EmptyState } from "../components/EmptyState";
 import { EmployeePortrait } from "../components/EmployeePortrait";
 import { Icon } from "../components/Icon";
 import {
-  employeeStatusLabel,
+  employeeDisplayStatusLabel,
   employeeStatusTone,
   StatusBadge,
 } from "../components/StatusBadge";
@@ -278,7 +278,7 @@ export function HomePage({
               <strong>{employee.name}</strong>
               <span>{employee.role}</span>
               <StatusBadge
-                label={employeeStatusLabel(employee.status)}
+                label={employeeDisplayStatusLabel(employee)}
                 tone={employeeStatusTone(employee.status)}
                 dot
               />

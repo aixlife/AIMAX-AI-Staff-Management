@@ -61,6 +61,12 @@ export interface Employee {
   beta?: boolean;
   profilePending?: boolean;
   resume?: EmployeeResume;
+  /** 서버가 계산한 상태 라벨·사유(라이브 모드). 없으면 status 기본 라벨을 씁니다. */
+  statusLabel?: string;
+  statusNote?: string;
+  /** 업무 시작이 외부 서비스에서 이어지는 직원의 이동 주소와 버튼 문구 */
+  externalUrl?: string;
+  ctaLabel?: string;
 }
 
 export type TaskStatus =

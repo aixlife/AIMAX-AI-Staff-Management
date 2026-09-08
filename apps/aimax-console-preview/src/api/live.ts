@@ -73,6 +73,15 @@ export interface ApiWorker {
   cta_label?: string;
   short_description: string;
   capabilities: string[];
+  /** 서버가 기존 운영실과 같은 우선순위로 계산한 접근 상태 */
+  access?: ApiWorkerAccess;
+}
+
+export interface ApiWorkerAccess {
+  can_use: boolean;
+  state: string;
+  label: string;
+  reason: string;
 }
 
 export interface ApiJob {
@@ -105,49 +114,34 @@ const EXECUTION_MAP: Record<string, EmployeeExecution> = {
   planned: "web",
 };
 
-const STATUS_MAP: Record<string, EmployeeStatus> = {
+/**
+ * 서버 access.state → 화면 상태.
+ * 보유·권한·실행기 연결 판정은 서버(workerAccessInfo)가 기존 운영실과 같은 규칙으로 계산한다.
+ * 클라이언트는 재계산하지 않는다 — 2026-09-09 QA 에서 재계산이 원회원·bundle 범위를 놓쳤다.
+ */
+const ACCESS_STATE_MAP: Record<string, EmployeeStatus> = {
   available: "ready",
-  beta: "ready",
+  login_required: "unavailable",
+  member_only: "unavailable",
+  no_entitlement: "unavailable",
+  password_change: "setup_required",
   needs_setup: "setup_required",
-  planned: "unavailable",
+  platform_unsupported: "setup_required",
+  agent_offline: "setup_required",
+  unknown: "setup_required",
 };
 
-export function ownedProducts(user: ApiUser): string[] {
-  const entitlements = user.entitlements;
-  if (!entitlements || entitlements.status !== "active") return [];
-  const products = Array.isArray(entitlements.products) ? entitlements.products : [];
-  if (entitlements.product && !products.includes(entitlements.product)) {
-    return [entitlements.product, ...products];
-  }
-  return products;
+export function employeeStatusFromAccess(access: ApiWorkerAccess | undefined): EmployeeStatus {
+  if (!access) return "setup_required";
+  return ACCESS_STATE_MAP[access.state] || (access.can_use ? "ready" : "unavailable");
 }
 
-/** 보유 여부와 무관하게 모두에게 열린 워커인지 (파트너 소개·무료 공개) */
-function isOpenAccess(worker: ApiWorker): boolean {
-  return worker.access_policy === "partner" || worker.access_policy === "free";
-}
-
-export function isWorkerOwned(worker: ApiWorker, user: ApiUser): boolean {
-  if (isOpenAccess(worker)) return true;
-  const products = ownedProducts(user);
-  if (products.includes("bundle")) return true;
-  if (products.includes(worker.product)) return true;
-  // blog_team 묶음은 예리·현주를 포함한다 (서버 productList 계약과 동일 방향).
-  if (products.includes("blog_team") && (worker.product === "yeri" || worker.product === "hyunju")) {
-    return true;
-  }
-  return false;
-}
-
-export function mapWorkerToEmployee(worker: ApiWorker, user: ApiUser): Employee {
+export function mapWorkerToEmployee(worker: ApiWorker, _user: ApiUser): Employee {
   const enrichment = buildFixture("normal").employees.find(
     (employee) => employee.id === worker.staff_code,
   );
-  const owned = isWorkerOwned(worker, user);
   const execution = EXECUTION_MAP[worker.execution] || EXECUTION_MAP[worker.type] || "web";
-  const status: EmployeeStatus = owned
-    ? STATUS_MAP[worker.status] || "ready"
-    : "unavailable";
+  const status = employeeStatusFromAccess(worker.access);
 
   return {
     id: worker.staff_code || worker.code,
@@ -170,6 +164,10 @@ export function mapWorkerToEmployee(worker: ApiWorker, user: ApiUser): Employee 
     lastUsed: undefined,
     beta: worker.status === "beta" || undefined,
     resume: enrichment?.resume,
+    statusLabel: worker.access?.label || undefined,
+    statusNote: worker.access?.reason || undefined,
+    externalUrl: worker.external_url || undefined,
+    ctaLabel: worker.cta_label || undefined,
   };
 }
 

@@ -139,7 +139,19 @@ export function App({ initialView = "landing", live }: AppProps = {}) {
     navigate("work");
   };
 
+  /** 라이브 베타(조회 전용)에서는 외부 연결 직원만 안내 화면을 열고, 나머지는 즉시 안내로 막습니다. */
+  const canOpenTaskDialog = (employee: Employee) => {
+    if (!live) return true;
+    if (employee.execution === "external" && employee.externalUrl) return true;
+    setToast({
+      id: Date.now(),
+      message: "베타는 조회 전용입니다. 업무 실행은 기존 운영실에서 해주세요.",
+    });
+    return false;
+  };
+
   const startTask = (employee: Employee) => {
+    if (!canOpenTaskDialog(employee)) return;
     setTaskFromPicker(false);
     setNewTaskEmployee(employee);
   };
@@ -155,6 +167,7 @@ export function App({ initialView = "landing", live }: AppProps = {}) {
 
   const pickEmployeeForTask = (employee: Employee) => {
     setEmployeePickerOpen(false);
+    if (!canOpenTaskDialog(employee)) return;
     setTaskFromPicker(true);
     setNewTaskEmployee(employee);
   };

@@ -16523,12 +16523,85 @@ function handlePublicDownload(req, res, url) {
   fs.createReadStream(filePath).pipe(res);
 }
 
+// 요청 기기 플랫폼: ?platform= 우선, 없으면 User-Agent 로 추정(새 운영실은 쿼리를 붙이지 않는다).
+function requestPlatformOrUserAgent(req) {
+  const explicit = requestPlatform(req);
+  if (explicit) return explicit;
+  const ua = String(req.headers["user-agent"] || "");
+  if (/Windows/i.test(ua)) return "windows";
+  if (/Macintosh|Mac OS X/i.test(ua)) return "macos";
+  return "";
+}
+
+// 2026-09-09: 새 운영실(/app2) QA 에서 클라이언트가 보유·상태를 재계산하다 기존 운영실과 어긋났다
+// (원회원 은서, bundle 범위, 실행기 미연결). 서버가 기존 app.html employeeStatusInfo 와 같은 우선순위로
+// 접근 상태를 계산해 내려주고, 클라이언트는 이 값을 그대로 쓴다. 기존 app.html 은 이 필드를 읽지 않는다.
+function workerAccessInfo(worker, user, context = {}) {
+  const info = (state, label, reason = "", canUse = false) => ({ can_use: canUse, state, label, reason });
+  if (!worker) return info("unknown", "확인 중", "직원 정보를 확인할 수 없습니다.");
+  if (isPartnerWorker(worker)) {
+    if (!user) return info("login_required", "로그인 필요", "로그인 후 파트너 직원을 사용할 수 있습니다.");
+    if (!worker.externalUrl) return info("needs_setup", "준비 중", "파트너 서비스 링크 연결을 준비 중입니다.");
+    return info("available", "사용 가능", "", true);
+  }
+  if (!user) return info("login_required", "로그인 필요", "로그인 후 사용할 수 있습니다.");
+  const isPublic = worker.accessPolicy === "public";
+  if (user.must_change_password && !isPublic) {
+    return info("password_change", "비밀번호 변경", "첫 로그인 비밀번호 변경 후 사용할 수 있습니다.");
+  }
+  if (!canAccessWorker(worker, user)) {
+    if (worker.accessPolicy === "makefamily_member" || worker.accessPolicy === "member_only") {
+      return info("member_only", "원회원 전용", "메이크패밀리 원회원 계정에서 사용할 수 있습니다.");
+    }
+    return info("no_entitlement", "권한 없음", "현재 계정 권한으로는 이 직원을 사용할 수 없습니다.");
+  }
+  if (!canExecute(user) && !isPublic) {
+    return info("needs_setup", "권한 확인", "계정 권한 확인 후 사용할 수 있습니다.");
+  }
+  const execution = worker.execution || worker.type || "";
+  if (execution === "planned") {
+    return info("needs_setup", "설정 필요", "기능 연결 전이라 직원 기본 설정을 준비 중입니다.");
+  }
+  const platform = context.platform || "";
+  // 실행 방법이 여러 개인 직원(지은·맥스 등)은 기존 운영실처럼 활성 링크가 하나라도 있으면 사용 가능.
+  const options = Array.isArray(worker.executionOptions) ? worker.executionOptions : [];
+  if (options.length) {
+    if (options.some((option) => option && option.status === "available" && option.url)) {
+      return info("available", "사용 가능", "", true);
+    }
+    if (options.some((option) => option && option.status === "testing")) {
+      return info("needs_setup", "테스트 중", "실행 링크는 검증 후 활성화됩니다.");
+    }
+    return info("needs_setup", "준비 중", "실행 방법별 배포 준비가 진행 중입니다.");
+  }
+  if (execution === "external_download" || worker.type === "desktop_app") {
+    const supported = Array.isArray(worker.supportedPlatforms) ? worker.supportedPlatforms : [];
+    if (platform && supported.length && !supported.includes(platform)) {
+      const label = supported.length === 1 && supported[0] === "windows" ? "Windows 전용" : "미지원 기기";
+      return info("platform_unsupported", label, `현재는 ${supported.map((p) => (p === "windows" ? "Windows" : "macOS")).join("·")}에서만 설치와 사용을 지원합니다.`);
+    }
+    return info("available", "다운로드 가능", "설치 파일을 직접 내려받아 사용합니다.", true);
+  }
+  if (execution === "local_agent") {
+    const agent = context.agents ? findAgentForUser(context.agents, user.id, platform) : null;
+    if (!publicAgent(agent).connected) {
+      return info("agent_offline", "연결 필요", "로컬 실행기를 실행하고 로그인하면 사용할 수 있습니다.");
+    }
+    return info("available", "사용 가능", "", true);
+  }
+  return info("available", "사용 가능", "", true);
+}
+
 function handleWorkers(req, res) {
   const auth = lookupSession(req);
   const user = auth?.user || null;
+  const accessContext = {
+    platform: requestPlatformOrUserAgent(req),
+    agents: user ? loadAgents() : null,
+  };
   const workers = Object.values(WORKERS)
     .filter((worker) => workerVisibleToUser(worker, user))
-    .map(publicWorker);
+    .map((worker) => ({ ...publicWorker(worker), access: workerAccessInfo(worker, user, accessContext) }));
   const jobKinds = Object.entries(JOB_KINDS)
     .filter(([kind]) => jobKindVisibleToUser(kind, user))
     .map(([kind, config]) => publicJobKind(kind, config, user));
@@ -19882,6 +19955,7 @@ module.exports = {
     publicJobKind,
     publicWorker,
     workerCatalogContractIssues,
+    workerAccessInfo,
   },
   __taxTest: {
     ensureDirs,
