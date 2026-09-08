@@ -10908,6 +10908,11 @@ function imageCompletionIssue(job, result) {
     result.images?.soft_failure_accepted === true
   ) return "";
   const images = result.images && typeof result.images === "object" ? result.images : {};
+  // 2026-09-06 원격 핫픽스 동기화: 키 없음으로 이미지를 건너뛰고 임시저장으로 전환까지 된 경우는
+  // 러너가 상황을 이미 수용한 것이라 done 을 실패로 뒤집지 않는다.
+  if (images.image_skipped_no_key === true && images.mode_overridden_to_save === true) {
+    return "";
+  }
   if (images.image_skipped_no_key === true) {
     return `이미지 ${requested}장을 요청했지만 이미지 생성용 로컬 API 키가 없어 이미지 없이 저장되었습니다. Mac/Windows 실행기의 AI/API 연결에 선택한 이미지 모델용 키를 저장해주세요.`;
   }
