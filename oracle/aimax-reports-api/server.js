@@ -494,6 +494,36 @@ const WORKERS = {
     shortDescription: "유튜브·인스타·틱톡·스레드·X에서 레퍼런스를 자동으로 모아 AI가 요약·분류해줍니다.",
     capabilities: ["레퍼런스 수집", "AI 요약", "채널 5종"],
   },
+  // 2026-09-08: 파트너 직원 2호(민수 지시). 창업 2기 오예림 대표(BCC)의 정부지원사업 길잡이
+  // '딱, 지원핏'을 오지원 이름·프로필로 연결한다. 송이와 같은 파트너 외부 연결 방식이라
+  // 콘솔 잡·설치 흐름을 타지 않고 로그인 사용자면 소개·이동이 열린다. 사이트는 AIMAX 전용
+  // 입구(/aimax)로 들어가 utm_source=aimax 랜딩으로 넘어간다.
+  jiwon_grant_finder: {
+    code: "jiwon_grant_finder",
+    staffCode: "jiwon",
+    name: "오지원",
+    label: "오지원",
+    role: "정부지원사업 길잡이",
+    category: "consulting",
+    product: "ddakfit",
+    jobKind: "",
+    execution: PARTNER_EXECUTION,
+    type: PARTNER_EXECUTION,
+    status: "available",
+    accessPolicy: "partner",
+    requiredSettings: [],
+    profileImage: "/assets/avatar_jiwon.png",
+    avatarImage: "/assets/avatar_jiwon.png",
+    externalUrl: "https://ddakfit.bccconsulting.kr/aimax",
+    ctaLabel: "오지원에게 맡기기",
+    partner: {
+      name: "오예림",
+      maker: "오예림",
+      supportNote: "가입, 결제, 고객 문의, 환불, 서비스 운영은 제작사가 담당합니다.",
+    },
+    shortDescription: "사업 이야기만 들려주면 지금 신청할 수 있는 정부지원사업을 찾고, 신청 가능 여부와 준비할 자료를 쉬운 말로 확인해줍니다.",
+    capabilities: ["지원사업 찾기", "신청 자격 확인", "사업계획서 초안"],
+  },
   jieun_office_support: {
     code: "jieun_office_support",
     staffCode: "jieun",
