@@ -21,6 +21,9 @@ export const CONSOLE_LOGIN_URL = "https://api.aimax.ai.kr/app";
 /** 송이의 레퍼런스 업무가 실제로 시작되는 외부 서비스 페이지 */
 export const HOOMCHA_URL = "https://hoomcha.com/aimax";
 
+/** 오지원의 정부지원사업 찾기가 실제로 시작되는 외부 서비스 페이지(딱, 지원핏 AIMAX 입구) */
+export const DDAKFIT_URL = "https://ddakfit.bccconsulting.kr/aimax";
+
 export interface PurchaseLink {
   employeeId: string;
   /** 카페24 상품명 그대로 (스토어에서 고객이 보는 이름) */

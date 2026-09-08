@@ -12,6 +12,7 @@ import { Icon } from "../components/Icon";
 import {
   CONSOLE_LOGIN_URL,
   COMPANY_URL,
+  DDAKFIT_URL,
   HOOMCHA_URL,
   LOUNGE_URL,
   STORE_URL,
@@ -34,7 +35,7 @@ interface ExternalTaskDestination {
 }
 
 interface TaskChoice {
-  id: "research" | "blog" | "quote" | "leads" | "office";
+  id: "research" | "grant" | "blog" | "quote" | "leads" | "office";
   label: string;
   employeeId: string;
   request: string;
@@ -57,6 +58,20 @@ const SONGI_EXTERNAL_DESTINATION: ExternalTaskDestination = {
   note: "송이 업무는 연결된 외부 서비스에서 이어집니다.",
 };
 
+const JIWON_ID = "jiwon";
+
+const JIWON_EXTERNAL_DESTINATION: ExternalTaskDestination = {
+  url: DDAKFIT_URL,
+  ctaLabel: "오지원에게 맡기기",
+  note: "오지원 업무는 연결된 외부 서비스에서 이어집니다.",
+};
+
+/** 이름·프로필은 AIMAX 직원으로 두고 업무 시작만 외부 서비스로 잇는 직원 목록 */
+const EXTERNAL_DESTINATIONS: Record<string, ExternalTaskDestination> = {
+  [SONGI_ID]: SONGI_EXTERNAL_DESTINATION,
+  [JIWON_ID]: JIWON_EXTERNAL_DESTINATION,
+};
+
 const taskChoices: TaskChoice[] = [
   {
     id: "research",
@@ -71,6 +86,20 @@ const taskChoices: TaskChoice[] = [
     ],
     ownerDecision: "어떤 자료를 따라 해볼지만 고르시면 됩니다.",
     externalDestination: SONGI_EXTERNAL_DESTINATION,
+  },
+  {
+    id: "grant",
+    label: "지원사업 찾기",
+    employeeId: "jiwon",
+    request: "우리 가게가 지금 받을 수 있는 지원사업 찾아줘",
+    resultTitle: "오지원이 찾아주는 지원사업",
+    resultItems: [
+      "사업 이야기만 듣고 지금 모집 중인 지원사업을 찾기",
+      "신청 자격과 마감, 준비할 자료를 쉬운 말로 확인",
+      "사업계획서가 필요할 때만 공식 양식 초안으로 연결",
+    ],
+    ownerDecision: "어떤 지원에 신청할지만 고르시면 됩니다.",
+    externalDestination: JIWON_EXTERNAL_DESTINATION,
   },
   {
     id: "blog",
@@ -122,7 +151,7 @@ export function LandingPage({
   const manualTeamSelectionRef = useRef<string | null>(null);
   const manualTeamSelectionTimerRef = useRef<number | undefined>(undefined);
   const publicEmployees = useMemo(
-    () => employees.filter((employee) => employee.photo && employee.resume).slice(0, 5),
+    () => employees.filter((employee) => employee.photo && employee.resume).slice(0, 6),
     [employees],
   );
   const availableTasks = useMemo<TaskChoiceWithEmployee[]>(
@@ -164,10 +193,9 @@ export function LandingPage({
     publicEmployees.find((employee) => employee.id === selectedTeamEmployeeId) ||
     publicEmployees.find((employee) => employee.id === "yeri") ||
     publicEmployees[0];
-  const selectedTeamDestination =
-    selectedTeamEmployee?.id === SONGI_ID
-      ? SONGI_EXTERNAL_DESTINATION
-      : undefined;
+  const selectedTeamDestination = selectedTeamEmployee
+    ? EXTERNAL_DESTINATIONS[selectedTeamEmployee.id]
+    : undefined;
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -624,7 +652,7 @@ export function LandingPage({
                   )}
                   <small>
                     {selectedTeamDestination
-                      ? "송이의 업무 시작은 연결된 외부 서비스에서 이어집니다."
+                      ? `${selectedTeamEmployee.name}의 업무 시작은 연결된 외부 서비스에서 이어집니다.`
                       : "이름과 사진은 역할을 친숙하게 이해하도록 만든 가상의 AI 직원 설정입니다."}
                   </small>
                 </div>

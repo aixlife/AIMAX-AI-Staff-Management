@@ -374,7 +374,7 @@
 .task-choice-grid {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   padding: var(--space-5) 0;
 }
@@ -761,7 +761,7 @@
 .staff-lineup {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
   padding: 44px 0 28px;
 }
@@ -1391,7 +1391,7 @@
   .team-scroll-story__sticky .landing-section__heading > p { font-size: 0.84rem; line-height: 1.65; }
   .staff-lineup { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; padding-top: 0; padding-bottom: 0; }
   .staff-lineup > button { min-height: 112px; gap: 7px; padding: 9px; }
-  .staff-lineup > button:last-child { grid-column: 1 / -1; }
+  .staff-lineup > button:last-child:nth-of-type(odd) { grid-column: 1 / -1; }
   .staff-lineup > button .employee-portrait { width: 52px; height: 62px; border-radius: 17px; }
   .staff-lineup > button .partner-portrait--lineup { width: 52px; height: 62px; border-radius: 17px; }
   .staff-lineup > button strong { font-size: 0.92rem; }
