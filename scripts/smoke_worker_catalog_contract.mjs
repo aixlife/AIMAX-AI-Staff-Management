@@ -115,7 +115,7 @@ assert(productCatalog.some((product) => product.product === "jieun" && product.p
 assert(productCatalog.some((product) => product.product === "nakyung" && product.price_won === 9900), "nakyung_product_catalog_missing");
 assert(productCatalog.some((product) => product.product === "hyojin" && product.price_won === 33000), "hyojin_product_catalog_missing");
 assert(productCatalog.some((product) => product.product === "sangsu" && product.job_kinds.includes("sangsu_quote")), "sangsu_product_job_kind_missing");
-assert(productCatalog.some((product) => product.product === "semu" && product.job_kinds.includes("semu_tax_invoice")), "semu_product_job_kind_missing");
+assert(!productCatalog.some((product) => product.product === "semu"), "semu_product_should_be_retired_from_admin_catalog");
 assert(productCatalog.every((product) => (product.job_kinds || []).every((kind) => jobKinds[kind])), "product_catalog_unknown_job_kind");
 const sangsu = publicWorkers.find((worker) => worker.staff_code === "sangsu");
 assert(sangsu?.name === "상수", "sangsu_worker_name_missing");

@@ -2,12 +2,12 @@
 
 이 문서는 UI 리빌딩 중 기존 기능이 조용히 사라지는 것을 막는 회귀 방지 정본입니다.
 
-Status:
+Status (2026-09-09 갱신):
 
-- Phase 1 preview: local fixture only
-- Existing production: untouched legacy console
-- API integration: not started
-- Deployment: not approved
+- Phase 1 preview: local fixture (랜딩·픽스처 콘솔) — aimax.ai.kr 루트에 랜딩만 공개
+- Existing production: untouched legacy console (`/app`)
+- API integration: Phase 1 실전환 빌드(`npm run build:live`, /app2 경로) 코드 완료 — 로그인·세션, 직원 카탈로그·권한 게이트, 업무 목록 조회 전용. 실 API 연결 QA 결과: `claudedocs/console-app2-phase1-qa-20260909.md`
+- Deployment: /app2 베타 공개 미승인(서버 라우트 없음, 공개 URL 404)
 
 상태 값:
 

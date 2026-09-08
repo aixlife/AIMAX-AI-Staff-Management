@@ -4285,13 +4285,6 @@ function adminProductCatalog() {
       download_product: "",
     },
     {
-      product: "semu",
-      label: "세무 직원",
-      products: productList("semu"),
-      job_kinds: ["semu_tax_invoice"],
-      download_product: "",
-    },
-    {
       product: "maxalert",
       label: "맥스",
       price_won: 0,
@@ -4372,8 +4365,14 @@ function adminUserRow(user, agent, phoneIndex = null) {
   };
 }
 
+// 2026-09-08 삭제(비노출)된 상품은 관리 콘솔 상품 목록에서 빠지지만, 기존 부여 이력의 라벨은 유지한다.
+const RETIRED_PRODUCT_LABELS = { semu: "세무 직원" };
+
 function productLabel(product) {
-  return adminProductCatalog().find((item) => item.product === product)?.label || product || "";
+  return adminProductCatalog().find((item) => item.product === product)?.label
+    || RETIRED_PRODUCT_LABELS[product]
+    || product
+    || "";
 }
 
 function productLabels(product) {
@@ -14076,8 +14075,11 @@ function handleAdminCatalog(req, res) {
   json(req, res, 200, {
     ok: true,
     products: adminProductCatalog(),
-    workers: Object.values(WORKERS).map(publicWorker),
-    job_kinds: Object.entries(JOB_KINDS).map(([kind, config]) => publicJobKind(kind, config)),
+    // 삭제(retired)된 직원과 그 잡 종류는 관리 콘솔 카탈로그에서도 뺀다.
+    workers: Object.values(WORKERS).filter((worker) => worker.status !== "retired").map(publicWorker),
+    job_kinds: Object.entries(JOB_KINDS)
+      .filter(([, config]) => WORKERS[config.workerCode]?.status !== "retired")
+      .map(([kind, config]) => publicJobKind(kind, config)),
     feature_flags: {
       yunmi: {
         public_enabled: YUNMI_PUBLIC_ENABLED,
