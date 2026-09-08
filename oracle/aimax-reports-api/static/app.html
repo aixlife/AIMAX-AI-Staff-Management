@@ -5209,7 +5209,7 @@
       yeri: "예리",
       hyunju: "현주",
       songi: "송이",
-      ddakfit: "오지원",
+      ddakfit: "지원",
       yunmi: "윤미",
       jieun: "지은",
       semu: "세무 직원",
@@ -5247,11 +5247,6 @@
         label: "상수 경리",
         required: "sangsu",
         worker: "상수",
-      },
-      semu_tax_invoice: {
-        label: "세무 직원 전자세금계산서",
-        required: "semu",
-        worker: "세무 직원",
       },
     };
 
@@ -5554,10 +5549,10 @@
         },
       },
       // 2026-09-08: 파트너 직원 2호. 오예림 대표(BCC)의 정부지원사업 길잡이 '딱, 지원핏'을
-      // 오지원 이름·프로필로 연결한다. 송이와 같은 파트너 외부 연결(잡·설치 없음).
+      // 지원 이름·프로필로 연결한다. 송이와 같은 파트너 외부 연결(잡·설치 없음).
       jiwon: {
         code: "jiwon",
-        name: "오지원",
+        name: "지원",
         role: "정부지원사업 길잡이",
         avatar: "/assets/avatar_jiwon.jpg",
         photo: "/assets/avatar_jiwon.jpg",
@@ -5569,10 +5564,10 @@
         accessPolicy: "partner",
         requiredSettings: [],
         externalUrl: "https://ddakfit.bccconsulting.kr/aimax",
-        ctaLabel: "오지원에게 맡기기",
+        ctaLabel: "지원에게 맡기기",
         partner: {
-          name: "오예림",
-          maker: "오예림",
+          name: "",
+          maker: "",
           supportNote: PARTNER_SUPPORT_NOTE_FALLBACK,
         },
         description: "사업 이야기만 들려주면 지금 신청할 수 있는 정부지원사업을 찾고, 신청 가능 여부와 준비할 자료를 쉬운 말로 확인해줍니다.",
@@ -5591,7 +5586,7 @@
             { period: "2026-현재", org: "AIMAX 정부지원사업팀", note: "딱, 지원핏에서 지원사업 찾기와 신청 가능 여부 확인을 맡습니다." },
           ],
           reference: {
-            quote: "공고를 읽어도 내 얘기인지 몰랐는데, 오지원은 제 말로 다시 설명해 줬습니다.",
+            quote: "공고를 읽어도 내 얘기인지 몰랐는데, 지원은 제 말로 다시 설명해 줬습니다.",
             from: "부산 초기창업자",
           },
           interviewLine: "대표님께 공부를 시키지 않는 게 제 일입니다.",
@@ -5604,23 +5599,7 @@
           ],
         },
       },
-      semu: {
-        code: "semu",
-        // TODO(CEO): 정식 직원 이름과 프로필 이미지를 결정하면 placeholder를 교체한다.
-        name: "세무 직원",
-        role: "전자세금계산서 발행 직원",
-        avatar: "/assets/avatar_placeholder.svg",
-        photo: "/assets/avatar_placeholder.svg",
-        product: "semu",
-        jobKind: "semu_tax_invoice",
-        status: "available",
-        execution: "web_module",
-        type: "web_module",
-        requiredSettings: ["business_registration"],
-        moduleKey: "tax",
-        description: "사업자 정보와 거래 내역을 받아 전자세금계산서 초안을 만들고, 비용 확인과 명시 승인 뒤 테스트베드에서 발행합니다.",
-        meta: ["전자세금계산서 초안", "발행 비용 확인", "명시 승인 발행", "상태 복구"],
-      },
+      // 세무 직원(semu)은 2026-09-08 민수 지시로 삭제 — 서버 카탈로그도 비노출이라 폴백에서 제거.
       jieun: {
         code: "jieun",
         name: "지은",
@@ -7680,8 +7659,9 @@
       return String(employee?.externalUrl || "").trim();
     }
 
+    // 비어 있으면 만든 사람을 화면에 표기하지 않는다(지원처럼 제작자 이름을 밝히지 않는 파트너).
     function partnerMakerName(employee) {
-      return String(employee?.partner?.maker || employee?.partner?.name || "").trim() || "제작사";
+      return String(employee?.partner?.maker || employee?.partner?.name || "").trim();
     }
 
     function partnerSupportNote(employee) {
@@ -7964,12 +7944,13 @@
       const code = String(employee?.code || "staff").toUpperCase();
       // 파트너 직원은 AIMAX 소속 인물 설정이 아니라 제작사·운영 주체를 그대로 밝힌다.
       if (isPartnerEmployee(employee)) {
+        const maker = partnerMakerName(employee);
         return [
           { label: "직원 구분", detail: "파트너 직원" },
-          { label: "만든 사람", detail: partnerMakerName(employee) },
+          ...(maker ? [{ label: "만든 사람", detail: maker }] : []),
           { label: "직무", detail: employee.role || "AI 직원" },
           { label: "실행 위치", detail: "AIMAX 밖의 파트너 사이트" },
-          { label: "운영 주체", detail: `${partnerMakerName(employee)} (제작사)` },
+          { label: "운영 주체", detail: maker ? `${maker} (제작사)` : "파트너 제작사" },
           { label: "이용 상태", detail: status.label || "확인 중" },
         ];
       }
@@ -8018,7 +7999,10 @@
       const resume = employeeResumeData(employee);
       if (resume.interviewLine) return resume.interviewLine;
       if (isPartnerEmployee(employee)) {
-        return `${partnerMakerName(employee)}님이 만든 서비스이고, 사용은 파트너 사이트에서 이어집니다.`;
+        const maker = partnerMakerName(employee);
+        return maker
+          ? `${maker}님이 만든 서비스이고, 사용은 파트너 사이트에서 이어집니다.`
+          : "파트너 제작사가 만든 서비스이고, 사용은 파트너 사이트에서 이어집니다.";
       }
       return `${employee.role || "맡은 일"}은 제 자리에서 차분하게 처리하겠습니다.`;
     }
@@ -8039,7 +8023,7 @@
       if (isPartnerEmployee(employee)) {
         return [
           { label: "직원 구분", detail: "파트너 직원 (AIMAX는 소개와 유입 연결만 담당)" },
-          { label: "만든 사람", detail: partnerMakerName(employee) },
+          ...(partnerMakerName(employee) ? [{ label: "만든 사람", detail: partnerMakerName(employee) }] : []),
           { label: "실행 방식", detail: "AIMAX 밖의 파트너 사이트에서 가입하고 사용합니다." },
           { label: "운영 책임", detail: partnerSupportNote(employee) },
           { label: "주요 기능", detail: (employee.meta || []).join(", ") || "기능 준비 중" },
@@ -10608,7 +10592,7 @@
               </span>
               <span class="staff-card-meta">
                 ${(employee.meta || []).slice(0, 3).map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("")}
-                ${isPartnerEmployee(employee) ? `<span class="pill">만든 사람 ${escapeHtml(partnerMakerName(employee))}</span>` : ""}
+                ${isPartnerEmployee(employee) && partnerMakerName(employee) ? `<span class="pill">만든 사람 ${escapeHtml(partnerMakerName(employee))}</span>` : ""}
                 <span class="pill">${escapeHtml(staffCardExecutionLabel(employee, recent))}</span>
               </span>
             </button>
@@ -10721,7 +10705,7 @@
       $("#staffResumePhoto").alt = `${selected.name} 프로필 사진`;
       $("#staffResumeName").textContent = selected.name;
       $("#staffResumeRole").textContent = isPartnerEmployee(selected)
-        ? `${selected.role} · 파트너 직원 (만든 사람 ${partnerMakerName(selected)})`
+        ? `${selected.role} · 파트너 직원${partnerMakerName(selected) ? ` (만든 사람 ${partnerMakerName(selected)})` : ""}`
         : selected.role;
       const statusNode = $("#staffResumeStatus");
       if (statusNode) {
@@ -11948,7 +11932,7 @@
         .map((item) => `<span class="pill">${escapeHtml(item)}</span>`)
         .join("");
       const partnerMetaPills = isPartnerEmployee(selected)
-        ? `<span class="pill">파트너 직원</span><span class="pill">만든 사람 ${escapeHtml(partnerMakerName(selected))}</span>`
+        ? `<span class="pill">파트너 직원</span>${partnerMakerName(selected) ? `<span class="pill">만든 사람 ${escapeHtml(partnerMakerName(selected))}</span>` : ""}`
         : "";
       $("#employeeDetailMeta").innerHTML = `${partnerMetaPills}${detailMetaPills}` || `<span class="pill">준비 중</span>`;
       const action = employeeAction(selectedKey);

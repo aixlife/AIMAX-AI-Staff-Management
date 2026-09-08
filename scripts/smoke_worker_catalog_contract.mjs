@@ -162,7 +162,7 @@ assert(__catalogTest.productList("blog_team").includes("yeri") && __catalogTest.
 const bundleOnlyUser = { status: "active", entitlements: { product: "bundle", products: ["bundle"], status: "active", source: "test" } };
 assert(__catalogTest.isJobAllowed(bundleOnlyUser, "sangsu_quote"), "bundle_should_allow_sangsu_quote");
 assert(__catalogTest.isJobAllowed(bundleOnlyUser, "yunmi_script"), "bundle_should_allow_yunmi_script");
-assert(__catalogTest.isJobAllowed(bundleOnlyUser, "semu_tax_invoice"), "bundle_should_allow_semu_tax_invoice");
+assert(!__catalogTest.isJobAllowed(bundleOnlyUser, "semu_tax_invoice"), "semu_tax_invoice_should_be_hidden_after_retirement");
 const yunmiUser = { status: "active", entitlements: { product: "yunmi", products: ["yunmi"], status: "active", source: "test" } };
 assert(__catalogTest.isJobAllowed(yunmiUser, "yunmi_script"), "yunmi_product_should_allow_yunmi_script");
 const bundleUser = { entitlements: { product: "bundle", products: ["yeri", "hyunju", "songi", "yunmi", "blog_team", "bundle"], status: "active", source: "test" } };

@@ -495,14 +495,14 @@ const WORKERS = {
     capabilities: ["레퍼런스 수집", "AI 요약", "채널 5종"],
   },
   // 2026-09-08: 파트너 직원 2호(민수 지시). 창업 2기 오예림 대표(BCC)의 정부지원사업 길잡이
-  // '딱, 지원핏'을 오지원 이름·프로필로 연결한다. 송이와 같은 파트너 외부 연결 방식이라
+  // '딱, 지원핏'을 지원 이름·프로필로 연결한다. 송이와 같은 파트너 외부 연결 방식이라
   // 콘솔 잡·설치 흐름을 타지 않고 로그인 사용자면 소개·이동이 열린다. 사이트는 AIMAX 전용
   // 입구(/aimax)로 들어가 utm_source=aimax 랜딩으로 넘어간다.
   jiwon_grant_finder: {
     code: "jiwon_grant_finder",
     staffCode: "jiwon",
-    name: "오지원",
-    label: "오지원",
+    name: "지원",
+    label: "지원",
     role: "정부지원사업 길잡이",
     category: "consulting",
     product: "ddakfit",
@@ -515,10 +515,11 @@ const WORKERS = {
     profileImage: "/assets/avatar_jiwon.jpg",
     avatarImage: "/assets/avatar_jiwon.jpg",
     externalUrl: "https://ddakfit.bccconsulting.kr/aimax",
-    ctaLabel: "오지원에게 맡기기",
+    ctaLabel: "지원에게 맡기기",
+    // 만든 사람 이름은 표기하지 않는다(2026-09-08 민수 지시) — supportNote 로 제작사 책임만 밝힌다.
     partner: {
-      name: "오예림",
-      maker: "오예림",
+      name: "",
+      maker: "",
       supportNote: "가입, 결제, 고객 문의, 환불, 서비스 운영은 제작사가 담당합니다.",
     },
     shortDescription: "사업 이야기만 들려주면 지금 신청할 수 있는 정부지원사업을 찾고, 신청 가능 여부와 준비할 자료를 쉬운 말로 확인해줍니다.",
@@ -582,7 +583,8 @@ const WORKERS = {
     jobKind: "semu_tax_invoice",
     execution: "web_module",
     type: "web_module",
-    status: "available",
+    // 2026-09-08 민수 지시로 삭제(비노출). 정의는 배포 가드 마커·관리 콘솔 상품 매핑 때문에 남긴다.
+    status: "retired",
     requiredSettings: ["business_registration"],
     moduleKey: "tax",
     profileImage: "/assets/avatar_placeholder.svg",
@@ -9384,16 +9386,14 @@ function hasDirectSemuEntitlement(user) {
 
 function workerVisibleToUser(worker, user) {
   if (worker?.accessPolicy === "public") return true;
-  if (worker?.staffCode === "semu") {
-    return hasDirectSemuEntitlement(user);
-  }
+  // 2026-09-08 민수 지시: 세무 직원 삭제 — 카탈로그·화면에서 전원 비노출. 팝빌/tax API 코드는 보존.
+  if (worker?.staffCode === "semu") return false;
   return true;
 }
 
 function jobKindVisibleToUser(kind, user) {
-  if (kind === "semu_tax_invoice") {
-    return hasDirectSemuEntitlement(user);
-  }
+  // 2026-09-08: 세무 직원 삭제에 따라 전자세금계산서 잡도 전원 비노출.
+  if (kind === "semu_tax_invoice") return false;
   return true;
 }
 
@@ -12538,7 +12538,8 @@ function workerCatalogContractIssues() {
     // 파트너 직원은 설치 파일/잡이 아니라 외부 서비스 링크와 제작사 표기가 계약 조건이다.
     if (isPartnerWorker(worker)) {
       if (!worker.externalUrl) issues.push({ code: "partner_external_url_missing", worker: worker.code || "" });
-      if (!worker.partner?.maker && !worker.partner?.name) {
+      // 제작사 이름을 비우는 파트너(지원)는 supportNote 로 책임 주체를 밝히면 계약을 만족한다.
+      if (!worker.partner?.maker && !worker.partner?.name && !worker.partner?.supportNote) {
         issues.push({ code: "partner_maker_missing", worker: worker.code || "" });
       }
       if (worker.jobKind) issues.push({ code: "partner_job_kind_not_allowed", worker: worker.code || "" });

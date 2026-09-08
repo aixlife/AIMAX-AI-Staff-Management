@@ -62,8 +62,8 @@ const JIWON_ID = "jiwon";
 
 const JIWON_EXTERNAL_DESTINATION: ExternalTaskDestination = {
   url: DDAKFIT_URL,
-  ctaLabel: "오지원에게 맡기기",
-  note: "오지원 업무는 연결된 외부 서비스에서 이어집니다.",
+  ctaLabel: "지원에게 맡기기",
+  note: "지원 업무는 연결된 외부 서비스에서 이어집니다.",
 };
 
 /** 이름·프로필은 AIMAX 직원으로 두고 업무 시작만 외부 서비스로 잇는 직원 목록 */
@@ -92,7 +92,7 @@ const taskChoices: TaskChoice[] = [
     label: "지원사업 찾기",
     employeeId: "jiwon",
     request: "우리 가게가 지금 받을 수 있는 지원사업 찾아줘",
-    resultTitle: "오지원이 찾아주는 지원사업",
+    resultTitle: "지원이 찾아주는 지원사업",
     resultItems: [
       "사업 이야기만 듣고 지금 모집 중인 지원사업을 찾기",
       "신청 자격과 마감, 준비할 자료를 쉬운 말로 확인",

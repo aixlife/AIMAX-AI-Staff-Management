@@ -83,7 +83,7 @@ const employees: Employee[] = [
   },
   {
     id: "jiwon",
-    name: "오지원",
+    name: "지원",
     role: "정부지원사업 길잡이",
     team: "정부지원사업팀",
     initials: "지",
@@ -110,7 +110,7 @@ const employees: Employee[] = [
         { period: "2022-2025", org: "비즈니스커리어컨설팅(BCC)", note: "여러 사이트에 흩어진 모집 정보를 한곳에 모아 신청 자격과 마감을 미리 확인하는 체계를 만들었습니다." },
         { period: "2026-현재", org: "AIMAX 정부지원사업팀", note: "딱, 지원핏에서 지원사업 찾기와 신청 가능 여부 확인을 맡습니다." },
       ],
-      reference: { quote: "공고를 읽어도 내 얘기인지 몰랐는데, 오지원은 제 말로 다시 설명해 줬습니다.", from: "부산 초기창업자" },
+      reference: { quote: "공고를 읽어도 내 얘기인지 몰랐는데, 지원은 제 말로 다시 설명해 줬습니다.", from: "부산 초기창업자" },
       interviewLine: "대표님께 공부를 시키지 않는 게 제 일입니다.",
       skills: [
         { label: "지원사업 찾기", score: 5 },

@@ -272,7 +272,7 @@ test("songi links to the external service while hyunju keeps her own job", () =>
   assert.match(landing, /target="_blank"/);
   assert.match(landing, /rel="noopener noreferrer"/);
   assert.match(links, /HOOMCHA_URL = "https:\/\/hoomcha\.com\/aimax"/);
-  // 시연은 6종 구조를 유지합니다(외부 연결 직원 송이·오지원 포함).
+  // 시연은 6종 구조를 유지합니다(외부 연결 직원 송이·지원 포함).
   assert.equal((landing.match(/^ {4}id: "/gm) || []).length, 6);
 });
 
