@@ -9,6 +9,21 @@ const net = require("node:net");
 const zlib = require("node:zlib");
 const childProcess = require("node:child_process");
 
+function readDeploymentCommit(file = path.join(__dirname, ".deploy-commit")) {
+  try {
+    const value = fs.readFileSync(file, "utf8").trim();
+    return /^[a-f0-9]{40}$/.test(value) ? value : null;
+  } catch (_error) {
+    return null;
+  }
+}
+// Capture the loaded source once; replacing files without restarting must not
+// make an old process report the new on-disk source as its running version.
+const DEPLOYMENT_INFO = Object.freeze({
+  commit: readDeploymentCommit(),
+  server_sha256: crypto.createHash("sha256").update(fs.readFileSync(__filename)).digest("hex"),
+});
+
 const HOST = process.env.AIMAX_REPORT_HOST || "127.0.0.1";
 const PORT = Number(process.env.AIMAX_REPORT_PORT || 18988);
 const DATA_DIR = process.env.AIMAX_REPORT_DATA_DIR || defaultReportDataDir();
@@ -19409,6 +19424,7 @@ function handleHealth(req, res) {
   json(req, res, 200, {
     ok: storage.ok,
     service: "aimax-reports-api",
+    deployment: DEPLOYMENT_INFO,
     time: nowIso(),
     storage,
   });
@@ -20242,6 +20258,7 @@ module.exports = {
     route,
   },
   __r02Test: {
+    readDeploymentCommit,
     dispatchApiRequest,
     loadCommands,
     mutateCommandsWithLock,
