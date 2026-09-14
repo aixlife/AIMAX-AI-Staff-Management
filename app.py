@@ -3628,7 +3628,19 @@ class NaverBlogApp:
             if command_type == "stop_current_job":
                 payload = command.get("payload") if isinstance(command.get("payload"), dict) else {}
                 job_id = str(payload.get("job_id") or "").strip()
-                self._log(f"[웹앱 연결] 작업 중단 요청 수신: {job_id or '현재 작업'}")
+                active_job_id = str(getattr(self, "web_agent_active_job_id", "") or "").strip()
+                if not job_id or job_id != active_job_id:
+                    self._log(
+                        f"[웹앱 연결] 현재 작업과 일치하지 않는 중단 명령을 무시했습니다: "
+                        f"requested={job_id or '-'} active={active_job_id or '-'}"
+                    )
+                    _send_command_update("done", "현재 실행 중인 웹앱 작업과 일치하지 않아 중단 명령을 적용하지 않았습니다.", {
+                        "type": "job_cancel_ignored",
+                        "job_id": job_id,
+                        "active_job_id": active_job_id,
+                    })
+                    return
+                self._log(f"[웹앱 연결] 현재 작업 중단 요청 수신: {job_id}")
                 self.stop_event.set()
                 self.running = False
                 if getattr(self, "driver", None):
@@ -3774,14 +3786,24 @@ class NaverBlogApp:
         self.web_agent_worker_started_at = time.monotonic()
         self._set_web_agent_active_job_stage("worker_thread_started", job_id=job_id, kind=kind)
         try:
-            client.update_job(
+            acknowledgement = client.update_job(
                 job_id,
                 "running",
                 "로컬 실행기 워커 스레드가 시작되었습니다.",
                 result={"runner_event": "worker_thread_started", "stage": "worker_thread_started"},
             )
+            if not isinstance(acknowledgement, dict) or acknowledgement.get("ok") is not True:
+                raise RuntimeError("worker_start_acknowledgement_not_confirmed")
+            if acknowledgement.get("ignored") is True:
+                self._log(f"[웹앱 작업] 서버에서 이미 종료된 작업으로 확인되어 시작하지 않습니다: {job_id}")
+                self._reset_web_agent_active_job()
+                self.queue.put(("done", None))
+                return
         except Exception as update_error:
-            self._log(f"[웹앱 작업] 워커 시작 상태 전송 오류: {update_error}")
+            self._log(f"[웹앱 작업] 워커 시작 상태 확인 실패로 실행하지 않습니다: {update_error}")
+            self._reset_web_agent_active_job()
+            self.queue.put(("done", None))
+            return
         self._worker_remote_job(client, job)
 
     def _worker_remote_job(self, client, job):
@@ -3811,12 +3833,17 @@ class NaverBlogApp:
                     "Mac 실행기의 AI/API 연결에 OpenAI 또는 Gemini 키를 저장해주세요."
                 )
 
-            client.update_job(
+            acknowledgement = client.update_job(
                 job_id,
                 "running",
                 "로컬 실행기가 작업을 시작했습니다.",
                 result={"runner_event": "worker_running", "stage": "worker_running"},
             )
+            if not isinstance(acknowledgement, dict) or acknowledgement.get("ok") is not True:
+                raise RuntimeError("worker_running_acknowledgement_not_confirmed")
+            if acknowledgement.get("ignored") is True:
+                self._log(f"[웹앱 작업] 서버에서 이미 종료된 작업으로 확인되어 실행하지 않습니다: {job_id}")
+                return
             if kind == "yeri_write":
                 kwargs = self._remote_write_kwargs(payload, artifact=artifact)
                 worker_started = True

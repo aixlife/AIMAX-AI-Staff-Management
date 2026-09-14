@@ -31,6 +31,7 @@ export function taskStatusLabel(status: TaskStatus): string {
     running: "실행 중",
     waiting_user: "확인 필요",
     failed: "실패",
+    cancelled: "사용자 취소",
     done: "완료",
   };
   return labels[status];
@@ -40,6 +41,7 @@ export function taskStatusTone(status: TaskStatus): StatusTone {
   if (status === "done") return "positive";
   if (status === "running") return "info";
   if (status === "waiting_user") return "warning";
+  if (status === "cancelled") return "neutral";
   if (status === "failed") return "critical";
   return "neutral";
 }

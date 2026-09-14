@@ -75,6 +75,8 @@ const YERI_SERVER_GENERATION_REAL_TEST_ONLY = envFlag("AIMAX_YERI_SERVER_GENERAT
 const YERI_SERVER_GENERATION_REAL_TEST_MAX_WORD_COUNT = Number(process.env.AIMAX_YERI_SERVER_GENERATION_REAL_TEST_MAX_WORD_COUNT || 500);
 const YERI_SERVER_GENERATION_REAL_TEST_MAX_IMAGE_COUNT = Number(process.env.AIMAX_YERI_SERVER_GENERATION_REAL_TEST_MAX_IMAGE_COUNT || 1);
 const YERI_READY_FOR_PUBLISH_CLAIM_ENABLED = envFlag("AIMAX_YERI_READY_FOR_PUBLISH_CLAIM_ENABLED");
+const yeriGenerationControllers = new Map();
+const YERI_GENERATION_CANCEL_POLL_MS = Math.max(100, Number(process.env.AIMAX_YERI_GENERATION_CANCEL_POLL_MS || 250));
 const NAVER_SEARCH_CLIENT_ID = String(process.env.AIMAX_NAVER_SEARCH_CLIENT_ID || "").trim();
 const NAVER_SEARCH_CLIENT_SECRET = String(process.env.AIMAX_NAVER_SEARCH_CLIENT_SECRET || "").trim();
 const PUBLIC_BASE_URL = String(process.env.AIMAX_PUBLIC_BASE_URL || "https://api.aimax.ai.kr").replace(/\/+$/, "");
@@ -1681,16 +1683,83 @@ function saveSetupTokens(data) {
   writeJsonAtomic(SETUP_TOKENS_PATH, { version: 1, tokens: arrayFieldOrThrow(SETUP_TOKENS_PATH, data, "tokens") });
 }
 
+const jobsSnapshots = new WeakMap();
+let jobsLockHeld = false;
+const commandsSnapshots = new WeakMap();
+let commandsLockHeld = false;
+
+function jobsFingerprint(data) {
+  return crypto.createHash("sha256")
+    .update(JSON.stringify({ version: 1, jobs: arrayFieldOrThrow(JOBS_PATH, data, "jobs") }))
+    .digest("hex");
+}
+
 function loadJobs() {
   const data = readJsonFile(JOBS_PATH, { version: 1, jobs: [] });
-  return {
-    version: 1,
-    jobs: arrayFieldOrThrow(JOBS_PATH, data, "jobs"),
-  };
+  const snapshot = { version: 1, jobs: arrayFieldOrThrow(JOBS_PATH, data, "jobs") };
+  jobsSnapshots.set(snapshot, jobsFingerprint(snapshot));
+  return snapshot;
+}
+
+const JOBS_LOCK_PATH = path.join(DATA_DIR, "jobs.lock");
+
+function withJobsStorageLockSync(mutator) {
+  if (jobsLockHeld) throw makeJsonStorageError(JOBS_PATH, "json_lock_reentrant", "jobs_lock_reentrant");
+  fs.mkdirSync(path.dirname(JOBS_LOCK_PATH), { recursive: true });
+  let fd = null;
+  let owner = null;
+  try {
+    fd = fs.openSync(JOBS_LOCK_PATH, "wx", 0o600);
+    owner = fs.fstatSync(fd);
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    // Never wait synchronously for a peer writer: that would freeze Node's event loop.
+    throw makeJsonStorageError(JOBS_PATH, "json_lock_busy", "jobs_lock_busy");
+  }
+  jobsLockHeld = true;
+  try {
+    fs.writeFileSync(fd, `${process.pid}\n`, "utf8");
+    return mutator();
+  } finally {
+    jobsLockHeld = false;
+    try { fs.closeSync(fd); } finally {
+      try {
+        const currentOwner = fs.statSync(JOBS_LOCK_PATH);
+        if (currentOwner.dev === owner.dev && currentOwner.ino === owner.ino) fs.unlinkSync(JOBS_LOCK_PATH);
+      } catch (_unlockError) {}
+    }
+  }
+}
+
+function saveJobsLocked(data) {
+  if (!jobsLockHeld) throw makeJsonStorageError(JOBS_PATH, "json_lock_required", "jobs_lock_required");
+  const expected = jobsSnapshots.get(data);
+  const current = readJsonFile(JOBS_PATH, { version: 1, jobs: [] });
+  if (!expected || expected !== jobsFingerprint(current)) {
+    throw makeJsonStorageError(JOBS_PATH, "json_write_conflict", "jobs_snapshot_changed_reload_required");
+  }
+  writeJsonAtomic(JOBS_PATH, { version: 1, jobs: arrayFieldOrThrow(JOBS_PATH, data, "jobs") });
+  jobsSnapshots.set(data, jobsFingerprint(data));
 }
 
 function saveJobs(data) {
-  writeJsonAtomic(JOBS_PATH, { version: 1, jobs: arrayFieldOrThrow(JOBS_PATH, data, "jobs") });
+  return withJobsStorageLockSync(() => saveJobsLocked(data));
+}
+
+function mutateJobsWithLock(mutator) {
+  return withJobsStorageLockSync(() => {
+    const jobs = loadJobs();
+    const result = mutator(jobs);
+    if (result?.save !== false) saveJobsLocked(jobs);
+    return result;
+  });
+}
+
+function saveJobsForTest(data) {
+  if (jobsSnapshots.has(data)) return saveJobs(data);
+  return mutateJobsWithLock((current) => {
+    current.jobs = arrayFieldOrThrow(JOBS_PATH, data, "jobs");
+  });
 }
 
 function safeArtifactId(value) {
@@ -1757,6 +1826,19 @@ function loadYeriArtifact(jobOrArtifactId) {
   const data = readJsonFile(filePath, null);
   if (data?.version !== 1 || data?.kind !== "yeri_write") return null;
   return sanitizeYeriArtifact(data.artifact);
+}
+
+function discardYeriArtifact(jobOrArtifactId) {
+  const artifactId = safeArtifactId(typeof jobOrArtifactId === "object" ? jobOrArtifactId?.id : jobOrArtifactId);
+  const filePath = yeriArtifactPath(artifactId);
+  if (!filePath || !fs.existsSync(filePath)) return false;
+  try {
+    fs.rmSync(filePath);
+    return true;
+  } catch (error) {
+    console.warn("[yeri-hybrid] cancelled artifact cleanup failed", error?.code || error?.message || error);
+    return false;
+  }
 }
 
 function attachYeriArtifactToJob(job, rawArtifact) {
@@ -1831,7 +1913,8 @@ function normalizeYeriGeminiModel(model) {
 // 폴백 체인만으로 진행하게 한다(기존 동작 보존, 조회가 생성을 막지 않는다).
 const geminiModelListCache = new Map();
 
-async function fetchAvailableGeminiModels(apiKey) {
+async function fetchAvailableGeminiModels(apiKey, signal = null) {
+  throwIfYeriGenerationCancelled(signal);
   const key = String(apiKey || "");
   if (!key) return null;
   const keyHash = crypto.createHash("sha256").update(key).digest("hex").slice(0, 16);
@@ -1842,7 +1925,7 @@ async function fetchAvailableGeminiModels(apiKey) {
   try {
     const res = await requestExternalJson(
       "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
-      { method: "GET", headers: { "x-goog-api-key": key }, timeoutMs: 8000, maxBytes: 2 * 1024 * 1024 },
+      { method: "GET", headers: { "x-goog-api-key": key }, timeoutMs: 8000, maxBytes: 2 * 1024 * 1024, signal },
     );
     const list = Array.isArray(res.json?.models) ? res.json.models : [];
     const set = new Set();
@@ -1854,6 +1937,7 @@ async function fetchAvailableGeminiModels(apiKey) {
     }
     models = set.size ? set : null;
   } catch (error) {
+    if (signal?.aborted || error?.code === "user_cancelled" || error?.name === "AbortError") throw new YeriGenerationCancelledError();
     // 조회 실패는 치명적이지 않다. 폴백 체인이 런타임에 걸러준다.
     console.warn("[yeri-hybrid] gemini ListModels failed", error?.status || error?.code || error?.message || "unknown");
     models = null;
@@ -2949,8 +3033,38 @@ function classifyYeriProviderError(provider, error) {
   });
 }
 
-function sleepMs(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+class YeriGenerationCancelledError extends Error {
+  constructor() {
+    super("user_cancelled");
+    this.code = "user_cancelled";
+    this.user_message = "사용자가 작업을 중단했습니다.";
+    this.cancelled = true;
+  }
+}
+
+function throwIfYeriGenerationCancelled(signal) {
+  if (signal?.aborted) throw new YeriGenerationCancelledError();
+}
+
+function sleepMs(ms, signal = null) {
+  throwIfYeriGenerationCancelled(signal);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
+    const settle = (settler, value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (signal) signal.removeEventListener("abort", onAbort);
+      settler(value);
+    };
+    const onAbort = () => settle(reject, new YeriGenerationCancelledError());
+    timer = setTimeout(() => settle(resolve), ms);
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) onAbort();
+    }
+  });
 }
 
 // transient(일시 오류/타임아웃/5xx/과부하) 분류 시에만 자동 재시도. 대기는 2초, 8초.
@@ -2959,14 +3073,16 @@ function sleepMs(ms) {
 const YERI_PROVIDER_RETRY_DELAYS_MS = [2000, 8000];
 
 async function requestYeriProviderJson(provider, rawUrl, options = {}) {
-  const { onTransientRetry, ...requestOptions } = options;
+  const { onTransientRetry, signal, ...requestOptions } = options;
   const maxAttemptsRaw = Number(YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
   const maxAttempts = Math.max(1, Math.min(5, Number.isFinite(maxAttemptsRaw) ? maxAttemptsRaw : 3));
   let lastError = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    throwIfYeriGenerationCancelled(signal);
     try {
-      return await requestExternalJson(rawUrl, requestOptions);
+      return await requestExternalJson(rawUrl, { ...requestOptions, signal });
     } catch (error) {
+      if (signal?.aborted || error?.code === "user_cancelled" || error?.name === "AbortError") throw new YeriGenerationCancelledError();
       const classified = classifyYeriProviderError(provider, error);
       lastError = classified;
       if (classified.transient && attempt < maxAttempts) {
@@ -2986,7 +3102,7 @@ async function requestYeriProviderJson(provider, rawUrl, options = {}) {
             // 재시도 로그 기록 실패가 생성 재시도 자체를 막으면 안 된다.
           }
         }
-        await sleepMs(delay);
+        await sleepMs(delay, signal);
         continue;
       }
       throw classified;
@@ -3001,7 +3117,7 @@ function appendJobLogById(jobId, userId, level, message) {
   try {
     const jobs = loadJobs();
     const job = jobs.jobs.find((item) => item.id === jobId && (!userId || item.user_id === userId));
-    if (!job) return false;
+    if (!job || job.status === "cancelled") return false;
     const now = nowIso();
     appendJobLog(job, level, message, now);
     job.updated_at = now;
@@ -3026,7 +3142,8 @@ function yeriTransientRetryLogger(provider, job, userId) {
   };
 }
 
-async function generateYeriGeminiArtifact(job, userId) {
+async function generateYeriGeminiArtifact(job, userId, signal = null) {
+  throwIfYeriGenerationCancelled(signal);
   const apiKey = getUserOrStoredSecret(userId, "gemini");
   if (!apiKey) {
     const error = new Error("yeri_gemini_key_missing");
@@ -3036,7 +3153,7 @@ async function generateYeriGeminiArtifact(job, userId) {
   const preferred = yeriServerGenerationTextModel(job.payload || {});
   // 사용자 키로 실제 가용 모델을 조회해(캐시) 이미 은퇴한 모델을 후보에서 미리 제거한다.
   // 조회 실패 시 candidates 는 선호+체인 원본이 되고, 런타임 실패가 다음 후보로 넘긴다.
-  const availableModels = await fetchAvailableGeminiModels(apiKey);
+  const availableModels = await fetchAvailableGeminiModels(apiKey, signal);
   const candidates = yeriGeminiModelCandidates(preferred, availableModels);
   const requestGemini = (targetModel) => requestYeriProviderJson("gemini", `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent`, {
     method: "POST",
@@ -3063,6 +3180,7 @@ async function generateYeriGeminiArtifact(job, userId) {
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
+    signal,
     onTransientRetry: yeriTransientRetryLogger("gemini", job, userId),
   });
   let response;
@@ -3102,7 +3220,8 @@ async function generateYeriGeminiArtifact(job, userId) {
   return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, usedModel, yeriGeminiUsage(response.json?.usageMetadata));
 }
 
-async function generateYeriOpenAiArtifact(job, userId) {
+async function generateYeriOpenAiArtifact(job, userId, signal = null) {
+  throwIfYeriGenerationCancelled(signal);
   const apiKey = getUserOrStoredSecret(userId, "openai");
   if (!apiKey) {
     const error = new Error("yeri_openai_key_missing");
@@ -3124,6 +3243,7 @@ async function generateYeriOpenAiArtifact(job, userId) {
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
+    signal,
     onTransientRetry: yeriTransientRetryLogger("openai", job, userId),
   });
   const text = extractOpenAiText(response.json);
@@ -3133,7 +3253,8 @@ async function generateYeriOpenAiArtifact(job, userId) {
   return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, model, yeriOpenAiUsage(response.json?.usage));
 }
 
-async function generateYeriClaudeArtifact(job, userId) {
+async function generateYeriClaudeArtifact(job, userId, signal = null) {
+  throwIfYeriGenerationCancelled(signal);
   const apiKey = getUserOrStoredSecret(userId, "claude");
   if (!apiKey) {
     const error = new Error("yeri_claude_key_missing");
@@ -3169,6 +3290,7 @@ async function generateYeriClaudeArtifact(job, userId) {
     },
     timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
     maxBytes: 1024 * 1024,
+    signal,
     onTransientRetry: yeriTransientRetryLogger("claude", job, userId),
   });
   const toolInput = extractClaudeToolInput(response.json, "emit_blog_post");
@@ -3190,17 +3312,18 @@ async function generateYeriClaudeArtifact(job, userId) {
   return sanitizeYeriGeneratedArtifact(parsed, job.payload || {}, model, yeriClaudeUsage(response.json?.usage));
 }
 
-async function generateYeriSelectedModelArtifact(job, userId) {
+async function generateYeriSelectedModelArtifact(job, userId, signal = null) {
   const provider = yeriAiProviderForModel(yeriSelectedModel(job.payload || {}));
-  if (provider === "openai") return generateYeriOpenAiArtifact(job, userId);
-  if (provider === "claude") return generateYeriClaudeArtifact(job, userId);
-  return generateYeriGeminiArtifact(job, userId);
+  if (provider === "openai") return generateYeriOpenAiArtifact(job, userId, signal);
+  if (provider === "claude") return generateYeriClaudeArtifact(job, userId, signal);
+  return generateYeriGeminiArtifact(job, userId, signal);
 }
 
 // 생성된 원고가 요청 분량을 벗어나면 같은 모델로 다시 다듬는다.
 // 재작성도 사용자 키로 과금되므로 상한을 둔다. 상한 안에서 못 맞추면 마지막 결과를 그대로 쓰되
 // 로그를 남겨 사용자와 운영이 "분량이 안 맞았다"는 사실을 볼 수 있게 한다.
-async function enforceYeriArtifactLength(artifact, job, userId) {
+async function enforceYeriArtifactLength(artifact, job, userId, signal = null) {
+  throwIfYeriGenerationCancelled(signal);
   const payload = job?.payload || {};
   const target = yeriPayloadWordCount(payload);
   let current = artifact;
@@ -3208,14 +3331,16 @@ async function enforceYeriArtifactLength(artifact, job, userId) {
   if (report.in_range) return current;
 
   for (let attempt = 1; attempt <= YERI_LENGTH_MAX_REWRITES; attempt += 1) {
+    throwIfYeriGenerationCancelled(signal);
     const revisionJob = {
       ...job,
       payload: { ...payload, __length_revision: { markdown: current.content_markdown, attempt } },
     };
     let revised;
     try {
-      revised = await generateYeriSelectedModelArtifact(revisionJob, userId);
+      revised = await generateYeriSelectedModelArtifact(revisionJob, userId, signal);
     } catch (error) {
+      if (signal?.aborted || error?.cancelled || error?.code === "user_cancelled") throw new YeriGenerationCancelledError();
       // 재작성 실패는 잡 실패로 올리지 않는다 — 본문은 이미 있고, 분량만 못 맞춘 상태다.
       console.warn("[yeri-length] rewrite failed", { job_id: job?.id, attempt, code: String(error?.code || error?.message || "") });
       appendJobLogById(job?.id, userId, "warn", `분량 보정 재작성에 실패해 직전 원고를 사용합니다. (${report.count}자 / 목표 ${report.target}자)`);
@@ -3330,6 +3455,20 @@ function buildFailureDiagnostic(input = {}) {
     input.context,
   ].filter(Boolean).join(" ");
   const text = rawText.toLowerCase();
+
+  if (/user_cancelled|사용자가 작업을 중단|사용자 취소/.test(text)) {
+    return {
+      code: "user_cancelled",
+      title: "사용자가 취소한 작업",
+      message: "사용자가 작업을 취소했습니다. 추가 조치가 필요하지 않습니다.",
+      user_actionable: false,
+      admin_action_required: false,
+      action_label: "",
+      actions: [],
+      stage,
+      reason,
+    };
+  }
 
   const diagnostic = {
     code: "admin_action_required",
@@ -3494,65 +3633,99 @@ function jobFailureDiagnostic(job) {
   });
 }
 
+function watchPersistedYeriCancellation(jobId, userId, controller) {
+  const poll = () => {
+    if (controller.signal.aborted) return;
+    try {
+      const current = loadJobs().jobs.find((item) => item.id === jobId && item.user_id === userId);
+      if (current?.status === "cancelled") controller.abort();
+    } catch (error) {
+      console.warn("[yeri-hybrid] cancellation poll failed", error?.code || error?.message || error);
+    }
+  };
+  const timer = setInterval(poll, YERI_GENERATION_CANCEL_POLL_MS);
+  if (typeof timer.unref === "function") timer.unref();
+  return () => clearInterval(timer);
+}
+
+let yeriGenerationFinalizationBarrier = null;
+
+async function finalizeYeriArtifactForJob(jobId, userId, artifact, signal) {
+  if (typeof yeriGenerationFinalizationBarrier === "function") {
+    await yeriGenerationFinalizationBarrier({ jobId, userId });
+  }
+  const result = mutateJobsWithLock((jobs) => {
+    const target = jobs.jobs.find((item) => item.id === jobId && item.user_id === userId);
+    if (!target) return { save: false, error: "job_not_found" };
+    if (signal?.aborted || target.status === "cancelled") {
+      return { save: false, error: "user_cancelled", cancelled: true, status: target.status };
+    }
+    if (target.status !== "generating") return { save: false, error: "job_state_changed", status: target.status };
+    const meta = attachYeriArtifactToJob(target, artifact);
+    target.status = "ready_for_publish";
+    target.updated_at = nowIso();
+    appendJobLog(target, "info", `서버 글 생성이 완료되었습니다. artifact=${meta.artifact_id}`, target.updated_at);
+    return { job: target, artifact: meta };
+  });
+  if (result.cancelled) discardYeriArtifact(jobId);
+  return result;
+}
+
 async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenerationMode()) {
   const jobs = loadJobs();
   const job = jobs.jobs.find((item) => item.id === jobId && item.user_id === userId);
   if (!job || job.kind !== "yeri_write") return { ok: false, error: "job_not_found" };
   if (job.status !== "generating") return { ok: false, error: "job_not_generating", status: job.status };
+  const controller = new AbortController();
+  yeriGenerationControllers.set(jobId, controller);
+  const stopCancellationPoll = watchPersistedYeriCancellation(jobId, userId, controller);
   try {
+    throwIfYeriGenerationCancelled(controller.signal);
     const artifact = mode === "mock"
-      ? buildYeriMockArtifact(job)
-      : await enforceYeriArtifactLength(await generateYeriSelectedModelArtifact(job, userId), job, userId);
-    // 긴 await 동안 다른 핸들러/스윕이 jobs.json 을 바꿨을 수 있으므로, 저장 직전 재로드해
-    // 해당 잡만 in-place 패치한다(전체 스냅샷 덮어쓰기로 동시 변경을 잃거나 좀비를 되살리는 것 방지).
-    const fresh = loadJobs();
-    const target = fresh.jobs.find((item) => item.id === jobId && item.user_id === userId);
-    if (!target) return { ok: false, error: "job_not_found" };
-    if (target.status !== "generating") return { ok: false, error: "job_state_changed", status: target.status };
-    const meta = attachYeriArtifactToJob(target, artifact);
-    target.status = "ready_for_publish";
-    target.updated_at = nowIso();
-    appendJobLog(target, "info", `서버 글 생성이 완료되었습니다. artifact=${meta.artifact_id}`, target.updated_at);
-    saveJobs(fresh);
-    return { ok: true, job: target, artifact: meta };
+      ? (await sleepMs(Math.max(0, Number(process.env.AIMAX_YERI_SERVER_GENERATION_MOCK_DELAY_MS || 0)), controller.signal), buildYeriMockArtifact(job))
+      : await enforceYeriArtifactLength(
+        await generateYeriSelectedModelArtifact(job, userId, controller.signal), job, userId, controller.signal,
+      );
+    const finalized = await finalizeYeriArtifactForJob(jobId, userId, artifact, controller.signal);
+    if (finalized.cancelled) return { ok: false, error: "user_cancelled", cancelled: true };
+    if (finalized.error) return { ok: false, error: finalized.error, status: finalized.status };
+    return { ok: true, job: finalized.job, artifact: finalized.artifact };
   } catch (error) {
+    if (error?.cancelled || error?.code === "user_cancelled" || controller.signal.aborted) {
+      return { ok: false, error: "user_cancelled", cancelled: true };
+    }
     const failureCode = yeriGenerationFailureCode(error);
     const failureMessage = yeriGenerationFailureMessage(error);
     const provider = error?.provider || yeriAiProviderForModel(yeriSelectedModel(job.payload || {}));
     const model = yeriServerGenerationTextModel(job.payload || {});
-    const fresh = loadJobs();
-    const target = fresh.jobs.find((item) => item.id === jobId && item.user_id === userId);
-    if (!target) return { ok: false, error: failureCode };
-    if (target.status !== "generating") return { ok: false, error: failureCode, status: target.status };
-    target.status = "failed";
-    target.failed_stage = YERI_CONTENT_GENERATION_STAGE;
-    target.failed_reason = failureCode;
-    target.diagnostic = buildFailureDiagnostic({
-      stage: YERI_CONTENT_GENERATION_STAGE,
-      reason: failureCode,
-      error: failureCode,
-      visible_error: failureMessage,
+    const failure = mutateJobsWithLock((lockedJobs) => {
+      const target = lockedJobs.jobs.find((item) => item.id === jobId && item.user_id === userId);
+      if (!target) return { save: false, error: "job_not_found" };
+      if (target.status !== "generating") return { save: false, error: failureCode, status: target.status };
+      target.status = "failed";
+      target.failed_stage = YERI_CONTENT_GENERATION_STAGE;
+      target.failed_reason = failureCode;
+      target.diagnostic = buildFailureDiagnostic({ stage: YERI_CONTENT_GENERATION_STAGE, reason: failureCode, error: failureCode, visible_error: failureMessage });
+      target.result = {
+        ok: false, stage: YERI_CONTENT_GENERATION_STAGE, error: failureCode, visible_error: failureMessage,
+        provider: String(provider || "").slice(0, 40), model: String(model || "").slice(0, 80),
+        provider_status: Number(error?.status || 0), transient: Boolean(error?.transient),
+        detail_code: String(error?.code || "").slice(0, 120), detail: redactText(String(error?.detail || "")).slice(0, 400),
+        diagnostic: target.diagnostic,
+      };
+      target.finished_at = nowIso();
+      target.updated_at = target.finished_at;
+      delete target.claim_expires_at;
+      appendJobLog(target, "error", `서버 글 생성에 실패했습니다: ${failureMessage}`, target.updated_at);
+      return { job: target };
     });
-    target.result = {
-      ok: false,
-      stage: YERI_CONTENT_GENERATION_STAGE,
-      error: failureCode,
-      visible_error: failureMessage,
-      provider: String(provider || "").slice(0, 40),
-      model: String(model || "").slice(0, 80),
-      provider_status: Number(error?.status || 0),
-      transient: Boolean(error?.transient),
-      detail_code: String(error?.code || "").slice(0, 120),
-      detail: redactText(String(error?.detail || "")).slice(0, 400),
-      diagnostic: target.diagnostic,
-    };
-    target.finished_at = nowIso();
-    target.updated_at = target.finished_at;
-    delete target.claim_expires_at;
-    appendJobLog(target, "error", `서버 글 생성에 실패했습니다: ${failureMessage}`, target.updated_at);
-    saveJobs(fresh);
+    if (failure.error) return { ok: false, error: failure.error, status: failure.status };
+    const target = failure.job;
     recordJobFailureGuard(target);
     return { ok: false, error: failureCode, job: target };
+  } finally {
+    stopCancellationPoll();
+    yeriGenerationControllers.delete(jobId);
   }
 }
 
@@ -3766,14 +3939,68 @@ function saveAgents(data) {
 
 function loadCommands() {
   const data = readJsonFile(COMMANDS_PATH, { version: 1, commands: [] });
-  return {
-    version: 1,
-    commands: arrayFieldOrThrow(COMMANDS_PATH, data, "commands"),
-  };
+  const snapshot = { version: 1, commands: arrayFieldOrThrow(COMMANDS_PATH, data, "commands") };
+  commandsSnapshots.set(snapshot, commandsFingerprint(snapshot));
+  return snapshot;
+}
+
+function commandsFingerprint(data) {
+  return crypto.createHash("sha256")
+    .update(JSON.stringify({ version: 1, commands: arrayFieldOrThrow(COMMANDS_PATH, data, "commands") }))
+    .digest("hex");
+}
+
+const COMMANDS_LOCK_PATH = path.join(DATA_DIR, "agent-commands.lock");
+
+function withCommandsStorageLockSync(mutator) {
+  if (commandsLockHeld) throw makeJsonStorageError(COMMANDS_PATH, "json_lock_reentrant", "commands_lock_reentrant");
+  fs.mkdirSync(path.dirname(COMMANDS_LOCK_PATH), { recursive: true });
+  let fd = null;
+  let owner = null;
+  try {
+    fd = fs.openSync(COMMANDS_LOCK_PATH, "wx", 0o600);
+    owner = fs.fstatSync(fd);
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+    throw makeJsonStorageError(COMMANDS_PATH, "json_lock_busy", "commands_lock_busy");
+  }
+  commandsLockHeld = true;
+  try {
+    fs.writeFileSync(fd, `${process.pid}\n`, "utf8");
+    return mutator();
+  } finally {
+    commandsLockHeld = false;
+    try { fs.closeSync(fd); } finally {
+      try {
+        const currentOwner = fs.statSync(COMMANDS_LOCK_PATH);
+        if (currentOwner.dev === owner.dev && currentOwner.ino === owner.ino) fs.unlinkSync(COMMANDS_LOCK_PATH);
+      } catch (_unlockError) {}
+    }
+  }
+}
+
+function saveCommandsLocked(data) {
+  if (!commandsLockHeld) throw makeJsonStorageError(COMMANDS_PATH, "json_lock_required", "commands_lock_required");
+  const expected = commandsSnapshots.get(data);
+  const current = readJsonFile(COMMANDS_PATH, { version: 1, commands: [] });
+  if (!expected || expected !== commandsFingerprint(current)) {
+    throw makeJsonStorageError(COMMANDS_PATH, "json_write_conflict", "commands_snapshot_changed_reload_required");
+  }
+  writeJsonAtomic(COMMANDS_PATH, { version: 1, commands: arrayFieldOrThrow(COMMANDS_PATH, data, "commands") });
+  commandsSnapshots.set(data, commandsFingerprint(data));
 }
 
 function saveCommands(data) {
-  writeJsonAtomic(COMMANDS_PATH, { version: 1, commands: arrayFieldOrThrow(COMMANDS_PATH, data, "commands") });
+  return withCommandsStorageLockSync(() => saveCommandsLocked(data));
+}
+
+function mutateCommandsWithLock(mutator) {
+  return withCommandsStorageLockSync(() => {
+    const commands = loadCommands();
+    const result = mutator(commands);
+    if (result?.save !== false) saveCommandsLocked(commands);
+    return result;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -5145,7 +5372,35 @@ function requestExternalJson(rawUrl, options = {}) {
     ? ""
     : (typeof options.body === "string" ? options.body : JSON.stringify(options.body));
   return new Promise((resolve, reject) => {
-    const req = https.request(parsed, {
+    let req;
+    let response;
+    let settled = false;
+    const signal = options.signal;
+    const cleanup = () => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+    };
+    const settleResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(value);
+    };
+    const settleReject = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+    const onAbort = () => {
+      if (settled) return;
+      const error = new YeriGenerationCancelledError();
+      settled = true;
+      cleanup();
+      reject(error);
+      if (response && typeof response.destroy === "function") response.destroy(error);
+      if (req && typeof req.destroy === "function") req.destroy(error);
+    };
+    req = https.request(parsed, {
       method: options.method || "GET",
       timeout: options.timeoutMs || 30000,
       headers: {
@@ -5154,18 +5409,24 @@ function requestExternalJson(rawUrl, options = {}) {
         ...(options.headers || {}),
       },
     }, (res) => {
+      response = res;
+      res.on("error", settleReject);
       const chunks = [];
       let total = 0;
       const maxBytes = options.maxBytes || 2 * 1024 * 1024;
       res.on("data", (chunk) => {
+        if (settled) return;
         total += chunk.length;
         if (total > maxBytes) {
-          req.destroy(blockedResearchFetchError("external_response_too_large", "외부 응답 크기가 너무 큽니다."));
+          const error = blockedResearchFetchError("external_response_too_large", "외부 응답 크기가 너무 큽니다.");
+          req.destroy(error);
+          settleReject(error);
           return;
         }
         chunks.push(chunk);
       });
       res.on("end", () => {
+        if (settled) return;
         const text = Buffer.concat(chunks).toString("utf8");
         let parsedJson = null;
         try {
@@ -5178,10 +5439,10 @@ function requestExternalJson(rawUrl, options = {}) {
           error.status = Number(res.statusCode || 0);
           const redactedDetail = redactValue("external_response", parsedJson || text);
           error.detail = (typeof redactedDetail === "string" ? redactedDetail : JSON.stringify(redactedDetail || {})).slice(0, 500);
-          reject(error);
+          settleReject(error);
           return;
         }
-        resolve({
+        settleResolve({
           status: Number(res.statusCode || 0),
           headers: res.headers,
           text,
@@ -5189,8 +5450,17 @@ function requestExternalJson(rawUrl, options = {}) {
         });
       });
     });
-    req.on("timeout", () => req.destroy(blockedResearchFetchError("external_timeout", "외부 API 요청 시간이 초과되었습니다.")));
-    req.on("error", reject);
+    req.on("timeout", () => {
+      if (settled) return;
+      const error = blockedResearchFetchError("external_timeout", "외부 API 요청 시간이 초과되었습니다.");
+      req.destroy(error);
+      settleReject(error);
+    });
+    req.on("error", settleReject);
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (signal.aborted) return onAbort();
+    }
     if (bodyText) req.write(bodyText);
     req.end();
   });
@@ -12494,11 +12764,33 @@ function jsonStorageHealth() {
       });
     }
   }
+  const inspectLock = (lockPath, label) => {
+    const state = { present: false, owner_pid: null, age_ms: null, inspect_error: "" };
+    try {
+      if (!fs.existsSync(lockPath)) return state;
+      const stat = fs.statSync(lockPath);
+      const ownerPid = Number.parseInt(fs.readFileSync(lockPath, "utf8").trim(), 10);
+      state.present = true;
+      state.owner_pid = Number.isSafeInteger(ownerPid) && ownerPid > 0 ? ownerPid : null;
+      state.age_ms = Math.max(0, Date.now() - stat.mtimeMs);
+      issues.push({ file: label, code: `${label.replace(".", "_")}_present`, message: `${label.replace(".", "_")}_present_requires_owner_inspection` });
+    } catch (error) {
+      state.present = true;
+      state.inspect_error = String(error?.code || error?.message || "lock_inspection_failed").slice(0, 160);
+      issues.push({ file: label, code: `${label.replace(".", "_")}_inspection_failed`, message: state.inspect_error });
+    }
+    return state;
+  };
+  const jobsLock = inspectLock(JOBS_LOCK_PATH, "jobs.lock");
+  const commandsLock = inspectLock(COMMANDS_LOCK_PATH, "agent-commands.lock");
   return {
     ok: issues.length === 0,
     checked_files: checkedFiles,
     issues,
     recent_issues: recentStorageIssues.slice(-5),
+    jobs_lock: jobsLock,
+    commands_lock: commandsLock,
+    locks: { jobs: jobsLock, commands: commandsLock },
   };
 }
 
@@ -18563,56 +18855,85 @@ async function handleCancelJob(req, res, jobId) {
   if (!auth) return;
   const body = await readJsonBody(req, res);
   if (!body) return;
-  const jobs = loadJobs();
-  const job = jobs.jobs.find((item) => item.id === jobId && item.user_id === auth.user.id);
-  if (!job || !jobVisibleToUser(job, auth.user)) {
+  const result = mutateJobsWithLock((lockedJobs) => {
+    const target = lockedJobs.jobs.find((item) => item.id === jobId && item.user_id === auth.user.id);
+    if (!target || !jobVisibleToUser(target, auth.user)) return { error: "job_not_found", save: false };
+    if (TERMINAL_JOB_STATUSES.has(target.status)) {
+      return {
+        job: target,
+        already_terminal: true,
+        needs_stop_command: target.status === "cancelled"
+          && (target.cancel_stop_command_required === true || Boolean(target.cancel_stop_command_id)),
+        save: false,
+      };
+    }
+    const now = nowIso();
+    const previousStatus = String(target.status || "");
+    const needsStopCommand = ["running", "ready_for_publish", "generating"].includes(previousStatus);
+    target.status = "cancelled";
+    target.cancelled_at = now;
+    target.finished_at = target.finished_at || now;
+    target.updated_at = now;
+    target.failed_stage = target.failed_stage || "user_cancelled";
+    target.failed_reason = "사용자가 작업을 중단했습니다.";
+    target.cancel_stop_command_required = needsStopCommand;
+    target.logs = target.logs || [];
+    target.logs.push({ at: now, level: "warn", message: redactText(body.reason || "사용자가 작업을 중단했습니다.") });
+    return { job: target, needs_stop_command: needsStopCommand, discard_artifact: previousStatus === "generating" };
+  });
+  if (result.error === "job_not_found") {
     json(req, res, 404, { ok: false, error: "job_not_found" });
     return;
   }
-  if (TERMINAL_JOB_STATUSES.has(job.status)) {
-    json(req, res, 200, { ok: true, job: publicJob(job), command: null, already_terminal: true });
-    return;
-  }
-
-  const now = nowIso();
-  const previousStatus = String(job.status || "");
-  job.status = "cancelled";
-  job.cancelled_at = now;
-  job.finished_at = job.finished_at || now;
-  job.updated_at = now;
-  job.failed_stage = job.failed_stage || "user_cancelled";
-  job.failed_reason = "사용자가 작업을 중단했습니다.";
-  job.logs = job.logs || [];
-  job.logs.push({
-    at: now,
-    level: "warn",
-    message: redactText(body.reason || "사용자가 작업을 중단했습니다."),
-  });
-
+  if (!result.already_terminal && result.discard_artifact) discardYeriArtifact(result.job.id);
+  const generationController = yeriGenerationControllers.get(result.job.id);
+  if (generationController) generationController.abort();
   let command = null;
-  if (["running", "ready_for_publish", "generating"].includes(previousStatus)) {
-    const commands = loadCommands();
-    command = {
-      id: crypto.randomUUID(),
-      user_id: auth.user.id,
-      type: "stop_current_job",
-      status: "queued",
-      target_platform: normalizePlatform(job.target_platform || body.target_platform || ""),
-      target_device_label: String(job.target_device_label || body.target_device_label || "").trim().slice(0, 120),
-      payload: {
-        job_id: job.id,
-        reason: compactText(body.reason || "user_cancelled", 120),
-      },
-      logs: [{ at: now, level: "info", message: "작업 중단 명령이 생성되었습니다." }],
-      created_at: now,
-      updated_at: now,
-    };
-    commands.commands.push(command);
-    saveCommands(commands);
+  if (result.needs_stop_command) {
+    command = mutateCommandsWithLock((commands) => {
+      const existing = commands.commands.find((item) => (
+        item.user_id === auth.user.id && item.type === "stop_current_job"
+        && item.payload?.job_id === result.job.id && item.status !== "failed"
+      ));
+      if (existing) {
+        // next-command marks delivery before its HTTP response is received.  A
+        // user who explicitly cancels again is asking us to repair that
+        // unacknowledged hand-off, not to create another stop command.  Do not
+        // touch commands for another job, nor completed/failed commands.
+        if (existing.status === "delivered" && !existing.finished_at) {
+          const now = nowIso();
+          existing.status = "queued";
+          delete existing.assigned_at;
+          existing.updated_at = now;
+          existing.logs = existing.logs || [];
+          existing.logs.push({ at: now, level: "warn", message: "사용자 재취소로 확인되지 않은 중단 명령을 다시 전달합니다." });
+        }
+        return { command: existing };
+      }
+      const now = nowIso();
+      const created = {
+        id: crypto.randomUUID(), user_id: auth.user.id, type: "stop_current_job", status: "queued",
+        target_platform: normalizePlatform(result.job.target_platform || body.target_platform || ""),
+        target_device_label: String(result.job.target_device_label || body.target_device_label || "").trim().slice(0, 120),
+        payload: { job_id: result.job.id, reason: compactText(body.reason || "user_cancelled", 120) },
+        logs: [{ at: now, level: "info", message: "작업 중단 명령이 생성되었습니다." }], created_at: now, updated_at: now,
+      };
+      commands.commands.push(created);
+      return { command: created };
+    }).command;
+    mutateJobsWithLock((lockedJobs) => {
+      const target = lockedJobs.jobs.find((item) => item.id === result.job.id && item.user_id === auth.user.id);
+      if (!target || target.status !== "cancelled") return { save: false };
+      target.cancel_stop_command_required = false;
+      target.cancel_stop_command_id = command.id;
+      target.updated_at = nowIso();
+      return { job: target };
+    });
   }
-
-  saveJobs(jobs);
-  json(req, res, 200, { ok: true, job: publicJob(job), command: command ? publicCommand(command) : null });
+  json(req, res, 200, {
+    ok: true, job: publicJob(result.job), command: command ? publicCommand(command) : null,
+    already_terminal: Boolean(result.already_terminal),
+  });
 }
 
 async function handleRetryJob(req, res, jobId) {
@@ -19446,7 +19767,7 @@ function serveResearchHtml(req, res, url) {
   fs.createReadStream(filePath).pipe(res);
 }
 
-function route(req, res) {
+async function route(req, res) {
   if (req.method === "OPTIONS") {
     res.writeHead(204, corsHeaders(req));
     res.end();
@@ -19507,16 +19828,14 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/user/writing-style") {
-    handleSetWritingStyle(req, res);
-    return;
+    return handleSetWritingStyle(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/user/secrets") {
     handleUserSecrets(req, res);
     return;
   }
   if (req.method === "PUT" && url.pathname.startsWith("/api/user/secrets/")) {
-    handlePutUserSecret(req, res, decodeURIComponent(url.pathname.slice("/api/user/secrets/".length)));
-    return;
+    return handlePutUserSecret(req, res, decodeURIComponent(url.pathname.slice("/api/user/secrets/".length)));
   }
   if (req.method === "DELETE" && url.pathname.startsWith("/api/user/secrets/")) {
     handleDeleteUserSecret(req, res, decodeURIComponent(url.pathname.slice("/api/user/secrets/".length)));
@@ -19527,20 +19846,17 @@ function route(req, res) {
     return;
   }
   if (req.method === "GET" && url.pathname === "/api/tax/settings") {
-    runTaxEndpoint(req, res, () => handleGetTaxSettings(req, res));
-    return;
+    return runTaxEndpoint(req, res, () => handleGetTaxSettings(req, res));
   }
   if (req.method === "PUT" && url.pathname === "/api/tax/settings") {
-    runTaxEndpoint(req, res, () => handlePutTaxSettings(req, res));
-    return;
+    return runTaxEndpoint(req, res, () => handlePutTaxSettings(req, res));
   }
   if (req.method === "GET" && url.pathname === "/api/tax/invoices") {
     runTaxEndpoint(req, res, () => handleListTaxInvoices(req, res));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/tax/invoices") {
-    runTaxEndpoint(req, res, () => handleCreateTaxInvoice(req, res));
-    return;
+    return runTaxEndpoint(req, res, () => handleCreateTaxInvoice(req, res));
   }
   const taxInvoiceRoute = /^\/api\/tax\/invoices\/([^/]+)(?:\/(preflight|issue|sync))?$/.exec(url.pathname);
   if (taxInvoiceRoute) {
@@ -19551,16 +19867,13 @@ function route(req, res) {
       return;
     }
     if (req.method === "POST" && action === "preflight") {
-      runTaxEndpoint(req, res, () => handleTaxInvoicePreflight(req, res, invoiceId));
-      return;
+      return runTaxEndpoint(req, res, () => handleTaxInvoicePreflight(req, res, invoiceId));
     }
     if (req.method === "POST" && action === "issue") {
-      runTaxEndpoint(req, res, () => handleIssueTaxInvoice(req, res, invoiceId));
-      return;
+      return runTaxEndpoint(req, res, () => handleIssueTaxInvoice(req, res, invoiceId));
     }
     if (req.method === "POST" && action === "sync") {
-      runTaxEndpoint(req, res, () => handleSyncTaxInvoice(req, res, invoiceId));
-      return;
+      return runTaxEndpoint(req, res, () => handleSyncTaxInvoice(req, res, invoiceId));
     }
   }
   if (req.method === "GET" && url.pathname === "/api/research/projects") {
@@ -19572,28 +19885,24 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/research/storage") {
-    handleUpdateResearchStorage(req, res);
-    return;
+    return handleUpdateResearchStorage(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/research/discovery") {
     handleListResearchDiscovery(req, res, url);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/research/discovery/search") {
-    handleRunResearchDiscovery(req, res);
-    return;
+    return handleRunResearchDiscovery(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/research/discovery/subscriptions") {
     handleListResearchDiscoverySubscriptions(req, res, url);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/research/discovery/subscriptions") {
-    handleCreateResearchDiscoverySubscription(req, res);
-    return;
+    return handleCreateResearchDiscoverySubscription(req, res);
   }
   if (req.method === "PATCH" && url.pathname.startsWith("/api/research/discovery/subscriptions/")) {
-    handleUpdateResearchDiscoverySubscription(req, res, decodeURIComponent(url.pathname.slice("/api/research/discovery/subscriptions/".length)));
-    return;
+    return handleUpdateResearchDiscoverySubscription(req, res, decodeURIComponent(url.pathname.slice("/api/research/discovery/subscriptions/".length)));
   }
   if (req.method === "DELETE" && url.pathname.startsWith("/api/research/discovery/subscriptions/")) {
     handleDeleteResearchDiscoverySubscription(req, res, decodeURIComponent(url.pathname.slice("/api/research/discovery/subscriptions/".length)));
@@ -19601,21 +19910,17 @@ function route(req, res) {
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/research/discovery/candidates/") && url.pathname.endsWith("/import")) {
     const candidateId = decodeURIComponent(url.pathname.slice("/api/research/discovery/candidates/".length, -"/import".length));
-    handleImportResearchDiscoveryCandidate(req, res, candidateId);
-    return;
+    return handleImportResearchDiscoveryCandidate(req, res, candidateId);
   }
   if (req.method === "POST" && url.pathname === "/api/research/projects") {
-    handleCreateResearchProject(req, res);
-    return;
+    return handleCreateResearchProject(req, res);
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/research/projects/") && url.pathname.endsWith("/profile/apify")) {
     const projectId = decodeURIComponent(url.pathname.slice("/api/research/projects/".length, -"/profile/apify".length));
-    handleRunResearchProfileApify(req, res, projectId);
-    return;
+    return handleRunResearchProfileApify(req, res, projectId);
   }
   if (req.method === "PATCH" && url.pathname.startsWith("/api/research/projects/")) {
-    handleUpdateResearchProject(req, res, decodeURIComponent(url.pathname.slice("/api/research/projects/".length)));
-    return;
+    return handleUpdateResearchProject(req, res, decodeURIComponent(url.pathname.slice("/api/research/projects/".length)));
   }
   if (req.method === "DELETE" && url.pathname.startsWith("/api/research/projects/")) {
     handleDeleteResearchProject(req, res, decodeURIComponent(url.pathname.slice("/api/research/projects/".length)));
@@ -19626,8 +19931,7 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/research/items") {
-    handleCreateResearchItem(req, res);
-    return;
+    return handleCreateResearchItem(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/research/brief") {
     handleResearchBrief(req, res, url);
@@ -19635,30 +19939,25 @@ function route(req, res) {
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/research/items/") && url.pathname.endsWith("/yunmi-script")) {
     const itemId = decodeURIComponent(url.pathname.slice("/api/research/items/".length, -"/yunmi-script".length));
-    handleCreateYunmiFromResearchItem(req, res, itemId);
-    return;
+    return handleCreateYunmiFromResearchItem(req, res, itemId);
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/research/items/") && url.pathname.endsWith("/apify")) {
     const itemId = decodeURIComponent(url.pathname.slice("/api/research/items/".length, -"/apify".length));
-    handleRunResearchApify(req, res, itemId);
-    return;
+    return handleRunResearchApify(req, res, itemId);
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/research/items/") && url.pathname.endsWith("/ai-analysis")) {
     const itemId = decodeURIComponent(url.pathname.slice("/api/research/items/".length, -"/ai-analysis".length));
-    handleRunResearchAiAnalysis(req, res, itemId);
-    return;
+    return handleRunResearchAiAnalysis(req, res, itemId);
   }
   if (req.method === "PATCH" && url.pathname.startsWith("/api/research/items/")) {
-    handleUpdateResearchItem(req, res, decodeURIComponent(url.pathname.slice("/api/research/items/".length)));
-    return;
+    return handleUpdateResearchItem(req, res, decodeURIComponent(url.pathname.slice("/api/research/items/".length)));
   }
   if (req.method === "GET" && url.pathname === "/api/downloads/options") {
     handleDownloadOptions(req, res);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/downloads/tickets") {
-    handleCreateDownloadTicket(req, res);
-    return;
+    return handleCreateDownloadTicket(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/eunseo/launch") {
     handleCreateEunseoLaunch(req, res);
@@ -19670,8 +19969,7 @@ function route(req, res) {
   }
   // localhost 전용. Caddy handle 목록에 추가하지 않는다.
   if (req.method === "POST" && url.pathname === "/api/internal/scriptbot/verify") {
-    handleScriptbotVerify(req, res);
-    return;
+    return handleScriptbotVerify(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/downloads/agent") {
     handleDownloadAgent(req, res);
@@ -19687,60 +19985,47 @@ function route(req, res) {
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/reports/") && url.pathname.endsWith("/response")) {
     const rawId = url.pathname.slice("/api/reports/".length, -"/response".length);
-    handleReportUserResponse(req, res, decodeURIComponent(rawId));
-    return;
+    return handleReportUserResponse(req, res, decodeURIComponent(rawId));
   }
   if (req.method === "POST" && url.pathname === "/api/reports") {
-    handleReport(req, res);
-    return;
+    return handleReport(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/integrations/cafe24/orders") {
-    handleCafe24OrderWebhook(req, res);
-    return;
+    return handleCafe24OrderWebhook(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/integrations/cafe24/partner-attribution") {
-    handleCafe24PartnerAttribution(req, res);
-    return;
+    return handleCafe24PartnerAttribution(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/integrations/cafe24/oauth/callback") {
     handleCafe24OauthCallback(req, res, url);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/provision") {
-    handleAdminProvisionUser(req, res);
-    return;
+    return handleAdminProvisionUser(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/send-guide") {
-    handleAdminSendGuideEmail(req, res);
-    return;
+    return handleAdminSendGuideEmail(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/send-guides-batch") {
-    handleAdminSendGuideEmailsBatch(req, res);
-    return;
+    return handleAdminSendGuideEmailsBatch(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/provision-batch") {
-    handleAdminProvisionBatch(req, res);
-    return;
+    return handleAdminProvisionBatch(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/grant-product") {
-    handleAdminGrantProduct(req, res);
-    return;
+    return handleAdminGrantProduct(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/secret-status") {
-    handleAdminUserSecretStatus(req, res);
-    return;
+    return handleAdminUserSecretStatus(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/setup-links") {
-    handleAdminCreateSetupLinks(req, res);
-    return;
+    return handleAdminCreateSetupLinks(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/expire") {
-    handleAdminExpireUser(req, res);
-    return;
+    return handleAdminExpireUser(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/users/delete") {
-    handleAdminDeleteUser(req, res);
-    return;
+    return handleAdminDeleteUser(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/admin/users") {
     handleAdminListUsers(req, res);
@@ -19751,24 +20036,19 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/admin/cafe24-orders/update") {
-    handleAdminUpdateCafe24Order(req, res);
-    return;
+    return handleAdminUpdateCafe24Order(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/cafe24-orders/retry") {
-    handleAdminRetryCafe24Orders(req, res);
-    return;
+    return handleAdminRetryCafe24Orders(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/cafe24-orders/provision") {
-    handleAdminProvisionCafe24Orders(req, res);
-    return;
+    return handleAdminProvisionCafe24Orders(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/cafe24-orders/send-guides") {
-    handleAdminSendCafe24Guides(req, res);
-    return;
+    return handleAdminSendCafe24Guides(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/login") {
-    handleAdminLogin(req, res);
-    return;
+    return handleAdminLogin(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/admin/logout") {
     handleAdminLogout(req, res);
@@ -19783,8 +20063,7 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/admin/alerts/telegram/test") {
-    handleAdminTelegramTest(req, res);
-    return;
+    return handleAdminTelegramTest(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/admin/automation-tickets") {
     handleAdminListAutomationTickets(req, res, url);
@@ -19796,16 +20075,14 @@ function route(req, res) {
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/admin/reports/") && url.pathname.endsWith("/status")) {
     const rawId = url.pathname.slice("/api/admin/reports/".length, -"/status".length);
-    handleAdminUpdateReportStatus(req, res, decodeURIComponent(rawId));
-    return;
+    return handleAdminUpdateReportStatus(req, res, decodeURIComponent(rawId));
   }
   if (req.method === "GET" && url.pathname.startsWith("/api/admin/reports/")) {
     handleAdminGetReport(req, res, decodeURIComponent(url.pathname.slice("/api/admin/reports/".length)));
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/auth/login") {
-    handleLogin(req, res);
-    return;
+    return handleLogin(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/auth/me") {
     handleMe(req, res);
@@ -19816,12 +20093,10 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/auth/setup-password") {
-    handleSetupPassword(req, res);
-    return;
+    return handleSetupPassword(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/auth/change-password") {
-    handleChangePassword(req, res);
-    return;
+    return handleChangePassword(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/auth/logout") {
     handleLogout(req, res);
@@ -19832,12 +20107,10 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/agent/heartbeat") {
-    handleAgentHeartbeat(req, res);
-    return;
+    return handleAgentHeartbeat(req, res);
   }
   if (req.method === "POST" && url.pathname === "/api/agent/commands") {
-    handleCreateAgentCommand(req, res);
-    return;
+    return handleCreateAgentCommand(req, res);
   }
   if (req.method === "GET" && url.pathname.startsWith("/api/agent/commands/")) {
     handleGetAgentCommand(req, res, decodeURIComponent(url.pathname.slice("/api/agent/commands/".length)));
@@ -19848,49 +20121,64 @@ function route(req, res) {
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/agent/commands/update") {
-    handleAgentCommandUpdate(req, res);
-    return;
+    return handleAgentCommandUpdate(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/agent/next-job") {
     handleAgentNextJob(req, res);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/agent/jobs/update") {
-    handleAgentJobUpdate(req, res);
-    return;
+    return handleAgentJobUpdate(req, res);
   }
   if (req.method === "GET" && url.pathname === "/api/jobs/guards") {
     handleListJobGuards(req, res);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/jobs/guard/acknowledge") {
-    handleAcknowledgeJobGuard(req, res);
-    return;
+    return handleAcknowledgeJobGuard(req, res);
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/jobs/") && url.pathname.endsWith("/retry")) {
     const rawId = url.pathname.slice("/api/jobs/".length, -"/retry".length);
-    handleRetryJob(req, res, decodeURIComponent(rawId));
-    return;
+    return handleRetryJob(req, res, decodeURIComponent(rawId));
   }
   if (req.method === "POST" && url.pathname.startsWith("/api/jobs/") && url.pathname.endsWith("/cancel")) {
     const rawId = url.pathname.slice("/api/jobs/".length, -"/cancel".length);
-    handleCancelJob(req, res, decodeURIComponent(rawId));
-    return;
+    return handleCancelJob(req, res, decodeURIComponent(rawId));
   }
   if (req.method === "GET" && url.pathname === "/api/jobs") {
     handleListJobs(req, res);
     return;
   }
   if (req.method === "POST" && url.pathname === "/api/jobs") {
-    handleCreateJob(req, res);
-    return;
+    return handleCreateJob(req, res);
   }
   json(req, res, 404, { ok: false, error: "not_found" });
 }
 
-function startServer() {
-  ensureDirs();
-  recoverStaleGeneratingJobs();
+function dispatchApiRequest(req, res) {
+  return Promise.resolve().then(() => route(req, res)).catch((error) => {
+    console.error("request_error", error);
+    if (res.headersSent) return;
+    if (isJsonStorageError(error)) {
+      json(req, res, 503, {
+        ok: false,
+        error: "storage_unavailable",
+        code: error.code || "json_storage_error",
+        file: error.file_label || "unknown",
+      });
+      return;
+    }
+    json(req, res, 500, { ok: false, error: "internal_error" });
+  });
+}
+
+function runStartupJobRecovery() {
+  try {
+    recoverStaleGeneratingJobs();
+  } catch (error) {
+    // A retained lock is inspected through health; it must not keep the HTTP API offline.
+    console.error("recoverStaleGeneratingJobs boot sweep failed", error);
+  }
   // 기존 running/ready_for_publish 좀비(러너 중단)도 부팅 시 1회 정리
   try {
     const bootJobs = loadJobs();
@@ -19898,21 +20186,13 @@ function startServer() {
   } catch (error) {
     console.error("failStaleRunningJobs boot sweep failed", error);
   }
+}
+
+function startServer() {
+  ensureDirs();
+  runStartupJobRecovery();
   const server = http.createServer((req, res) => {
-    Promise.resolve(route(req, res)).catch((error) => {
-      console.error("request_error", error);
-      if (res.headersSent) return;
-      if (isJsonStorageError(error)) {
-        json(req, res, 503, {
-          ok: false,
-          error: "storage_unavailable",
-          code: error.code || "json_storage_error",
-          file: error.file_label || "unknown",
-        });
-        return;
-      }
-      json(req, res, 500, { ok: false, error: "internal_error" });
-    });
+    dispatchApiRequest(req, res);
   });
 
   startSongiDiscoverySubscriptionPoller();
@@ -19960,6 +20240,13 @@ module.exports = {
   __taxTest: {
     ensureDirs,
     route,
+  },
+  __r02Test: {
+    dispatchApiRequest,
+    loadCommands,
+    mutateCommandsWithLock,
+    runStartupJobRecovery,
+    saveCommands,
   },
   __cafe24Test: {
     adminCafe24OrderRow,
@@ -20026,7 +20313,9 @@ module.exports = {
     loadYeriStructurePacks,
     renderYeriStructureInstruction,
     buildFailureDiagnostic,
+    enforceYeriArtifactLength,
     generateYeriArtifactForJob,
+    generateYeriGeminiArtifact,
     jobFailureDiagnostic,
     loadJobs,
     loadYeriArtifact,
@@ -20035,7 +20324,13 @@ module.exports = {
     safeArtifactId,
     sanitizeFailedStage,
     sanitizeYeriGeneratedArtifact,
-    saveJobs,
+    saveJobs: saveJobsForTest,
+    mutateJobsWithLock,
+    withJobsStorageLockSync,
+    finalizeYeriArtifactForJob,
+    setFinalizationBarrierForTest: (barrier) => {
+      yeriGenerationFinalizationBarrier = typeof barrier === "function" ? barrier : null;
+    },
     saveYeriArtifact,
     AGENT_CLAIMABLE_JOB_STATUSES,
     yeriServerGenerationMode,
@@ -20096,6 +20391,10 @@ module.exports = {
     recordJobFailureGuard,
     releaseJobGuardsForClasses,
     requestYeriProviderJson,
+    requestExternalJson,
+    sleepMs,
+    classifyYeriProviderError,
+    buildFailureDiagnostic,
     runnerUpdateRequirement,
     saveJobGuards,
   },

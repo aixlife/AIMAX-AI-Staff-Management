@@ -178,7 +178,7 @@ const TASK_STATUS_MAP: Record<string, TaskStatus> = {
   running: "running",
   waiting_user: "waiting_user",
   failed: "failed",
-  cancelled: "failed",
+  cancelled: "cancelled",
   done: "done",
 };
 
@@ -187,6 +187,7 @@ const TASK_PROGRESS: Record<TaskStatus, number> = {
   running: 55,
   waiting_user: 70,
   failed: 100,
+  cancelled: 100,
   done: 100,
 };
 
@@ -200,7 +201,7 @@ function formatWhen(iso: string | null | undefined): string {
 }
 
 function jobTimeline(job: ApiJob, status: TaskStatus): TimelineStep[] {
-  const doneOrFailed = status === "done" || status === "failed";
+  const doneOrFailed = status === "done" || status === "failed" || status === "cancelled";
   const steps: TimelineStep[] = [
     {
       id: `${job.id}-created`,
@@ -217,9 +218,9 @@ function jobTimeline(job: ApiJob, status: TaskStatus): TimelineStep[] {
     },
     {
       id: `${job.id}-final`,
-      label: status === "failed" ? "실패" : "완료",
+      label: status === "failed" ? "실패" : status === "cancelled" ? "사용자 취소" : "완료",
       detail: formatWhen(job.finished_at),
-      state: status === "done" ? "complete" : status === "failed" ? "failed" : "upcoming",
+      state: status === "done" || status === "cancelled" ? "complete" : status === "failed" ? "failed" : "upcoming",
       at: formatWhen(job.finished_at),
     },
   ];

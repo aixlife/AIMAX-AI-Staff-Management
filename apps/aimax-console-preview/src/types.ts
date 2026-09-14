@@ -74,6 +74,7 @@ export type TaskStatus =
   | "running"
   | "waiting_user"
   | "failed"
+  | "cancelled"
   | "done";
 
 export interface TimelineStep {

@@ -139,10 +139,10 @@ assert(eunseo?.role === "녹화 프롬프터", "eunseo_worker_role_missing");
 assert(eunseo?.execution === "external_tool", "eunseo_execution_contract_missing");
 assert(eunseo?.type === "multi_channel", "eunseo_type_contract_missing");
 assert(eunseo?.access_policy === "makefamily_member", "eunseo_member_only_access_missing");
-assert(Array.isArray(eunseo?.execution_options) && eunseo.execution_options.length === 5, "eunseo_execution_options_missing");
+assert(Array.isArray(eunseo?.execution_options) && eunseo.execution_options.length === 3, "eunseo_web_only_execution_options_missing");
 assert(eunseo.execution_options.some((option) => option.kind === "web_app" && option.primary === true && option.status === "available" && option.url === "/eunseo"), "eunseo_web_primary_option_missing");
 assert(eunseo.status === "available", "eunseo_status_available_missing");
-assert(eunseo.execution_options.some((option) => option.kind === "mac_download" && option.status === "available" && option.url === "/api/downloads/agent?platform=macos&product=eunseo"), "eunseo_mac_download_option_missing");
+assert(!eunseo.execution_options.some((option) => option.kind === "mac_download" || option.kind === "windows_download"), "eunseo_desktop_download_must_remain_retired");
 assert(productCatalog.some((product) => product.product === "eunseo" && product.member_only === true && product.access_policy === "makefamily_member"), "eunseo_product_catalog_member_only_missing");
 assert(__catalogTest.canAccessEunseo({
   status: "active",
@@ -231,6 +231,11 @@ for (const kind of appJobKindKeys) {
 for (const kind of serverJobKindKeys) {
   const config = jobKinds[kind];
   const worker = workers[config.workerCode];
+  if (worker?.status === "retired") {
+    assert(!appJobKindKeys.includes(kind), `retired_job_kind_in_app_fallback:${kind}`);
+    assert(!__catalogTest.isJobAllowed(bundleOnlyUser, kind), `retired_job_kind_allowed:${kind}`);
+    continue;
+  }
   if (worker?.jobKind) assert(appJobKindKeys.includes(kind), `server_job_kind_not_in_app_fallback:${kind}`);
 }
 

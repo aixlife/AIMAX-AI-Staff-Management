@@ -66,6 +66,17 @@ test("network calls stay inside the api client with a whitelisted endpoint list"
   assert.equal(listed.length, 5, `허용 엔드포인트가 5개를 넘었습니다: ${listed.join(", ")}`);
 });
 
+test("cancelled jobs remain a user-cancelled state in the live UI", () => {
+  const live = read("src/api/live.ts");
+  const types = read("src/types.ts");
+  const badge = read("src/components/StatusBadge.tsx");
+
+  assert.match(types, /\| "cancelled"/);
+  assert.match(live, /cancelled: "cancelled"/);
+  assert.doesNotMatch(live, /cancelled: "failed"/);
+  assert.match(badge, /cancelled: "사용자 취소"/);
+});
+
 /**
  * 공개 랜딩은 구매·로그인·파트너로 나가는 바깥 주소가 필요합니다.
  * 대신 어디로 나갈 수 있는지를 이 목록으로 묶어 둡니다.

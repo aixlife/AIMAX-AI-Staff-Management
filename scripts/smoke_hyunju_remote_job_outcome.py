@@ -37,6 +37,7 @@ class FakeClient:
 
     def update_job(self, job_id, status, message, level="info", result=None):
         self.updates.append({"job_id": job_id, "status": status, "message": message, "level": level, "result": result})
+        return {"ok": True}
 
 
 def make_agent() -> HeadlessNaverBlogAgent:

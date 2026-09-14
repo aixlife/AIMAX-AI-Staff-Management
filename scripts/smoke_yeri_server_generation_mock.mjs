@@ -10,7 +10,9 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aimax-yeri-server-generation-smoke-"));
 const port = 20000 + Math.floor(Math.random() * 500);
+const port2 = port + 1;
 const baseUrl = `http://127.0.0.1:${port}`;
+const baseUrl2 = `http://127.0.0.1:${port2}`;
 const email = "yeri-server-generation-smoke@example.test";
 const password = "SmokePassword123!";
 
@@ -52,9 +54,7 @@ writeJson(path.join(tmpDir, "users.json"), {
   }],
 });
 
-const child = childProcess.spawn(process.execPath, ["oracle/aimax-reports-api/server.js"], {
-  cwd: repoRoot,
-  env: {
+const serverEnv = {
     ...process.env,
     AIMAX_REPORT_HOST: "127.0.0.1",
     AIMAX_REPORT_PORT: String(port),
@@ -63,6 +63,8 @@ const child = childProcess.spawn(process.execPath, ["oracle/aimax-reports-api/se
     AIMAX_DOWNLOAD_DIR: path.join(tmpDir, "downloads"),
     AIMAX_USER_SECRET_ENCRYPTION_KEY: `base64:${crypto.randomBytes(32).toString("base64")}`,
     AIMAX_YERI_SERVER_GENERATION_MOCK: "1",
+    AIMAX_YERI_SERVER_GENERATION_MOCK_DELAY_MS: "1000",
+    AIMAX_YERI_GENERATION_CANCEL_POLL_MS: "100",
     AIMAX_YERI_SERVER_GENERATION_ENABLED: "",
     APIFY_API_TOKEN: "",
     AIMAX_APIFY_API_TOKEN: "",
@@ -70,17 +72,27 @@ const child = childProcess.spawn(process.execPath, ["oracle/aimax-reports-api/se
     AIMAX_GEMINI_API_KEY: "",
     OPENAI_API_KEY: "",
     AIMAX_OPENAI_API_KEY: "",
-  },
+};
+const child = childProcess.spawn(process.execPath, ["oracle/aimax-reports-api/server.js"], {
+  cwd: repoRoot,
+  env: serverEnv,
+  stdio: ["ignore", "pipe", "pipe"],
+});
+const child2 = childProcess.spawn(process.execPath, ["oracle/aimax-reports-api/server.js"], {
+  cwd: repoRoot,
+  env: { ...serverEnv, AIMAX_REPORT_PORT: String(port2) },
   stdio: ["ignore", "pipe", "pipe"],
 });
 
 let stdout = "";
 let stderr = "";
+let stderr2 = "";
 child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
 child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+child2.stderr.on("data", (chunk) => { stderr2 += chunk.toString(); });
 
-async function request(pathname, options = {}) {
-  const response = await fetch(`${baseUrl}${pathname}`, {
+async function requestTo(serverUrl, pathname, options = {}) {
+  const response = await fetch(`${serverUrl}${pathname}`, {
     ...options,
     headers: {
       "content-type": "application/json",
@@ -97,21 +109,23 @@ async function request(pathname, options = {}) {
   return body;
 }
 
-async function waitForServer() {
+async function request(pathname, options = {}) { return requestTo(baseUrl, pathname, options); }
+
+async function waitForServer(serverUrl, label) {
   const started = Date.now();
   while (Date.now() - started < 8000) {
     try {
-      const health = await request("/api/reports/health");
+      const health = await requestTo(serverUrl, "/api/reports/health");
       if (health.ok) return;
     } catch (_error) {
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
   }
-  throw new Error(`server did not start\nstdout=${stdout}\nstderr=${stderr}`);
+  throw new Error(`server did not start (${label})\nstdout=${stdout}\nstderr=${stderr}\nstderr2=${stderr2}`);
 }
 
-async function login(deviceLabel) {
-  const result = await request("/api/auth/login", {
+async function login(serverUrl, deviceLabel) {
+  const result = await requestTo(serverUrl, "/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password, device_label: deviceLabel }),
   });
@@ -131,9 +145,9 @@ async function waitForJobReady(auth, jobId) {
 }
 
 try {
-  await waitForServer();
-  const browserAuth = await login("Browser Smoke");
-  const agentAuth = await login("Agent Smoke");
+  await Promise.all([waitForServer(baseUrl, "primary"), waitForServer(baseUrl2, "secondary")]);
+  const browserAuth = await login(baseUrl, "Browser Smoke");
+  const agentAuth = await login(baseUrl, "Agent Smoke");
 
   const created = await request("/api/jobs", {
     method: "POST",
@@ -183,9 +197,23 @@ try {
   const next = await request("/api/agent/next-job", { headers: agentAuth });
   assert(!next.job, "ready_for_publish_must_not_be_claimable_before_local_support");
 
+  const cancelled = await request("/api/jobs", {
+    method: "POST", headers: browserAuth,
+    body: JSON.stringify({ kind: "yeri_write", server_generation: true, payload: { keywords: ["취소 경쟁조건"], word_count: 900, image_count: 0, ai_model: "gemini-2.5-flash" } }),
+  });
+  const cancelResult = await requestTo(baseUrl2, `/api/jobs/${encodeURIComponent(cancelled.job.id)}/cancel`, {
+    method: "POST", headers: browserAuth, body: JSON.stringify({ reason: "user_cancelled" }),
+  });
+  assert(cancelResult.job.status === "cancelled", `cancel_status_mismatch:${JSON.stringify(cancelResult)}`);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const afterCancel = (await request("/api/jobs", { headers: browserAuth })).jobs.find((job) => job.id === cancelled.job.id);
+  assert(afterCancel?.status === "cancelled", `cancelled_job_overwritten:${JSON.stringify(afterCancel)}`);
+  assert(!fs.existsSync(path.join(tmpDir, "artifacts", `${cancelled.job.id}.json`)), "cancelled_job_created_artifact");
+
   console.log("YERI_SERVER_GENERATION_MOCK_SMOKE_OK");
 } finally {
   child.kill("SIGTERM");
+  child2.kill("SIGTERM");
   try {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   } catch (_error) {}
