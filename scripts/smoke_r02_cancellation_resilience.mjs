@@ -122,7 +122,8 @@ try {
 
   const imageJob = { kind: "yeri_write", payload: { image_count: 1 } };
   assert.equal(__yeriHybridTest.imageCompletionIssue(imageJob, { images: { image_skipped_no_key: true, mode_overridden_to_save: true } }), "");
-  assert.notEqual(__yeriHybridTest.imageCompletionIssue(imageJob, { images: { image_skipped_no_key: true } }), "");
+  // 2026-10-13: 키 때문에 이미지만 빠지고 글은 저장된 경우는 실패가 아니다(완료 + 작업 기록 안내).
+  assert.equal(__yeriHybridTest.imageCompletionIssue(imageJob, { images: { image_skipped_no_key: true } }), "");
   assert.notEqual(__yeriHybridTest.imageCompletionIssue(imageJob, { images: { mode_overridden_to_save: true } }), "");
   console.log("R02_CANCELLATION_RESILIENCE_SMOKE_OK");
 } finally {
