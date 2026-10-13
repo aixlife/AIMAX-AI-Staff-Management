@@ -2592,12 +2592,48 @@ function yeriImageTextRiskLines(markdown) {
     .filter((line) => YERI_IMAGE_TEXT_SUBJECT_PATTERN.test(line));
 }
 
+// 2026-10-13 실측: 무료 키 과부하로 3.5-flash-lite 까지 내려가면 "문단 40~60자" 지시를 무시하고
+// 200자 넘는 문단을 쓴다. 모델과 상관없이 긴 문단은 문장 경계에서 나눈다(내용은 한 글자도 안 바꾼다).
+function yeriSplitLongParagraphs(markdown, maxLen) {
+  const limit = Math.max(30, Number(maxLen) || 90);
+  const isPlain = (line) => line.trim() && !/^\s*(#|\[이미지\]|[-*] |\d+[.)] |\||>)/.test(line);
+  const visibleLength = (text) => text.replace(/\*\*/g, "").length;
+  const out = [];
+  for (const line of String(markdown || "").split("\n")) {
+    if (!isPlain(line) || visibleLength(line) <= limit) {
+      out.push(line);
+      continue;
+    }
+    const sentences = line.trim().split(/(?<=[.!?。])\s+/).filter(Boolean);
+    if (sentences.length < 2) {
+      out.push(line);
+      continue;
+    }
+    const chunks = [];
+    let current = "";
+    for (const sentence of sentences) {
+      const candidate = current ? `${current} ${sentence}` : sentence;
+      const boldOpen = ((current.match(/\*\*/g) || []).length % 2) === 1;
+      if (current && visibleLength(candidate) > limit && !boldOpen) {
+        chunks.push(current);
+        current = sentence;
+      } else {
+        current = candidate;
+      }
+    }
+    if (current) chunks.push(current);
+    out.push(chunks.join("\n\n"));
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
 function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
   const title = compactText(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle, 180);
   const markdown = cleanMultilineText(restoreEscapedNewlines(source.content_markdown || source.markdown || source.content || ""), 100000);
-  const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(markdown)));
+  const splitMarkdown = yeriSplitLongParagraphs(markdown, yeriStylePack(payload).paragraph?.max);
+  const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(splitMarkdown)));
   // 모델이 글자를 못 그리는데 글자 주인공 프롬프트가 나왔으면 조용히 넘기지 않는다.
   // 이미지가 깨진 채로 발행되는 것이 지금까지 아무 신호 없이 일어나던 일이다.
   const imageTextWarnings = yeriImageModelRendersText(payload)
@@ -20790,6 +20826,7 @@ module.exports = {
     yeriServerImagePath,
     buildYeriLengthRevisionPrompt,
     setUserSecretForSmoke: setUserSecret,
+    yeriSplitLongParagraphs,
     publicUserSecretStatus,
     recordUserSecretImageCapability,
     JOB_STATUSES,

@@ -91,6 +91,13 @@ check("무료 키 판정 기록", t.publicUserSecretStatus("cap-user", "gemini")
 t.setUserSecretForSmoke("cap-user", "gemini", "AIzaSy-test-key-paid-tier-111111111111");
 check("키 교체 시 초기화", t.publicUserSecretStatus("cap-user", "gemini").image_capability, "unknown");
 
+console.log("[6c] 긴 문단은 문장 경계에서 나눈다(내용 불변)");
+const longPara = "첫 문장은 충분히 길게 써서 기준을 넘기도록 만든 설명입니다. 두 번째 문장도 **굵은 구절을 포함해** 길게 이어지는 설명입니다. 세 번째 문장으로 마무리합니다.";
+const split = t.yeriSplitLongParagraphs(`## 소제목\n${longPara}\n- 목록 항목은 길어도 그대로입니다. 나누지 않습니다.`, 60);
+check("문단이 나뉜다", split.split("\n\n").length >= 2, true);
+check("글자는 그대로", split.replace(/\s/g, ""), `## 소제목\n${longPara}\n- 목록 항목은 길어도 그대로입니다. 나누지 않습니다.`.replace(/\s/g, ""));
+check("목록은 안 나눈다", split.includes("- 목록 항목은 길어도 그대로입니다. 나누지 않습니다."), true);
+
 if (process.env.AIMAX_LIVE_IMAGE_SMOKE === "1") {
   console.log("[7] 실제 Gemini 이미지 1장 (유료)");
   const key = String(process.env.GEMINI_KEY_FOR_SMOKE || "").trim();
