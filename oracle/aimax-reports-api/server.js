@@ -2665,6 +2665,26 @@ function yeriSplitLongParagraphs(markdown, maxLen) {
   return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
+// 2026-10-14 실측: 프롬프트가 "문단당 최대 1곳, 글 전체 N곳"을 지시해도 모델이 31곳을 굵게 했다.
+// 굵게가 많으면 훑는 눈이 내려앉을 지점이 사라진다 — 서버가 상한을 강제한다(글자는 바꾸지 않고 ** 만 푼다).
+function yeriCapBold(markdown, maxTotal) {
+  const cap = Math.max(1, Number(maxTotal) || 1);
+  let used = 0;
+  return String(markdown || "").split("\n").map((line) => {
+    if (!line.includes("**") || /^\s*#/.test(line)) return line;
+    const isParagraph = !/^\s*([-*] |\d+[.)] |\||>|\[이미지\])/.test(line);
+    let keptInLine = 0;
+    return line.replace(/\*\*([^*\n]+?)\*\*/g, (match, inner) => {
+      if (isParagraph && keptInLine === 0 && used < cap) {
+        keptInLine += 1;
+        used += 1;
+        return match;
+      }
+      return inner;
+    });
+  }).join("\n");
+}
+
 function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
@@ -2672,7 +2692,8 @@ function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const markdown = cleanMultilineText(restoreEscapedNewlines(source.content_markdown || source.markdown || source.content || ""), 100000);
   // "- [ ] 항목" 체크박스는 네이버 에디터에 목록으로 들어가며 "[ ]" 가 글에 그대로 찍힌다(10/14 실측) — 일반 목록으로 바꾼다.
   const uncheckedMarkdown = markdown.replace(/^(\s*[-*]\s+)\[[ xX]?\]\s+/gm, "$1");
-  const splitMarkdown = yeriSplitLongParagraphs(yeriScrubToolMentions(uncheckedMarkdown), yeriStylePack(payload).paragraph?.max);
+  const cappedMarkdown = yeriCapBold(uncheckedMarkdown, Math.round(yeriBoldTarget(payload) * 1.25));
+  const splitMarkdown = yeriSplitLongParagraphs(yeriScrubToolMentions(cappedMarkdown), yeriStylePack(payload).paragraph?.max);
   const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(splitMarkdown)));
   // 모델이 글자를 못 그리는데 글자 주인공 프롬프트가 나왔으면 조용히 넘기지 않는다.
   // 이미지가 깨진 채로 발행되는 것이 지금까지 아무 신호 없이 일어나던 일이다.
@@ -2929,7 +2950,7 @@ function buildYeriGenerationPrompt(payload) {
     // 읽히지 않았다(같은 사용자의 2점 글에 "AIMAX 예리입니다" 인사). 정체성을 블로그 주인의 대필로 바꾼다.
     "너는 블로그 주인을 대신해 글을 쓰는 작가다. 네이버 블로그에 입력할 수 있는 한국어 마크다운 초안을 작성한다.",
     "- 글은 블로그 주인이 직접 쓴 글로 읽혀야 한다. AIMAX, 예리, AI 같은 작성 도구나 작성자 소개를 본문·제목에 쓰지 않는다. 자기소개 인사로 시작하지 않는다.",
-    `- 오늘 날짜는 ${yeriTodayKst()}(한국 시간)이다. 지난 연도를 현재처럼 쓰지 않는다. 해마다 바뀌는 수치·제도·가격을 다룰 때만, 확인할 수 없는 연도와 수치를 쓰지 않는다. '최신 기준은 공식 안내에서 확인' 같은 문장을 관계없는 곳에 끼워 넣지 않는다.`,
+    `- 오늘 날짜는 ${yeriTodayKst()}(한국 시간)이다. 지난 연도를 현재처럼 쓰지 않는다. 확인할 수 없는 가격·비용·기간·통계·연도는 숫자로 쓰지 않고 '무엇에 따라 달라지는지'로 쓴다. 다만 '최신 기준은 공식 안내에서 확인' 같은 안내 문장은 제도·가격을 다루는 문단에만 한 번 쓰고, 관계없는 문단에 끼워 넣지 않는다.`,
     "출력은 반드시 JSON 객체 하나만 작성한다. 마크다운 코드블록을 쓰지 않는다.",
     "JSON 스키마: {\"title\":\"...\",\"content_markdown\":\"# 제목\\n\\n## 소제목\\n본문\\n\\n[이미지] 이미지 프롬프트\"}",
     "",
