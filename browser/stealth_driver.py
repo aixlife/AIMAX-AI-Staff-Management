@@ -3,6 +3,7 @@ import platform
 import random
 import re
 import shutil
+import sys
 import subprocess
 import time
 from glob import glob
@@ -169,6 +170,55 @@ def _get_uc_driver_cache_dir():
     return None
 
 
+def _is_apple_silicon():
+    import platform as _platform
+    return sys.platform == "darwin" and _platform.machine() == "arm64"
+
+
+def _macho_is_x86_64(path):
+    """Mach-O 헤더로 x86_64 실행 파일인지 본다(64비트 리틀엔디언 cputype 0x01000007)."""
+    try:
+        with open(path, "rb") as handle:
+            head = handle.read(8)
+        return len(head) == 8 and head[:4] == b"\xcf\xfa\xed\xfe" and head[4:8] == b"\x07\x00\x00\x01"
+    except Exception:
+        return False
+
+
+def _patch_uc_platform_for_apple_silicon(uc_patcher):
+    """2026-10-14 실측: undetected_chromedriver 3.5.5 는 맥이면 무조건 mac-x64 드라이버를 받는다.
+    Rosetta 가 없는 Apple 칩 맥에서는 'Bad CPU type in executable' 로 브라우저가 아예 뜨지 않는다.
+    Chrome for Testing 에 mac-arm64 드라이버가 있으므로 그쪽을 받게 한다."""
+    if not _is_apple_silicon() or getattr(uc_patcher.Patcher, "_aimax_arm64_patched", False):
+        return
+    original = uc_patcher.Patcher._set_platform_name
+
+    def _set_platform_name(self):
+        original(self)
+        if getattr(self, "platform_name", "") == "mac-x64":
+            self.platform_name = "mac-arm64"
+
+    uc_patcher.Patcher._set_platform_name = _set_platform_name
+
+    # 라이브러리가 드라이버 바이트를 고치면(patch_exe) 서명이 깨져 Apple 칩 맥은 즉시 -9 로 죽인다(실측).
+    # 고친 직후 임시 서명(ad-hoc)을 다시 한다.
+    original_patch_exe = uc_patcher.Patcher.patch_exe
+
+    def patch_exe(self):
+        result = original_patch_exe(self)
+        try:
+            subprocess.run(
+                ["codesign", "--force", "--sign", "-", str(self.executable_path)],
+                check=False, capture_output=True, timeout=30,
+            )
+        except Exception as error:
+            logger.warning(f"드라이버 임시 서명 실패: {error}")
+        return result
+
+    uc_patcher.Patcher.patch_exe = patch_exe
+    uc_patcher.Patcher._aimax_arm64_patched = True
+
+
 def _configure_uc_driver_cache_dir():
     cache_dir = _get_uc_driver_cache_dir()
     if not cache_dir:
@@ -177,6 +227,17 @@ def _configure_uc_driver_cache_dir():
         import undetected_chromedriver.patcher as uc_patcher
 
         uc_patcher.Patcher.data_path = str(cache_dir)
+        _patch_uc_platform_for_apple_silicon(uc_patcher)
+        if _is_apple_silicon():
+            # 예전에 받아 둔 Intel 용 드라이버가 남아 있으면 지우고 arm64 로 다시 받게 한다.
+            for name in os.listdir(str(cache_dir)):
+                candidate = os.path.join(str(cache_dir), name)
+                if "chromedriver" in name and os.path.isfile(candidate) and _macho_is_x86_64(candidate):
+                    try:
+                        os.remove(candidate)
+                        logger.info(f"Apple 칩 맥에서 실행할 수 없는 Intel 용 드라이버를 지웠습니다: {name}")
+                    except OSError:
+                        pass
     except Exception as e:
         logger.debug(f"undetected 드라이버 캐시 경로 설정 실패: {e}")
 
@@ -516,6 +577,19 @@ def _browser_start_failure_message(error, browser_path=None, profile_dir=None):
         lines.append(f"- 감지된 Chrome: {browser_path}")
     if profile_dir:
         lines.append(f"- 사용한 브라우저 프로필: {profile_dir}")
+    if sys.platform == "darwin":
+        # 2026-10-14: 맥에서도 윈도우 전용 안내(작업 관리자·Windows 보안·%APPDATA%)가 나가던 것.
+        lines.extend([
+            "",
+            "지금 해볼 순서:",
+            "1. 열려 있는 Chrome 창을 모두 닫고(Command + Q) 프로그램을 다시 실행합니다.",
+            "2. Chrome을 열어 오른쪽 위 점 3개 > 도움말 > Chrome 정보에서 최신 버전으로 업데이트합니다.",
+            "3. 시스템 설정 > 개인정보 보호 및 보안 아래쪽에 AIMAX 또는 chromedriver 차단 안내가 있으면 [그래도 허용]을 누릅니다.",
+            "4. 계속 실패하면 Finder에서 Command + Shift + G 를 누르고 ~/Library/Application Support/NaverBlogAuto 를 입력한 뒤 driver_cache 폴더를 삭제하고 다시 실행합니다.",
+            "   그래도 안 되면 같은 위치의 browser_profiles 폴더를 삭제합니다. 이 경우 네이버에 다시 로그인해야 할 수 있습니다.",
+        ])
+        logger.debug(f"browser start raw error: {_exception_text(error)}")
+        return "\n".join(lines)
     lines.extend([
         "",
         "지금 해볼 순서:",
