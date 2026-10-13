@@ -3892,7 +3892,7 @@ class NaverBlogApp:
         worker_started = False
         self._set_web_agent_active_job_stage("worker_running", job_id=job_id, kind=kind)
         try:
-            if not self._validate_credentials(need_api=False):
+            if not self._validate_credentials(need_api=False) and not self._has_recent_naver_session_only():
                 raise ValueError("로컬 실행기의 네이버 계정 설정이 필요합니다.")
             web_secrets = self._fetch_web_secret_statuses()
             if kind == "yeri_write" and not artifact:
@@ -6496,6 +6496,24 @@ class NaverBlogApp:
             self._toggle_buttons_recursive(child, is_running)
 
     # ── 인증정보 검증 ──
+    def _has_recent_naver_session_only(self):
+        """비밀번호는 저장하지 않았지만 네이버에 직접 로그인해 둔 최근 세션이 있으면 작업을 시작할 수 있다.
+
+        2026-10-14 맥 실측: 새로 설치한 실행기에 아이디와 오늘 로그인한 세션이 있는데도 비밀번호가 없다는
+        이유로 작업을 막았다. 세션이 실제로 죽어 있으면 로그인 단계에서 '로그인 필요' 안내로 끝난다.
+        """
+        naver_id = str(self.naver_id_var.get() or "").strip()
+        if not naver_id:
+            return False
+        try:
+            from browser.session_manager import has_recent_session_file
+            ok = bool(has_recent_session_file(naver_id))
+        except Exception:
+            ok = False
+        if ok:
+            self._log("[네이버] 저장된 비밀번호 없이 최근 로그인 세션으로 진행합니다.")
+        return ok
+
     def _validate_credentials(self, need_api=True):
         if not self.naver_id_var.get():
             self._log("[오류] 네이버 ID를 입력해주세요.")
