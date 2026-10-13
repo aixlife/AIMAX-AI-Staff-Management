@@ -444,6 +444,23 @@ def _is_openai_model(value):
     return str(value or "").startswith("gpt-")
 
 
+def _neighbor_outcome(total, naver_id, daily_limit, **extra):
+    """현주 작업 결과. 2026-10-13: total 만 보내 서버가 성공 0명으로 기록했고, 0명 신청도 사유 없이 성공으로 남았다."""
+    total = int(total or 0)
+    outcome = {"ok": True, "stage": "neighbor_request", "total": total, "success": total}
+    outcome.update(extra)
+    if total == 0:
+        reason = "no_candidates"
+        try:
+            from engagement.neighbor_quota import get_today_count
+            if daily_limit and get_today_count(naver_id) >= int(daily_limit):
+                reason = "daily_limit_reached"
+        except Exception:
+            pass
+        outcome["zero_reason"] = reason
+    return outcome
+
+
 def _safe_path_part(value):
     """파일/폴더 이름에 쓸 수 있게 잡 id 같은 값을 정리한다."""
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "")).strip("._")
@@ -7816,7 +7833,7 @@ class NaverBlogApp:
 
             self.queue.put(("progress", 100))
             self._log(f"서로이웃 추가 완료: {total}명 신청")
-            outcome = {"ok": True, "stage": "neighbor_request", "total": total}
+            outcome = _neighbor_outcome(total, nid, daily_limit)
 
             # 완료 팝업
             try:
@@ -7931,7 +7948,7 @@ class NaverBlogApp:
 
             self.queue.put(("progress", 100))
             self._log(f"특정 블로거 링크 작업 완료: 후보 {len(blog_ids)}명 중 {total}명 신청")
-            outcome = {"ok": True, "stage": "neighbor_request", "total": total, "candidates": len(blog_ids)}
+            outcome = _neighbor_outcome(total, nid, daily_limit, candidates=len(blog_ids))
 
             try:
                 from engagement.neighbor_quota import get_today_count

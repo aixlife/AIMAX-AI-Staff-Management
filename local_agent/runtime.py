@@ -233,6 +233,8 @@ class HeadlessAgentMixin:
             while not self.web_agent_stop_event.is_set():
                 self._process_headless_queue()
                 self._process_single_instance_requests()
+                self._pump_headless_status_window()  # 연결 상태 창이 떠 있어도 작업 대기열을 계속 처리한다
+                self._process_pending_status_action()
                 self._pump_mac_events()          # macOS: Apple Event(GetURL) 펌프
                 self._process_pending_mac_url()   # macOS: 수신한 aimax:// URL 처리
                 if once and time.monotonic() - started_at >= once_seconds:
@@ -551,6 +553,15 @@ class HeadlessAgentMixin:
         import tkinter as tk
         from tkinter import ttk
 
+        existing = getattr(self, "_headless_status_window", None)
+        if existing is not None:
+            try:
+                if existing.winfo_exists():
+                    self._focus_headless_window(existing)
+                    return
+            except Exception:
+                pass
+
         root = self._get_headless_tk_root()
         dialog = tk.Toplevel(root)
         dialog.title("AIMAX 실행기 연결됨")
@@ -558,7 +569,6 @@ class HeadlessAgentMixin:
         dialog.resizable(False, False)
         dialog.configure(bg="#f7f7f5")
 
-        result = {"open_settings": False, "switch_account": False}
         connected_email = self._web_agent_current_account()
         frame = ttk.Frame(dialog, padding=22)
         frame.pack(fill="both", expand=True)
@@ -581,11 +591,11 @@ class HeadlessAgentMixin:
         buttons.pack(anchor="e", fill="x")
 
         def _open_settings() -> None:
-            result["open_settings"] = True
+            self._pending_status_action = "open_settings"
             dialog.destroy()
 
         def _switch_account() -> None:
-            result["switch_account"] = True
+            self._pending_status_action = "switch_account"
             dialog.destroy()
 
         ttk.Button(buttons, text="닫기", command=dialog.destroy).pack(side="right", padx=(8, 0))
@@ -595,11 +605,33 @@ class HeadlessAgentMixin:
         dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
         self._center_headless_window(dialog)
         self._focus_headless_window(dialog)
-        self._wait_for_headless_window(root, dialog)
-        if result["switch_account"]:
+        # 2026-10-13 실측: 여기서 창이 닫힐 때까지 기다리면(wait_window) 본체 루프가 멈춰
+        # 그 사이 받은 작업이 30초 뒤 "내부 UI 큐 미처리"로 실패했다(고객 6명·7건과 같은 증상).
+        # 창은 띄워만 두고, 버튼 결과는 본체 루프가 _process_pending_status_action 에서 처리한다.
+        self._headless_status_window = dialog
+
+    def _pump_headless_status_window(self) -> None:
+        """연결 상태 창이 열려 있으면 Tk 이벤트를 처리한다(창 반응 유지, 본체 루프는 계속 돈다)."""
+        window = getattr(self, "_headless_status_window", None)
+        if window is None:
+            return
+        try:
+            if not window.winfo_exists():
+                self._headless_status_window = None
+                return
+            window.update()
+        except Exception:
+            self._headless_status_window = None
+
+    def _process_pending_status_action(self) -> None:
+        action = getattr(self, "_pending_status_action", "")
+        if not action:
+            return
+        self._pending_status_action = ""
+        if action == "switch_account":
             self._switch_web_agent_account()
             return
-        if result["open_settings"]:
+        if action == "open_settings":
             try:
                 self._open_headless_settings_dialog()
             except Exception as error:

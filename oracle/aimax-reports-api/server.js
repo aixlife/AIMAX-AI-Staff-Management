@@ -2269,6 +2269,38 @@ function yeriStylePack(payload) {
   return YERI_STYLE_PACKS[key] || YERI_STYLE_PACKS.info;
 }
 
+function yeriTodayKst(now = new Date()) {
+  return new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// 모델이 지시를 어겨도 "AIMAX 예리입니다" 류 자기소개 문장은 나가지 않게 한다.
+// 문장 단위로만 지운다 — 사용자가 키워드로 쓴 'AIMAX' 같은 단어 자체는 건드리지 않는다.
+function yeriScrubToolMentions(markdown) {
+  const isSelfIntro = (sentence) => {
+    const t = sentence.trim();
+    if (!t) return false;
+    const yeriSelf = /예리(입니다|예요|이에요|가\s|는\s|의\s|에게)/.test(t) && /(AIMAX|에이맥스|직원|AI|글쓰기|안녕하세요|저는)/.test(t);
+    const aimaxSelf = /^(안녕하세요[,!.\s]*)?(저는\s*)?(AIMAX|에이맥스)\s*(의\s*)?(블로그\s*)?(글쓰기\s*)?(직원|AI)/.test(t);
+    return yeriSelf || aimaxSelf;
+  };
+  return String(markdown || "")
+    .split("\n")
+    .map((line) => {
+      if (/^\s*(\[이미지\]|\|)/.test(line)) return line;
+      const prefix = (line.match(/^(\s*(?:#+|[-*]|\d+[.)]|>)\s*)/) || [""])[0];
+      const body = line.slice(prefix.length);
+      const sentences = body.split(/(?<=[.!?])\s+/);
+      let kept = sentences.filter((sentence) => !isSelfIntro(sentence));
+      if (kept.length === sentences.length) return line;
+      // 자기소개를 지운 줄에 홀로 남은 인사("안녕하세요!")도 함께 지운다.
+      kept = kept.filter((sentence) => !/^안녕하세요[!.,~\s]*$/.test(sentence.trim()));
+      const rest = kept.join(" ").trim();
+      return rest ? `${prefix}${rest}` : "";
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 function yeriBoldTarget(payload) {
   const [low, high] = yeriStylePack(payload).boldPer1k || [8, 10];
   return Math.max(low, Math.round((yeriPayloadWordCount(payload) / 1000) * ((low + high) / 2)));
@@ -2630,9 +2662,9 @@ function yeriSplitLongParagraphs(markdown, maxLen) {
 function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
-  const title = compactText(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle, 180);
+  const title = compactText(yeriScrubToolMentions(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle).trim() || fallbackTitle, 180);
   const markdown = cleanMultilineText(restoreEscapedNewlines(source.content_markdown || source.markdown || source.content || ""), 100000);
-  const splitMarkdown = yeriSplitLongParagraphs(markdown, yeriStylePack(payload).paragraph?.max);
+  const splitMarkdown = yeriSplitLongParagraphs(yeriScrubToolMentions(markdown), yeriStylePack(payload).paragraph?.max);
   const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(splitMarkdown)));
   // 모델이 글자를 못 그리는데 글자 주인공 프롬프트가 나왔으면 조용히 넘기지 않는다.
   // 이미지가 깨진 채로 발행되는 것이 지금까지 아무 신호 없이 일어나던 일이다.
@@ -2839,7 +2871,7 @@ function buildYeriLengthRevisionPrompt(payload) {
     ? `현재보다 약 ${Math.abs(delta)}자 줄이고, 반복되는 문장부터 정리한다.`
     : `현재보다 약 ${Math.abs(delta)}자 늘리고, 실제 예시나 확인 항목을 한 단락 이상 추가한다.`;
   return [
-    "너는 AIMAX 블로그 글쓰기 직원 예리다. 아래 원고는 요청 분량을 벗어났다.",
+    "너는 블로그 주인을 대신해 글을 쓰는 작가다. 아래 원고는 요청 분량을 벗어났다.",
     "내용의 핵심과 검색 의도, 소제목 구성은 유지하고 분량만 맞춰 최종 원고를 다시 작성한다.",
     "출력은 반드시 JSON 객체 하나만 작성한다. 마크다운 코드블록을 쓰지 않는다.",
     "JSON 스키마: {\"title\":\"...\",\"content_markdown\":\"# 제목\\n\\n## 소제목\\n본문\\n\\n[이미지] 이미지 프롬프트\"}",
@@ -2885,7 +2917,11 @@ function buildYeriGenerationPrompt(payload) {
     ? cleanMultilineText(JSON.stringify(redactPayload(payload.seo_brief)), 3000)
     : "";
   return [
-    "너는 AIMAX 블로그 글쓰기 직원 예리다. 네이버 블로그에 입력할 수 있는 한국어 마크다운 초안을 작성한다.",
+    // 2026-10-13 결과물 분석: 원고 373편 중 87편에 AIMAX·예리 언급/자기소개가 들어가 "블로그 주인 글"로
+    // 읽히지 않았다(같은 사용자의 2점 글에 "AIMAX 예리입니다" 인사). 정체성을 블로그 주인의 대필로 바꾼다.
+    "너는 블로그 주인을 대신해 글을 쓰는 작가다. 네이버 블로그에 입력할 수 있는 한국어 마크다운 초안을 작성한다.",
+    "- 글은 블로그 주인이 직접 쓴 글로 읽혀야 한다. AIMAX, 예리, AI 같은 작성 도구나 작성자 소개를 본문·제목에 쓰지 않는다. 자기소개 인사로 시작하지 않는다.",
+    `- 오늘 날짜는 ${yeriTodayKst()}(한국 시간)이다. 지난 연도를 현재처럼 쓰지 않는다. 최신 수치·제도를 확인할 수 없으면 연도와 수치를 쓰지 않고 '최신 기준은 공식 안내에서 확인'처럼 쓴다.`,
     "출력은 반드시 JSON 객체 하나만 작성한다. 마크다운 코드블록을 쓰지 않는다.",
     "JSON 스키마: {\"title\":\"...\",\"content_markdown\":\"# 제목\\n\\n## 소제목\\n본문\\n\\n[이미지] 이미지 프롬프트\"}",
     "",
@@ -2907,6 +2943,10 @@ function buildYeriGenerationPrompt(payload) {
     "- 글의 결론은 세 번째 문단 안에 이미 나와 있어야 한다. 끝까지 읽어야 답이 나오는 구조로 쓰지 않는다.",
     "- 첫 다섯 문단(약 200자) 안에 독자가 찾던 답의 핵심이 들어간다.",
     "- 소제목은 400~500자마다 하나씩 둔다.",
+    // 2026-10-13 결과물 분석: 라벨 소제목(서론/결론/마무리하며)·하위 번호(1.1.)·과장 제목어가 낮은 평점 글에 몰렸다.
+    "- 소제목은 독자가 실제로 궁금해할 질문이나 주장으로 쓴다. '서론', '본론', '결론', '마무리하며', '들어가며' 같은 라벨 소제목과 '1.1.' 같은 하위 번호는 쓰지 않는다.",
+    "- 제목은 독자의 구체적인 상황이나 고민이 보이게 쓴다. '현명한', '완벽한', '완벽 가이드', '성공적인', '총정리 끝판왕' 같은 과장어는 쓰지 않는다.",
+    "- 다음 상투 표현은 쓰지 않는다: '~하는 것이 중요합니다', '~는 필수적입니다', '다양한 ~', '결론적으로', '이처럼', '살펴보겠습니다', '알아보겠습니다'. 같은 뜻이면 구체적인 이유나 예시로 바꿔 쓴다.",
     // 볼드: 상위 노출 글 46편 중 볼드를 쓰지 않은 글이 0편이었다(중앙값 14개, 1,000자당 9.3개).
     // 우리 글은 0개다. 문장 전체를 굵게 하면 훑는 눈이 내려앉을 지점이 사라진다.
     // 2026-10-13 실측: 상위글 볼드 한 덩어리는 중앙값 11자(6~17자)다. 8/26 의 "2~6자 어절" 지시는 짧았다.
@@ -3768,13 +3808,19 @@ function jobFailureDiagnostic(job) {
     return buildFailureDiagnostic(job.diagnostic);
   }
   const result = job.result && typeof job.result === "object" ? job.result : {};
-  const imageFailure = Array.isArray(result.images?.failures) ? result.images.failures.find(Boolean) : null;
+  const anyImageFailure = Array.isArray(result.images?.failures) ? result.images.failures.find(Boolean) : null;
+  // 2026-10-13 오류 전수조사: 네이버 로그인·에디터 단계 실패에도 이미지 실패 문구("…키가 없어…")가 섞여
+  // 키 누락 규칙이 먼저 걸렸다 → 6명이 "API 키를 다시 넣으라"는 잘못된 안내를 받았다(10건).
+  // 실패 단계가 이미지 단계일 때(또는 단계 정보가 없을 때)만 이미지 실패를 진단 근거로 쓴다.
+  const baseStage = String(job.failed_stage || result.stage || "");
+  const imageFailure = !baseStage || /image/.test(baseStage) ? anyImageFailure : null;
+  const failedPostError = Array.isArray(result.failed_posts) ? String(result.failed_posts.find(Boolean)?.error || "") : "";
   if (!job.failed_stage && !job.failed_reason && !result.error && !imageFailure) return null;
   return buildFailureDiagnostic({
     stage: job.failed_stage || result.stage || imageFailure?.stage || "",
     reason: job.failed_reason || result.error || imageFailure?.error_code || imageFailure?.error || "",
     error: result.error || imageFailure?.error_code || imageFailure?.error || "",
-    visible_error: result.visible_error || imageFailure?.message || "",
+    visible_error: result.visible_error || failedPostError || imageFailure?.message || "",
     message: result.user_message || result.message || "",
   });
 }
@@ -4533,6 +4579,8 @@ function saveJobGuards(data) {
 function classifyStructuredFailureSignature(text) {
   if (!text.trim()) return "other";
   if (/naver_login|네이버 로그인|네이버.*(아이디|비밀번호|로그인|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
+  // 이미지 키 누락은 글 생성 키 무효와 다른 문제라 연속 실패 서명을 나눈다(같이 묶여 가드가 잘못 멈췄다).
+  if (/api_key_missing|key_missing/.test(text) && /image/.test(text)) return "image_key_missing";
   if (/server_generation_auth_failed|api_key_invalid|api_key_missing|key_missing|invalid.*api.*key|invalid x-api-key|unauthorized|permission denied|authentication|api 키 인증|키 인증 실패/.test(text)) return "ai_key_invalid";
   // 구글 무료 한도 429 본문에도 "billing" 이 들어 있어, 코드가 rate_limited 거나 free_tier 면 결제로 보지 않는다.
   if (/server_generation_rate_limited|free_tier/.test(text)) return "transient";
@@ -7405,6 +7453,8 @@ function buildGeminiResearchPrompt(item) {
     "영상이 첨부되어 있으면 화면 전환, 자막/오버레이, 장면 밀도, 초반 3초 후킹을 우선 분석한다. 영상이 없으면 수집된 원문과 자막만 근거로 한다.",
     "반드시 viral shorts 분석 3관점인 hooks, flow, benchmarking을 작성한다. flow는 timestamp와 description 객체 배열이다.",
     "PRD 기준으로 copywriting_points, visual_cues, performance_reasons.views/likes/comments/saves도 작성한다. 저장수 실제값이 없으면 saves는 저장 유도 가능성으로 표현한다.",
+    // 2026-10-13 결과물 분석: 지표가 없는데 4칸을 다 채우라는 지시 때문에 "활발한 소통" 같은 근거 없는 이유를 지어냈다.
+    "performance_reasons 각 칸은 원문에 해당 지표(조회수·좋아요·댓글·저장)가 있을 때만 근거로 쓴다. 지표가 없으면 그 칸을 반드시 '지표 없음 — 추정: '으로 시작하고, 추정 근거(후킹 문장, 구성 등)를 한 줄로만 쓴다.",
     "JSON 스키마: {\"summary\":\"...\",\"transcript\":\"...\",\"tags\":[\"...\"],\"insights\":[\"...\"],\"hooks\":[\"...\"],\"flow\":[{\"timestamp\":\"0:00-0:03\",\"description\":\"...\"}],\"benchmarking\":[\"...\"],\"copywriting_points\":[\"...\"],\"visual_cues\":[\"...\"],\"performance_reasons\":{\"views\":\"...\",\"likes\":\"...\",\"comments\":\"...\",\"saves\":\"...\"},\"hook_note\":\"...\",\"copy_note\":\"...\",\"structure_note\":\"...\",\"performance_note\":\"...\",\"personalized_plan\":\"...\",\"script_brief\":\"...\"}",
     "",
     `제목: ${item.title || ""}`,
@@ -10411,6 +10461,10 @@ function sanitizeJobResult(raw) {
   }
   if (failedPosts.length) result.failed_posts = failedPosts.slice(-20).map(sanitizePostResult);
   if (raw.error) result.error = redactText(String(raw.error)).slice(0, 500);
+  // 2026-10-13 현주: 구버전 실행기는 신청 수를 total 로만 보내 성공이 0명으로 기록됐다. success 가 없으면 total 로 본다.
+  if (raw.success == null && raw.stage === "neighbor_request" && result.total > 0) result.success = result.total;
+  if (["daily_limit_reached", "no_candidates"].includes(raw.zero_reason)) result.zero_reason = raw.zero_reason;
+  if (raw.candidates != null) result.candidates = safeInt(raw.candidates, 0, 100000);
   return result;
 }
 
@@ -19736,6 +19790,12 @@ async function handleAgentJobUpdate(req, res) {
   if (job.status === "done") {
     // 2026-10-13: 이미지를 못 만들어 공개 발행이 임시저장으로 바뀐 경우를 사용자가 알 수 있게 남긴다.
     // 그전에는 문제 없음으로 끝나 "창이 닫혔는데 발행이 안 됐다" 문의가 들어왔다.
+    if (job.kind === "hyunju_find" && job.result?.stage === "neighbor_request" && Number(job.result?.total || 0) === 0) {
+      const why = job.result?.zero_reason === "daily_limit_reached"
+        ? "오늘 신청 상한에 이미 도달해 새로 신청하지 않았습니다. 내일 다시 실행하거나 일일 상한을 조정해주세요."
+        : "조건에 맞는 새 이웃 후보를 찾지 못해 신청 0명으로 끝났습니다. 키워드를 바꾸거나 넓혀 다시 실행해주세요.";
+      appendJobLog(job, "warn", why, now);
+    }
     const doneImages = job.result?.images || {};
     if (doneImages.image_skipped_no_key === true && doneImages.mode_overridden_to_save !== true) {
       const reason = (Array.isArray(doneImages.failures) && doneImages.failures[0]?.message) || "이미지를 만들 수 있는 키가 없습니다.";
@@ -20833,6 +20893,7 @@ module.exports = {
     buildYeriLengthRevisionPrompt,
     setUserSecretForSmoke: setUserSecret,
     yeriSplitLongParagraphs,
+    yeriScrubToolMentions,
     publicUserSecretStatus,
     recordUserSecretImageCapability,
     JOB_STATUSES,

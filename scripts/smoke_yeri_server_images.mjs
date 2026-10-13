@@ -98,6 +98,17 @@ check("문단이 나뉜다", split.split("\n\n").length >= 2, true);
 check("글자는 그대로", split.replace(/\s/g, ""), `## 소제목\n${longPara}\n- 목록 항목은 길어도 그대로입니다. 나누지 않습니다.`.replace(/\s/g, ""));
 check("목록은 안 나눈다", split.includes("- 목록 항목은 길어도 그대로입니다. 나누지 않습니다."), true);
 
+console.log("[6d] 네이버·에디터 실패에 이미지 키 문구가 섞여도 키 안내로 오분류하지 않는다");
+const imgFail = { failures: [{ stage: "image_generation", error_code: "api_key_missing", message: "이미지 생성용 API 키가 없어 이미지 없이 본문을 보존했습니다." }], image_skipped_no_key: true };
+check("네이버 로그인 실패", t.jobFailureDiagnostic({ failed_stage: "naver_login", result: { stage: "naver_login", error: "네이버 로그인이 필요합니다.", images: imgFail } })?.code, "naver_login_required");
+check("에디터 열기 실패", t.jobFailureDiagnostic({ failed_stage: "smart_editor_open", result: { stage: "smart_editor_open", failed_posts: [{ error: "NID 로그인 후에도 로그인 페이지에 머무릅니다." }], images: imgFail } })?.code, "naver_login_required");
+check("이미지만 실패면 키 안내", t.jobFailureDiagnostic({ failed_stage: "image_completion", result: { images: imgFail } })?.code, "api_key_missing");
+
+console.log("[6e] 자기소개 문장만 지운다");
+check("자기소개 제거", t.yeriScrubToolMentions("안녕하세요! AIMAX 블로그 글쓰기 직원 예리입니다. 오늘은 중고차 고르는 법입니다."), "오늘은 중고차 고르는 법입니다.");
+check("키워드 AIMAX 는 유지", t.yeriScrubToolMentions("AIMAX 실행기 설치 방법을 정리합니다."), "AIMAX 실행기 설치 방법을 정리합니다.");
+check("'예리한' 같은 낱말 유지", t.yeriScrubToolMentions("예리한 칼날은 관리가 필요합니다."), "예리한 칼날은 관리가 필요합니다.");
+
 if (process.env.AIMAX_LIVE_IMAGE_SMOKE === "1") {
   console.log("[7] 실제 Gemini 이미지 1장 (유료)");
   const key = String(process.env.GEMINI_KEY_FOR_SMOKE || "").trim();
