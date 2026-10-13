@@ -11648,7 +11648,7 @@ function imageCompletionIssue(job, result) {
     return "";
   }
   if (images.image_skipped_no_key === true) {
-    return `이미지 ${requested}장을 요청했지만 이미지 생성용 로컬 API 키가 없어 이미지 없이 저장되었습니다. Mac/Windows 실행기의 AI/API 연결에 선택한 이미지 모델용 키를 저장해주세요.`;
+    return `이미지 ${requested}장을 요청했지만 이미지를 만들 수 있는 키가 없어 이미지 없이 저장되었습니다. 웹 AI/API 연결에 결제가 연결된 Gemini 키나 OpenAI 키를 저장해주세요.`;
   }
   if (images.mode_overridden_to_save === true) {
     return `이미지 ${requested}장을 요청했지만 이미지 키가 없어 공개 발행/예약 대신 임시저장으로 전환되었습니다.`;
@@ -19696,6 +19696,13 @@ async function handleAgentJobUpdate(req, res) {
     delete job.diagnostic;
   }
   if (job.status === "done") {
+    // 2026-10-13: 이미지를 못 만들어 공개 발행이 임시저장으로 바뀐 경우를 사용자가 알 수 있게 남긴다.
+    // 그전에는 문제 없음으로 끝나 "창이 닫혔는데 발행이 안 됐다" 문의가 들어왔다.
+    const doneImages = job.result?.images || {};
+    if (doneImages.mode_overridden_to_save === true) {
+      const reason = (Array.isArray(doneImages.failures) && doneImages.failures[0]?.message) || "이미지를 만들 수 있는 키가 없습니다.";
+      appendJobLog(job, "warn", `이미지를 만들지 못해 공개 발행 대신 네이버 임시저장으로 안전하게 저장했습니다. 이유: ${reason} 네이버 블로그 글쓰기의 임시저장 목록에서 열어 확인 후 발행하거나, 이미지 수를 0장으로 다시 실행하면 바로 발행됩니다.`, now);
+    }
     const imageIssue = imageCompletionIssue(job, job.result);
     if (imageIssue) {
       job.status = "failed";
