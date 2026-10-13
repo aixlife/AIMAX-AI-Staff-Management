@@ -6575,7 +6575,7 @@ class NaverBlogApp:
             )
             from content.markdown_parser import parse_markdown, parse_markdown_file, rebalance_image_blocks
             from content.seo_research import build_auto_seo_brief
-            from posting.editor import navigate_to_editor, input_title, input_content, set_font, editor_visible_text_count
+            from posting.editor import navigate_to_editor, input_title, input_content, set_font, editor_visible_text_count, format_profile_for_style
             from posting.publisher import save_draft, publish_now, schedule_publish
             from utils.delays import random_delay
 
@@ -6927,6 +6927,7 @@ class NaverBlogApp:
                                 image_model=image_model,
                                 stop_event=self.stop_event,
                                 prepared_images=prepared_images,
+                                format_profile=format_profile_for_style(style_id),
                             ) or {}
                             image_attempted = _usage_number(input_stats.get("image_attempted")) or image_block_count
                             image_generated = _usage_number(input_stats.get("image_generated"))

@@ -94,18 +94,19 @@ def main():
     parser.add_argument("--bold", action="store_true")
     parser.add_argument("--markdown", default="")
     parser.add_argument("--no-save", action="store_true")
+    parser.add_argument("--style", default="info", help="review | consult | info (글 유형 서식)")
     parser.add_argument("--profile-session", action="store_true", help="저장 세션 파일이 만료돼도 브라우저 프로필 로그인만 확인해 진행")
     args = parser.parse_args()
     if args.bold:
         os.environ["AIMAX_EDITOR_ENABLE_BOLD"] = "1"
     os.makedirs(args.out, exist_ok=True)
-    result = {"started_at": time.strftime("%Y-%m-%d %H:%M:%S"), "bold_enabled": bool(args.bold), "stages": []}
+    result = {"style": None, "started_at": time.strftime("%Y-%m-%d %H:%M:%S"), "bold_enabled": bool(args.bold), "stages": []}
 
     from app import load_settings
     from browser.stealth_driver import create_stealth_driver
     from auth.naver_login import login
     from content.markdown_parser import parse_markdown
-    from posting.editor import navigate_to_editor, input_title, input_content
+    from posting.editor import navigate_to_editor, input_title, input_content, format_profile_for_style
     from posting.publisher import save_draft
 
     md = DEFAULT_MD
@@ -149,8 +150,8 @@ def main():
         result["stages"].append("title")
         input_title(driver, title or "AIMAX 서식 점검 임시저장 글")
         result["stages"].append("content")
-        stats = input_content(driver, content_list, api_key="", image_provider="gemini", fallback_api_key="", prepared_images=prepared) or {}
-        result["input_stats"] = {k: v for k, v in stats.items() if k in ("image_attempted", "image_generated", "image_inserted", "image_failures")}
+        stats = input_content(driver, content_list, api_key="", image_provider="gemini", fallback_api_key="", prepared_images=prepared, format_profile=format_profile_for_style(args.style)) or {}
+        result["input_stats"] = {k: v for k, v in stats.items() if k in ("format_profile", "align_applied", "image_attempted", "image_generated", "image_inserted", "image_failures")}
         time.sleep(2)
         result["metrics_before_save"] = _editor_metrics(driver)
         try:

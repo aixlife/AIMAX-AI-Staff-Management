@@ -54,8 +54,28 @@ EDITOR_IFRAME_SELECTORS = [
 
 
 def _editor_bold_enabled():
-    value = os.environ.get("AIMAX_EDITOR_ENABLE_BOLD", "")
-    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    # 2026-10-13: 기본값을 켬으로 바꾼다. 네이버 상위 노출 글 50편 중 41편이 굵게를 쓰는데
+    # 우리 글은 이 스위치 때문에 0개였다. 끄려면 AIMAX_EDITOR_ENABLE_BOLD=0.
+    value = os.environ.get("AIMAX_EDITOR_ENABLE_BOLD", "1")
+    return value.strip().lower() not in {"0", "false", "no", "n", "off"}
+
+
+# 글 유형별 서식(2026-10-13, 상위글 50편 실측 — claudedocs/yeri-template-research-20261013.md).
+# 상위 글은 네이버 '소제목' 서식을 거의 안 쓰고(2/50) 짧은 인용구나 굵은 기호 줄로 소제목을 만든다.
+# 유형마다 인용구 스타일과 정렬도 다르다.
+FORMAT_PROFILES = {
+    "review": {"heading": "quote", "heading_quote_style": "quotation_line", "quote_style": "quotation_line", "align": "center"},
+    "consult": {"heading": "bold_marker", "heading_quote_style": "", "quote_style": "default", "align": "left"},
+    "info": {"heading": "quote", "heading_quote_style": "quotation_underline", "quote_style": "default", "align": "left"},
+}
+_FORMAT_STYLE_ALIASES = {"buy": "consult", "ad": "consult", "sell": "consult"}
+_active_format = {"heading": "section_title", "heading_quote_style": "quotation_underline", "quote_style": "quotation_underline", "align": "left", "heading_index": 0}
+
+
+def format_profile_for_style(style_id):
+    key = str(style_id or "").strip()
+    key = _FORMAT_STYLE_ALIASES.get(key, key)
+    return dict(FORMAT_PROFILES.get(key) or FORMAT_PROFILES["info"])
 
 
 def _save_editor_debug(driver, step_name):
@@ -987,7 +1007,7 @@ def _dismiss_editor_popup(driver):
         logger.debug(f"팝업 닫기 시도 중 오류: {e}")
 
 
-def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model="", stop_event=None, prepared_images=None):
+def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model="", stop_event=None, prepared_images=None, format_profile=None):
     """파싱된 콘텐츠 리스트를 에디터에 입력
 
     content_list 형식:
@@ -997,6 +1017,14 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
       미리 만든 이미지. 있으면 그 순번은 생성하지 않고 파일을 그대로 넣는다(2026-10-13).
     """
     prepared_images = prepared_images if isinstance(prepared_images, dict) else {}
+    _active_format.clear()
+    _active_format.update({"heading": "section_title", "heading_quote_style": "quotation_underline", "quote_style": "quotation_underline", "align": "left"})
+    if isinstance(format_profile, dict):
+        _active_format.update({k: v for k, v in format_profile.items() if v is not None})
+    _active_format["heading_index"] = 0
+    align_applied = None
+    if _active_format.get("align") == "center":
+        align_applied = _set_paragraph_align(driver, "center")
     # 혹시 남아있는 팝업 먼저 제거
     _dismiss_editor_popup(driver)
     _reset_inline_formatting(driver)
@@ -1082,6 +1110,8 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
             wait_short()
 
     return {
+        "format_profile": {k: v for k, v in _active_format.items() if k != "heading_index"},
+        "align_applied": align_applied,
         "image_attempted": image_attempted,
         "image_generated": image_generated,
         "image_inserted": image_inserted,
@@ -1185,6 +1215,14 @@ def _input_heading(driver, text):
     이전 동작으로 떨어지는 편이 낫다.
     """
     logger.info(f"소제목 입력: {text[:30]}...")
+    mode = _active_format.get("heading") or "section_title"
+    _active_format["heading_index"] = int(_active_format.get("heading_index") or 0) + 1
+    if mode == "quote":
+        _input_quotation(driver, text, style=_active_format.get("heading_quote_style") or "quotation_underline")
+        return
+    if mode == "bold_marker":
+        _input_bold_marker_heading(driver, text, _active_format["heading_index"])
+        return
 
     if not _set_text_format(driver, TEXT_FORMAT_SECTION_TITLE, "소제목"):
         logger.warning("소제목 서식을 적용하지 못해 인용구로 대체합니다.")
@@ -1200,6 +1238,39 @@ def _input_heading(driver, text):
     wait_short()
     if not _set_text_format(driver, TEXT_FORMAT_BODY, "본문"):
         logger.warning("본문 서식 복귀에 실패했습니다. 다음 문단이 소제목 서식일 수 있습니다.")
+
+
+def _input_bold_marker_heading(driver, text, index):
+    """상담형 소제목: '■ 1. 제목' 을 굵게 한 줄로 넣는다(상위 상담글 12/20이 이 방식)."""
+    label = re.sub(r"^\s*(?:[■▶●◆]\s*)?(?:\d+[.)]\s*)?", "", str(text or "")).strip() or str(text or "").strip()
+    _input_text_block(driver, [("bold", f"■ {index}. {label}")])
+
+
+def _set_paragraph_align(driver, align):
+    """현재 문단(이후 입력) 정렬을 바꾼다. 실패하면 False — 정렬 실패로 글쓰기를 막지 않는다."""
+    candidates = [
+        (".se-toolbar-item-align button", f".se-toolbar-option-align-{align}-button"),
+        (".se-toolbar-item-align .se-document-toolbar-select-option-button", f".se-toolbar-option-align-{align}-button"),
+        (".se-align-left-toolbar-button", f".se-toolbar-option-align-{align}-button"),
+    ]
+    for opener_sel, option_sel in candidates:
+        try:
+            opener = driver.find_element(By.CSS_SELECTOR, opener_sel)
+            driver.execute_script("arguments[0].click();", opener)
+            wait_short()
+            option = driver.find_element(By.CSS_SELECTOR, option_sel)
+            driver.execute_script("arguments[0].click();", option)
+            wait_short()
+            logger.info(f"문단 정렬 적용: {align}")
+            return True
+        except Exception as e:
+            logger.debug(f"정렬 셀렉터 실패({opener_sel} → {option_sel}): {e}")
+            try:
+                ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+            except Exception:
+                pass
+    logger.warning(f"문단 정렬({align})을 적용하지 못했습니다. 기본 정렬로 계속합니다.")
+    return False
 
 
 def _open_list_option(driver, option_selector, label):
@@ -1477,9 +1548,14 @@ def _input_image_caption(driver, text):
         logger.debug(f"사진 설명 입력 실패(건너뜀): {e}")
 
 
-def _input_quotation(driver, text):
-    """인용구 입력 (실패 시 볼드 텍스트로 대체)"""
-    logger.info(f"인용구 입력: {text[:30]}...")
+def _input_quotation(driver, text, style=None):
+    """인용구 입력 (실패 시 볼드 텍스트로 대체)
+
+    style: default | quotation_line | quotation_underline | quotation_postit | quotation_corner | quotation_bubble
+    지정이 없으면 글 유형 서식(_active_format)의 인용구 스타일을 쓴다.
+    """
+    style = str(style or _active_format.get("quote_style") or "quotation_underline").strip()
+    logger.info(f"인용구 입력({style}): {text[:30]}...")
 
     try:
         # 인용구 열기 버튼 클릭
@@ -1489,6 +1565,8 @@ def _input_quotation(driver, text):
 
         # 인용구 스타일 선택 — 여러 셀렉터 시도
         style_selectors = [
+            f".se-toolbar-option-insert-quotation-{style}-button",
+            f".se-insert-menu-sub-panel-button-quotation-{style}",
             QUOTATION_STYLE,
             ".se-toolbar-option-insert-quotation button:first-child",
             "[class*='quotation'] button",
