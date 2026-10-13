@@ -94,6 +94,7 @@ def main():
     parser.add_argument("--bold", action="store_true")
     parser.add_argument("--markdown", default="")
     parser.add_argument("--no-save", action="store_true")
+    parser.add_argument("--profile-session", action="store_true", help="저장 세션 파일이 만료돼도 브라우저 프로필 로그인만 확인해 진행")
     args = parser.parse_args()
     if args.bold:
         os.environ["AIMAX_EDITOR_ENABLE_BOLD"] = "1"
@@ -136,7 +137,13 @@ def main():
         result["stages"].append("browser_start")
         driver = create_stealth_driver()
         result["stages"].append("naver_login")
-        login(driver, naver_id, naver_pw)
+        if args.profile_session:
+            from auth.naver_login import _blog_session_ready
+            result["profile_session_ready"] = bool(_blog_session_ready(driver, naver_id))
+            if not result["profile_session_ready"]:
+                raise RuntimeError("profile_session_not_logged_in")
+        else:
+            login(driver, naver_id, naver_pw)
         result["stages"].append("editor_open")
         navigate_to_editor(driver, naver_id, naver_pw)
         result["stages"].append("title")
