@@ -396,6 +396,42 @@ class AimaxWebAgentClient:
     def get_user_secrets(self) -> dict[str, Any]:
         return self._request("GET", "/api/user/secrets")
 
+    def download_job_image(self, job_id: str, index: int, dest_path: str, max_bytes: int = 25 * 1024 * 1024) -> str:
+        """서버가 만들어 둔 예리 이미지 1장을 내려받는다(2026-10-13).
+
+        키는 서버에만 있고 PC로 내려오지 않는다. 그래서 이미지도 서버가 만들고 실행기는 파일만 받는다.
+        """
+        url = f"{self.base_url}/api/agent/jobs/{requests.utils.quote(str(job_id), safe='')}/images/{int(index)}"
+        headers = self._headers(auth=True)
+        headers["accept"] = "image/*"
+        try:
+            response = requests.get(url, headers=headers, timeout=max(self.timeout, 60), stream=True)
+        except requests.RequestException as exc:
+            raise AimaxApiError(0, f"network_error: {exc}") from exc
+        if response.status_code >= 400:
+            try:
+                error = str((response.json() or {}).get("error") or f"http_{response.status_code}")
+            except ValueError:
+                error = f"http_{response.status_code}"
+            raise AimaxApiError(response.status_code, error)
+        total = 0
+        tmp_path = f"{dest_path}.part"
+        with open(tmp_path, "wb") as handle:
+            for chunk in response.iter_content(chunk_size=65536):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > max_bytes:
+                    handle.close()
+                    os.remove(tmp_path)
+                    raise AimaxApiError(413, "image_too_large")
+                handle.write(chunk)
+        if total < 1024:
+            os.remove(tmp_path)
+            raise AimaxApiError(502, "image_too_small")
+        os.replace(tmp_path, dest_path)
+        return dest_path
+
     def update_job(self, job_id: str, status: str, log: str, level: str = "info", result: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = {
             "job_id": job_id,

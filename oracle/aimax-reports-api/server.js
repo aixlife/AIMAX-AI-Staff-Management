@@ -1799,6 +1799,7 @@ function sanitizeYeriArtifact(raw) {
     generated_at: String(artifact.generated_at || nowIso()).slice(0, 40),
     text_model: String(artifact.text_model || artifact.model || "").trim().slice(0, 80),
     usage: sanitizeUsage(artifact.usage),
+    ...(artifact.server_images ? { server_images: sanitizeYeriServerImages(artifact.server_images) } : {}),
   };
 }
 
@@ -1846,6 +1847,10 @@ function loadYeriArtifact(jobOrArtifactId) {
 function discardYeriArtifact(jobOrArtifactId) {
   const artifactId = safeArtifactId(typeof jobOrArtifactId === "object" ? jobOrArtifactId?.id : jobOrArtifactId);
   const filePath = yeriArtifactPath(artifactId);
+  const imageDir = path.join(ARTIFACTS_DIR, `${artifactId}.images`);
+  if (artifactId && fs.existsSync(imageDir)) {
+    try { fs.rmSync(imageDir, { recursive: true, force: true }); } catch (_error) { /* 본문 정리를 막지 않는다 */ }
+  }
   if (!filePath || !fs.existsSync(filePath)) return false;
   try {
     fs.rmSync(filePath);
@@ -2762,6 +2767,13 @@ function buildYeriLengthRevisionPrompt(payload) {
     `- ${adjustment}`,
     `- 최종 결과는 반드시 ${report.min}자 이상 ${report.max}자 이하로 끝낸다. 이 범위를 벗어난 원고는 실패다.`,
     `- [이미지] 줄은 정확히 ${imageCount}개만 유지하고 위치도 그대로 둔다.`,
+    // 2026-10-13 실측: 보정 지시가 "분량만"이라 보정을 거친 원고가 굵게 0개, 문단 300자대로
+    // 돌아갔다("~하는 것이 필수적이다" 류 군더더기 문장을 기존 문단 끝에 덧붙여 늘렸다).
+    // 원문의 서식·호흡 규칙은 보정 후에도 그대로 지켜야 한다.
+    "- 원문의 서식 표기는 그대로 유지한다: **굵게**, '> ' 로 시작하는 인용구 줄, 목록, 표, [이미지] 줄과 ' || ' 사진 설명.",
+    "- 한 문단은 40자 안팎, 길어도 60자에서 끊는다. 기존 문단 끝에 문장을 덧붙여 늘리지 않는다.",
+    "- 늘릴 때는 구체적인 예시, 확인 항목, 상황별 차이를 새 짧은 문단이나 목록 항목으로 추가한다. 같은 말을 바꿔 반복하거나 '~하는 것이 중요하다'류 일반론으로 채우지 않는다.",
+    "- 줄일 때는 반복되는 문장과 일반론부터 지우고, 굵게 표시와 인용구는 남긴다.",
     `- 핵심 키워드 "${keyword}"의 사용 빈도를 원문보다 늘리지 않는다.`,
     "- 제목은 content_markdown 첫 줄에도 '# 제목' 형식으로 유지한다.",
     "- 확인되지 않은 통계, 후기, 가격, 순위, 법적/의학적 단정은 새로 만들지 않는다.",
@@ -3016,7 +3028,22 @@ function classifyYeriProviderError(provider, error) {
     // 진짜 결제 고갈(유료 크레딧 소진)만 hard quota 로 분류한다. 무료 티어 일일/분당 한도
     // (quota exceeded / RESOURCE_EXHAUSTED / limit: 0)는 결제 문제가 아니므로 '결제 확인'으로
     // 오안내하지 않고 대기/유료키 등록 안내로 보낸다(무료 사용자 혼란·중복 보고 방지).
-    const billingDead = /(insufficient_quota|billing|payment|balance|out of credit|결제)/i.test(detail);
+    // 2026-10-13 실측: 구글은 무료 티어 한도 초과 429 본문에도 "check your plan and billing details"
+    // 를 붙인다. 그 'billing' 한 단어로 결제 고갈로 오분류해 다음 무료 모델로 넘어가지 못하고
+    // "결제 한도 초과"로 실패했다(신규 구매자 1명, 연속 4건). 메트릭 이름에 free_tier 가 있으면
+    // 결제 문제가 아니라 모델별 무료 한도다.
+    const freeTier = /free_tier/i.test(detail);
+    const billingDead = !freeTier && /(insufficient_quota|billing|payment|balance|out of credit|결제)/i.test(detail);
+    if (freeTier) {
+      // 무료 한도는 모델마다 따로 잡힌다. 같은 모델을 2초·8초 뒤 재시도해 봐야 한도만 더 쓰므로
+      // 재시도하지 않고(transient=false) 체인의 다음 모델로 바로 넘긴다(fallback 코드는 유지).
+      return yeriProviderError(
+        provider,
+        "server_generation_rate_limited",
+        `${label} 무료 사용량 한도에 도달했습니다. 분당 한도면 잠시 후, 일일 한도면 내일 다시 시도하거나, 본인 유료 API 키를 등록하면 해소됩니다. (여러 글을 한 번에 몰아 보내면 한도에 더 빨리 도달합니다)`,
+        { status, detail, transient: false },
+      );
+    }
     if (billingDead) {
       return yeriProviderError(
         provider,
@@ -3665,6 +3692,346 @@ function watchPersistedYeriCancellation(jobId, userId, controller) {
 
 let yeriGenerationFinalizationBarrier = null;
 
+// ── 예리 이미지: 서버에서 만든다 (2026-10-13) ──
+// 그전까지 이미지는 실행기(사용자 PC)가 "로컬에 저장된 키"로 만들었다. 그런데 키 입력은 웹으로
+// 옮겨 갔고(v1.0.45 전부 웹키) 실행기는 웹 키의 '있음/없음'만 알 뿐 값을 받지 않는다.
+// 그래서 웹에만 키를 넣은 사용자는 이미지가 한 장도 안 만들어지고(api_key_missing) 그 보호
+// 규칙 때문에 발행이 임시저장으로 바뀌었다. 8~10월 이미지 요청 잡 대부분이 이 경로였다.
+// 키를 PC로 내려보내지 않고, 글을 만든 그 자리(서버)에서 사용자 키로 이미지를 만들어 둔다.
+// 실행기는 파일만 받아 넣는다. 구버전 실행기는 이 필드를 모르고 예전처럼 동작한다(호환).
+const YERI_SERVER_IMAGES_ENABLED = !/^(0|false|no|off)$/i.test(String(process.env.AIMAX_YERI_SERVER_IMAGES || "1").trim());
+const YERI_SERVER_IMAGE_TIMEOUT_MS = Math.max(30000, Number(process.env.AIMAX_YERI_SERVER_IMAGE_TIMEOUT_MS || 180000));
+const YERI_SERVER_IMAGE_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.AIMAX_YERI_SERVER_IMAGE_CONCURRENCY || 2)));
+const YERI_SERVER_IMAGE_RETENTION_MS = Math.max(24 * 3600 * 1000, Number(process.env.AIMAX_YERI_SERVER_IMAGE_RETENTION_MS || 14 * 24 * 3600 * 1000));
+const YERI_DEFAULT_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
+const YERI_DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-1";
+const YERI_IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+
+function yeriImageProviderForModel(model) {
+  const value = String(model || "").trim().toLowerCase();
+  if (value.startsWith("gpt-image") || value.startsWith("dall") || value === "openai") return "openai";
+  return "gemini";
+}
+
+function yeriNormalizeServerImageModel(model, provider) {
+  const value = String(model || "").trim();
+  if (provider === "openai") return value.startsWith("gpt-image") ? value : YERI_DEFAULT_OPENAI_IMAGE_MODEL;
+  if (!value || !value.startsWith("gemini") || value === "gemini-2.5-flash-image") return YERI_DEFAULT_GEMINI_IMAGE_MODEL;
+  return value;
+}
+
+// 본문의 [이미지] 줄에서 그림 지시만 뽑는다. ' || ' 뒤는 사진 설명(캡션)이라 그림 지시가 아니다.
+// 실행기 markdown_parser 와 같은 기준이어야 순서(index)가 맞는다.
+function yeriImagePromptsFromMarkdown(markdown) {
+  const prompts = [];
+  for (const line of String(markdown || "").split(/\r?\n/)) {
+    const stripped = line.trim();
+    if (!stripped.startsWith("[이미지]")) continue;
+    const body = stripped.slice("[이미지]".length).trim();
+    const prompt = body.split("||")[0].trim();
+    prompts.push(prompt);
+  }
+  return prompts;
+}
+
+function yeriServerImageDir(jobId) {
+  const safeId = safeArtifactId(jobId);
+  return safeId ? path.join(ARTIFACTS_DIR, `${safeId}.images`) : "";
+}
+
+function yeriServerImagePath(jobId, index) {
+  const dir = yeriServerImageDir(jobId);
+  const n = safeInt(index, 1, 50);
+  return dir ? path.join(dir, `${n}.png`) : "";
+}
+
+function pruneYeriServerImageDirs(referenceMs = Date.now()) {
+  if (!fs.existsSync(ARTIFACTS_DIR)) return;
+  try {
+    for (const name of fs.readdirSync(ARTIFACTS_DIR)) {
+      if (!name.endsWith(".images")) continue;
+      const dir = path.join(ARTIFACTS_DIR, name);
+      const stat = fs.statSync(dir);
+      if (referenceMs - stat.mtimeMs > YERI_SERVER_IMAGE_RETENTION_MS) fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch (error) {
+    console.warn("[yeri-images] prune failed", error?.code || error?.message || error);
+  }
+}
+
+function classifyYeriImageError(provider, error) {
+  const status = Number(error?.status || error?.statusCode || 0);
+  const detail = redactText([error?.code, error?.detail, error?.message].filter(Boolean).join(" ")).slice(0, 400);
+  const label = provider === "openai" ? "OpenAI" : "Gemini";
+  const make = (code, message, fatalForProvider) => ({ code, message, status, detail, fatalForProvider });
+  if (error?.code === "external_timeout" || /timed out|timeout/i.test(detail)) {
+    return make("timeout", `${label} 이미지 생성이 시간 안에 끝나지 않았습니다.`, false);
+  }
+  // 구글 이미지 모델은 무료 티어가 아예 없다(공식 가격표 "Not available", 2026-10-13 확인).
+  // 무료 키로 부르면 429 + free_tier ... limit: 0 이 온다. 결제 문제지만 사용자가 할 일은
+  // "결제 연결"이라 메시지를 따로 준다. 같은 키로 남은 장을 계속 불러도 결과가 같아 제공자 단위로 끊는다.
+  if (provider === "gemini" && (/free_tier|limit: 0|not available.*free|only available.*paid/i.test(detail))) {
+    return make("image_paid_required", "Gemini 무료 API 키로는 이미지를 만들 수 없습니다(구글 정책: 이미지 모델은 무료 사용량이 없음). Google AI Studio에서 결제를 연결하거나 OpenAI 키를 등록하면 이미지가 만들어집니다.", true);
+  }
+  if (status === 401 || status === 403 || /api[_ ]?key|unauthorized|permission|API_KEY_INVALID|invalid_api_key/i.test(detail)) {
+    return make("api_key_invalid", `${label} API 키가 이미지 생성에 거절되었습니다. 키를 확인해주세요.`, true);
+  }
+  if (/insufficient_quota|billing_hard_limit|billing|payment|credit|balance/i.test(detail) && status !== 400) {
+    return make("quota_exceeded", `${label} 결제/크레딧 한도로 이미지를 만들지 못했습니다.`, true);
+  }
+  if (status === 429 || /rate.?limit|resource_exhausted/i.test(detail)) {
+    return make("rate_limited", `${label} 이미지 요청 한도에 걸렸습니다. 잠시 후 다시 시도해주세요.`, false);
+  }
+  if (status === 404 || /not found|model_not_found|unsupported/i.test(detail)) {
+    return make("model_not_found", `${label} 이미지 모델을 사용할 수 없습니다.`, true);
+  }
+  if (/safety|moderation|content_policy|blocked|PROHIBITED/i.test(detail)) {
+    return make("content_blocked", `${label}가 이 그림 지시를 안전 정책으로 거절했습니다.`, false);
+  }
+  return make("image_generation_failed", `${label} 이미지 생성에 실패했습니다.`, false);
+}
+
+async function requestYeriGeminiImage(apiKey, model, prompt, signal) {
+  const response = await requestExternalJson(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    method: "POST",
+    headers: { "x-goog-api-key": apiKey },
+    body: {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+    },
+    timeoutMs: YERI_SERVER_IMAGE_TIMEOUT_MS,
+    maxBytes: YERI_IMAGE_MAX_BYTES,
+    signal,
+  });
+  for (const candidate of response.json?.candidates || []) {
+    for (const part of candidate?.content?.parts || []) {
+      const data = part?.inlineData?.data || part?.inline_data?.data;
+      if (data) return Buffer.from(String(data), "base64");
+    }
+  }
+  const finish = response.json?.candidates?.[0]?.finishReason || response.json?.promptFeedback?.blockReason || "no_image";
+  const error = new Error(`gemini_image_empty ${finish}`);
+  error.code = /SAFETY|PROHIBITED|BLOCK/i.test(String(finish)) ? "content_blocked" : "gemini_image_empty";
+  error.detail = `finish=${finish}`;
+  throw error;
+}
+
+async function requestYeriOpenAiImage(apiKey, model, prompt, signal) {
+  const response = await requestExternalJson("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: { authorization: `Bearer ${apiKey}` },
+    body: { model, prompt, n: 1, size: "1024x1024", quality: "medium", output_format: "png" },
+    timeoutMs: YERI_SERVER_IMAGE_TIMEOUT_MS,
+    maxBytes: YERI_IMAGE_MAX_BYTES,
+    signal,
+  });
+  const b64 = response.json?.data?.[0]?.b64_json;
+  if (b64) return Buffer.from(String(b64), "base64");
+  const error = new Error("openai_image_empty");
+  error.code = "openai_image_empty";
+  throw error;
+}
+
+function yeriImageBufferLooksValid(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 1024) return false;
+  const png = buffer.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const jpg = buffer[0] === 0xff && buffer[1] === 0xd8;
+  const webp = buffer.slice(0, 4).toString("ascii") === "RIFF" && buffer.slice(8, 12).toString("ascii") === "WEBP";
+  return png || jpg || webp;
+}
+
+function yeriImageMime(buffer) {
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) return "image/jpeg";
+  if (buffer.slice(0, 4).toString("ascii") === "RIFF") return "image/webp";
+  return "image/png";
+}
+
+// 사용자 본인 키만 쓴다. getUserOrStoredSecret 은 서버 저장 키로 넘어갈 수 있어 이미지(장당 과금)에는
+// 쓰지 않는다 — 회사 키로 고객 이미지를 만들면 비용이 우리에게 청구된다.
+function yeriServerImagePlan(job, userId) {
+  const payload = job?.payload || {};
+  const requested = yeriImageProviderForModel(payload.image_model);
+  const order = requested === "openai" ? ["openai", "gemini"] : ["gemini", "openai"];
+  return order
+    .map((provider) => ({
+      provider,
+      model: provider === requested ? yeriNormalizeServerImageModel(payload.image_model, provider) : yeriNormalizeServerImageModel("", provider),
+      apiKey: getUserSecret(userId, provider) || "",
+      requested: provider === requested,
+    }))
+    .filter((item) => item.apiKey);
+}
+
+async function generateYeriServerImages(artifact, job, userId, signal = null) {
+  if (!YERI_SERVER_IMAGES_ENABLED || !artifact || typeof artifact !== "object") return artifact;
+  const prompts = yeriImagePromptsFromMarkdown(artifact.content_markdown).slice(0, 20);
+  if (!prompts.length || yeriPayloadImageCount(job?.payload || {}) <= 0) return artifact;
+  const plan = yeriServerImagePlan(job, userId);
+  if (!plan.length) {
+    // 웹에 이미지용 키가 하나도 없다. 실행기가 예전처럼 로컬 키를 찾아보게 둔다.
+    return { ...artifact, server_images: { status: "no_key", requested: prompts.length, ready: 0, items: [] } };
+  }
+  pruneYeriServerImageDirs();
+  const dir = yeriServerImageDir(job.id);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const deadProviders = new Map();
+  const items = new Array(prompts.length);
+  appendJobLogById(job.id, userId, "info", `이미지 ${prompts.length}장을 서버에서 만듭니다 (${plan.map((p) => p.model).join(" → ")}).`);
+
+  const makeOne = async (index) => {
+    const prompt = prompts[index];
+    const item = { index: index + 1, prompt: compactText(prompt, 500), status: "failed", provider: "", model: "", error_code: "", message: "" };
+    if (!prompt) {
+      item.error_code = "empty_image_prompt";
+      item.message = "이미지 지시가 비어 있습니다.";
+      items[index] = item;
+      return;
+    }
+    for (const target of plan) {
+      throwIfYeriGenerationCancelled(signal);
+      if (deadProviders.has(target.provider)) {
+        const dead = deadProviders.get(target.provider);
+        item.error_code = item.error_code || dead.code;
+        item.message = item.message || dead.message;
+        continue;
+      }
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const buffer = target.provider === "openai"
+            ? await requestYeriOpenAiImage(target.apiKey, target.model, prompt, signal)
+            : await requestYeriGeminiImage(target.apiKey, target.model, prompt, signal);
+          if (!yeriImageBufferLooksValid(buffer)) {
+            const error = new Error("image_invalid_bytes");
+            error.code = "image_invalid_bytes";
+            throw error;
+          }
+          const filePath = yeriServerImagePath(job.id, index + 1);
+          fs.writeFileSync(filePath, buffer, { mode: 0o600 });
+          Object.assign(item, {
+            status: "ready",
+            provider: target.provider,
+            model: target.model,
+            error_code: "",
+            message: target.requested ? "" : `${target.provider === "openai" ? "OpenAI" : "Gemini"} 키로 대신 만들었습니다.`,
+            mime: yeriImageMime(buffer),
+            bytes: buffer.length,
+            sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
+          });
+          items[index] = item;
+          return;
+        } catch (error) {
+          if (error?.cancelled || error?.code === "user_cancelled") throw error;
+          const classified = classifyYeriImageError(target.provider, error);
+          item.provider = target.provider;
+          item.model = target.model;
+          item.error_code = classified.code;
+          item.message = classified.message;
+          console.warn("[yeri-images] generation failed", {
+            job_id: job.id, index: index + 1, provider: target.provider, model: target.model,
+            code: classified.code, status: classified.status,
+          });
+          if (classified.fatalForProvider) {
+            deadProviders.set(target.provider, classified);
+            break;
+          }
+          if (attempt < 2 && ["timeout", "rate_limited", "image_generation_failed", "gemini_image_empty"].includes(classified.code)) {
+            await sleepMs(classified.code === "rate_limited" ? 8000 : 2000, signal);
+            continue;
+          }
+          break;
+        }
+      }
+    }
+    items[index] = item;
+  };
+
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(YERI_SERVER_IMAGE_CONCURRENCY, prompts.length) }, async () => {
+    while (cursor < prompts.length) {
+      const index = cursor;
+      cursor += 1;
+      await makeOne(index);
+    }
+  });
+  await Promise.all(workers);
+
+  const ready = items.filter((item) => item?.status === "ready").length;
+  const firstFailure = items.find((item) => item && item.status !== "ready");
+  const status = ready === prompts.length ? "ready" : (ready ? "partial" : "failed");
+  if (status === "ready") {
+    appendJobLogById(job.id, userId, "info", `이미지 ${ready}장을 서버에서 만들었습니다.`);
+  } else {
+    appendJobLogById(job.id, userId, "warn", `이미지 ${prompts.length}장 중 ${ready}장만 만들었습니다. ${firstFailure?.message || ""}`.trim());
+  }
+  return {
+    ...artifact,
+    server_images: {
+      status,
+      requested: prompts.length,
+      ready,
+      error_code: status === "ready" ? "" : String(firstFailure?.error_code || ""),
+      message: status === "ready" ? "" : String(firstFailure?.message || ""),
+      items,
+    },
+  };
+}
+
+function sanitizeYeriServerImages(raw) {
+  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : null;
+  if (!source) return undefined;
+  const items = (Array.isArray(source.items) ? source.items : []).slice(0, 20).map((item, idx) => {
+    const value = item && typeof item === "object" ? item : {};
+    return {
+      index: safeInt(value.index || idx + 1, 1, 50),
+      status: value.status === "ready" ? "ready" : "failed",
+      provider: ["gemini", "openai"].includes(value.provider) ? value.provider : "",
+      model: String(value.model || "").slice(0, 80),
+      prompt: compactText(value.prompt || "", 500),
+      error_code: String(value.error_code || "").slice(0, 60),
+      message: redactText(String(value.message || "")).slice(0, 300),
+      mime: ["image/png", "image/jpeg", "image/webp"].includes(value.mime) ? value.mime : "",
+      bytes: safeInt(value.bytes, 0, YERI_IMAGE_MAX_BYTES),
+      sha256: /^[a-f0-9]{64}$/.test(String(value.sha256 || "")) ? value.sha256 : "",
+    };
+  });
+  return {
+    status: ["ready", "partial", "failed", "no_key"].includes(source.status) ? source.status : "failed",
+    requested: safeInt(source.requested, 0, 50),
+    ready: safeInt(source.ready, 0, 50),
+    error_code: String(source.error_code || "").slice(0, 60),
+    message: redactText(String(source.message || "")).slice(0, 300),
+    items,
+  };
+}
+
+function handleAgentJobImage(req, res, jobId, indexText) {
+  const auth = requireSession(req, res);
+  if (!auth) return;
+  const jobs = loadJobs();
+  const job = jobs.jobs.find((item) => item.id === jobId && item.user_id === auth.user.id);
+  if (!job || job.kind !== "yeri_write" || !jobVisibleToUser(job, auth.user)) {
+    json(req, res, 404, { ok: false, error: "job_not_found" });
+    return;
+  }
+  const index = Number.parseInt(indexText, 10);
+  if (!Number.isFinite(index) || index < 1 || index > 50) {
+    json(req, res, 400, { ok: false, error: "invalid_image_index" });
+    return;
+  }
+  const filePath = yeriServerImagePath(job.id, index);
+  if (!filePath || !fs.existsSync(filePath)) {
+    json(req, res, 404, { ok: false, error: "image_not_found" });
+    return;
+  }
+  const buffer = fs.readFileSync(filePath);
+  res.writeHead(200, {
+    "content-type": yeriImageMime(buffer),
+    "content-length": buffer.length,
+    "cache-control": "no-store",
+  });
+  res.end(buffer);
+}
+
 async function finalizeYeriArtifactForJob(jobId, userId, artifact, signal) {
   if (typeof yeriGenerationFinalizationBarrier === "function") {
     await yeriGenerationFinalizationBarrier({ jobId, userId });
@@ -3701,7 +4068,18 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
       : await enforceYeriArtifactLength(
         await generateYeriSelectedModelArtifact(job, userId, controller.signal), job, userId, controller.signal,
       );
-    const finalized = await finalizeYeriArtifactForJob(jobId, userId, artifact, controller.signal);
+    // 이미지는 글을 살리는 보조 단계다. 이미지가 실패해도 이미 과금된 본문은 실행기로 넘긴다.
+    let artifactWithImages = artifact;
+    if (mode !== "mock") {
+      try {
+        artifactWithImages = await generateYeriServerImages(artifact, job, userId, controller.signal);
+      } catch (imageError) {
+        if (imageError?.cancelled || imageError?.code === "user_cancelled" || controller.signal.aborted) throw imageError;
+        console.warn("[yeri-images] crashed", imageError?.message || imageError);
+        appendJobLogById(jobId, userId, "warn", "서버 이미지 생성 중 오류가 나 이미지는 실행기 쪽 방식으로 진행합니다.");
+      }
+    }
+    const finalized = await finalizeYeriArtifactForJob(jobId, userId, artifactWithImages, controller.signal);
     if (finalized.cancelled) return { ok: false, error: "user_cancelled", cancelled: true };
     if (finalized.error) return { ok: false, error: finalized.error, status: finalized.status };
     return { ok: true, job: finalized.job, artifact: finalized.artifact };
@@ -4050,6 +4428,8 @@ function classifyStructuredFailureSignature(text) {
   if (!text.trim()) return "other";
   if (/naver_login|네이버 로그인|네이버.*(아이디|비밀번호|로그인|인증)|captcha|인증 화면/.test(text)) return "naver_login_failed";
   if (/server_generation_auth_failed|api_key_invalid|api_key_missing|key_missing|invalid.*api.*key|invalid x-api-key|unauthorized|permission denied|authentication|api 키 인증|키 인증 실패/.test(text)) return "ai_key_invalid";
+  // 구글 무료 한도 429 본문에도 "billing" 이 들어 있어, 코드가 rate_limited 거나 free_tier 면 결제로 보지 않는다.
+  if (/server_generation_rate_limited|free_tier/.test(text)) return "transient";
   if (/server_generation_quota_exceeded|quota_exceeded|insufficient_quota|billing|payment|out of credit|balance|결제|크레딧|잔액|요금제/.test(text)) return "billing_quota";
   // runner_stopped_heartbeating_or_timed_out 은 timeout 이라는 단어 때문에 transient 로
   // 오분류되기 쉬워 transient 검사보다 먼저 실행기 계열로 분류한다(H-2).
@@ -20139,6 +20519,11 @@ async function route(req, res) {
   if (req.method === "POST" && url.pathname === "/api/agent/commands/update") {
     return handleAgentCommandUpdate(req, res);
   }
+  if (req.method === "GET" && /^\/api\/agent\/jobs\/[^/]+\/images\/\d+$/.test(url.pathname)) {
+    const [, , , , imageJobId, , imageIndex] = url.pathname.split("/");
+    handleAgentJobImage(req, res, decodeURIComponent(imageJobId), imageIndex);
+    return;
+  }
   if (req.method === "GET" && url.pathname === "/api/agent/next-job") {
     handleAgentNextJob(req, res);
     return;
@@ -20319,6 +20704,15 @@ module.exports = {
   },
   __yeriHybridTest: {
     ARTIFACTS_DIR,
+    classifyYeriImageError,
+    classifyYeriProviderError,
+    generateYeriServerImages,
+    sanitizeYeriServerImages,
+    yeriImagePromptsFromMarkdown,
+    yeriServerImagePlan,
+    yeriServerImagePath,
+    buildYeriLengthRevisionPrompt,
+    setUserSecretForSmoke: setUserSecret,
     JOB_STATUSES,
     agentYeriArtifactPayload,
     attachYeriArtifactToJob,

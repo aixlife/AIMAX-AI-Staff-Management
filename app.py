@@ -437,6 +437,12 @@ def _is_openai_model(value):
     return str(value or "").startswith("gpt-")
 
 
+def _safe_path_part(value):
+    """파일/폴더 이름에 쓸 수 있게 잡 id 같은 값을 정리한다."""
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "")).strip("._")
+    return cleaned[:80] or "item"
+
+
 def _normalize_image_model(value, ai_model=None):
     value = str(value or "").strip()
     if not value:
@@ -3733,6 +3739,54 @@ class NaverBlogApp:
         content = str((artifact or {}).get("content_markdown") or "")
         return sum(1 for line in content.splitlines() if line.strip().startswith("[이미지]"))
 
+    def _download_server_images(self, client, job_id, artifact):
+        """서버가 사용자 웹 키로 만들어 둔 이미지를 받아 {순번: 파일정보} 로 돌려준다(2026-10-13).
+
+        웹 키 값은 PC로 내려오지 않는다. 그래서 웹에만 키를 넣은 사용자는 이미지가 한 장도 안 나왔다.
+        받기에 실패한 순번은 비워 두고, 그 자리는 예전처럼 로컬 키 생성(있으면) 또는 건너뛰기로 간다.
+        """
+        server_images = (artifact or {}).get("server_images")
+        if not isinstance(server_images, dict):
+            return {}
+        status = str(server_images.get("status") or "")
+        message = str(server_images.get("message") or "").strip()
+        if status in {"failed", "no_key"} or not server_images.get("ready"):
+            if message:
+                self._log(f"[이미지] 서버 이미지 생성 실패: {message}")
+            return {}
+        prepared = {}
+        folder = os.path.join(GENERATED_IMAGE_DIR, "server", _safe_path_part(str(job_id or "job")))
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except Exception as error:
+            self._log(f"[이미지] 서버 이미지 저장 폴더를 만들지 못했습니다: {error}")
+            return {}
+        for item in server_images.get("items") or []:
+            if not isinstance(item, dict) or item.get("status") != "ready":
+                continue
+            try:
+                index = int(item.get("index") or 0)
+            except (TypeError, ValueError):
+                continue
+            if index < 1:
+                continue
+            ext = {"image/jpeg": ".jpg", "image/webp": ".webp"}.get(str(item.get("mime") or ""), ".png")
+            dest = os.path.join(folder, f"{index}{ext}")
+            try:
+                client.download_job_image(job_id, index, dest)
+                prepared[index] = {
+                    "path": dest,
+                    "provider": str(item.get("provider") or ""),
+                    "model": str(item.get("model") or ""),
+                }
+            except Exception as error:
+                self._log(f"[이미지] 서버 이미지 {index}번을 받지 못했습니다: {error}")
+        total = int(server_images.get("requested") or 0) or len(server_images.get("items") or [])
+        self._log(f"[이미지] 서버에서 만든 이미지 {len(prepared)}/{total}장을 받았습니다.")
+        if message and len(prepared) < total:
+            self._log(f"[이미지] 일부 이미지 실패 사유: {message}")
+        return prepared
+
     def _start_remote_job(self, data):
         client = data.get("client")
         job = data.get("job") or {}
@@ -3826,7 +3880,9 @@ class NaverBlogApp:
                 requested_images = _payload_image_count(payload)
                 artifact_image_count = min(self._remote_artifact_image_count(artifact), requested_images)
             image_model = _normalize_image_model(payload.get("image_model"), payload.get("ai_model") or payload.get("model") or self.ai_model_var.get())
-            if artifact_image_count > 0 and not self._has_local_image_key(image_model):
+            if artifact and artifact_image_count > 0:
+                artifact["prepared_images"] = self._download_server_images(client, job_id, artifact)
+            if artifact_image_count > 0 and not (artifact or {}).get("prepared_images") and not self._has_local_image_key(image_model):
                 self._log(
                     "[웹앱 작업] 선택한 이미지 모델을 실행할 로컬 이미지 API 키가 없어 이미지는 건너뜁니다. "
                     "웹앱에 저장된 키는 현재 로컬 네이버 에디터 이미지 생성에는 직접 사용되지 않습니다. "
@@ -6553,6 +6609,10 @@ class NaverBlogApp:
             image_provider = _image_provider_for_model(image_model)
             image_api_key = openai_key if image_provider == "openai" else gemini_key
             fallback_image_api_key = gemini_key if image_provider == "openai" else openai_key
+            prepared_images = (artifact or {}).get("prepared_images") if artifact_mode else {}
+            prepared_images = prepared_images if isinstance(prepared_images, dict) else {}
+            server_image_info = (artifact or {}).get("server_images") if artifact_mode else {}
+            server_image_info = server_image_info if isinstance(server_image_info, dict) else {}
 
             # 포스트 목록 구성
             if artifact_mode:
@@ -6595,15 +6655,17 @@ class NaverBlogApp:
                 self._log("[문체 검수] 추가 검수를 완료했습니다.")
                 return reviewed, merged_usage
 
-            if image_count > 0 and not (_is_real_secret(image_api_key) or _is_real_secret(fallback_image_api_key)):
+            if image_count > 0 and not prepared_images and not (_is_real_secret(image_api_key) or _is_real_secret(fallback_image_api_key)):
+                server_error_code = str(server_image_info.get("error_code") or "").strip()
+                server_message = str(server_image_info.get("message") or "").strip()
                 self._log(
-                    "[이미지] 이미지 생성을 위한 로컬 Gemini/OpenAI 키가 없어 이미지 없이 본문만 진행합니다. "
-                    "이미지는 AI/API 연결에서 유료 이미지 사용 가능 키를 등록하거나 이미지 수 0장으로 다시 실행해주세요."
+                    "[이미지] " + (server_message or "이미지 생성을 위한 Gemini/OpenAI 키가 없어 이미지 없이 본문만 진행합니다.")
+                    + " 이미지는 AI/API 연결에서 이미지 생성이 되는 키(결제 연결된 Gemini 또는 OpenAI)를 등록하거나 이미지 수 0장으로 다시 실행해주세요."
                 )
                 image_totals["failures"].append({
                     "stage": "image_generation",
-                    "error": "api_key_missing",
-                    "message": "이미지 생성용 API 키가 없어 이미지 없이 본문을 보존했습니다.",
+                    "error": server_error_code or "api_key_missing",
+                    "message": server_message or "이미지 생성용 API 키가 없어 이미지 없이 본문을 보존했습니다.",
                     "user_actionable": True,
                     "admin_action_required": False,
                 })
@@ -6864,6 +6926,7 @@ class NaverBlogApp:
                                 fallback_api_key=fallback_image_api_key,
                                 image_model=image_model,
                                 stop_event=self.stop_event,
+                                prepared_images=prepared_images,
                             ) or {}
                             image_attempted = _usage_number(input_stats.get("image_attempted")) or image_block_count
                             image_generated = _usage_number(input_stats.get("image_generated"))

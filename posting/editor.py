@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import tempfile
 import time
 import pyperclip
 from urllib.parse import quote
@@ -986,12 +987,16 @@ def _dismiss_editor_popup(driver):
         logger.debug(f"팝업 닫기 시도 중 오류: {e}")
 
 
-def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model="", stop_event=None):
+def input_content(driver, content_list, api_key, image_provider="gemini", fallback_api_key="", image_model="", stop_event=None, prepared_images=None):
     """파싱된 콘텐츠 리스트를 에디터에 입력
 
     content_list 형식:
       [('quote', text), ('image', prompt), ('text', [(type, text), ...]), ...]
+
+    prepared_images: {이미지 순번(1부터): {"path", "provider", "model"}} — 서버가 사용자 웹 키로
+      미리 만든 이미지. 있으면 그 순번은 생성하지 않고 파일을 그대로 넣는다(2026-10-13).
     """
+    prepared_images = prepared_images if isinstance(prepared_images, dict) else {}
     # 혹시 남아있는 팝업 먼저 제거
     _dismiss_editor_popup(driver)
     _reset_inline_formatting(driver)
@@ -1035,6 +1040,7 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
                 image_provider=image_provider,
                 fallback_api_key=fallback_api_key,
                 image_model=image_model,
+                prepared=prepared_images.get(image_attempted),
             ) or {}
             if image_result.get("generated"):
                 image_generated += 1
@@ -1725,10 +1731,35 @@ def _editor_image_diagnostics(driver, before_count=0, upload_method="", attempts
     return diagnostics
 
 
-def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_key="", image_model=""):
+def _copy_prepared_image(prepared):
+    """서버가 만든 이미지 파일을 임시 사본으로 만든다. 삽입 뒤 임시 파일을 지우는 기존 흐름을 그대로 쓰기 위해서다."""
+    if not isinstance(prepared, dict):
+        return None
+    src = str(prepared.get("path") or "").strip()
+    if not src or not os.path.isfile(src) or os.path.getsize(src) < 1024:
+        return None
+    ext = os.path.splitext(src)[1] or ".png"
+    dst = os.path.join(tempfile.gettempdir(), f"aimax_server_image_{int(time.time() * 1000)}{ext}")
+    shutil.copyfile(src, dst)
+    return dst
+
+
+def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_key="", image_model="", prepared=None):
     """이미지 생성 후 에디터에 삽입"""
     prompt = str(prompt or "").strip()
     logger.info(f"이미지 삽입 중: {prompt[:50]}...")
+
+    prepared_path = None
+    try:
+        prepared_path = _copy_prepared_image(prepared)
+    except Exception as e:
+        logger.warning(f"서버 이미지 사본 준비 실패 - 실행기 생성으로 진행: {e}")
+        prepared_path = None
+    if prepared_path:
+        used_provider = str(prepared.get("provider") or image_provider or "").strip()
+        image_model = str(prepared.get("model") or image_model or "").strip()
+        logger.info(f"서버에서 만든 이미지를 넣습니다: {os.path.basename(str(prepared.get('path') or ''))}")
+        return _insert_generated_image(driver, prepared_path, used_provider, image_model)
 
     if not prompt:
         failure = _image_failure(
@@ -1824,6 +1855,11 @@ def _input_image(driver, prompt, api_key, image_provider="gemini", fallback_api_
             "failure": failure,
         }
 
+    return _insert_generated_image(driver, image_path, used_provider, image_model)
+
+
+def _insert_generated_image(driver, image_path, used_provider, image_model):
+    """만들어진 이미지 파일을 에디터에 넣고 결과를 돌려준다(생성 경로·서버 이미지 경로 공용)."""
     abs_path = os.path.abspath(image_path)
     preserved_path = _preserve_generated_image(abs_path, used_provider, image_model)
 
