@@ -59,7 +59,8 @@ const YERI_SERVER_GENERATION_MOCK = envFlag("AIMAX_YERI_SERVER_GENERATION_MOCK")
 // 체인은 env(AIMAX_YERI_GEMINI_MODEL_CHAIN, 콤마구분)로 코드 배포 없이 조정 가능하다.
 const YERI_GEMINI_MODEL_CHAIN = String(
   process.env.AIMAX_YERI_GEMINI_MODEL_CHAIN
-    || "gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash",
+    // 2026-10-13: 3.8-flash 추가. 무료 한도는 모델마다 따로라 체인이 길수록 무료 키가 덜 막힌다.
+    || "gemini-3.6-flash,gemini-3.8-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash",
 ).split(",").map((item) => item.trim()).filter(Boolean);
 // 기본 모델 = 체인의 첫 항목. env override 가 있으면 그것을 우선한다.
 const YERI_SERVER_GENERATION_MODEL = String(
@@ -76,7 +77,8 @@ const YERI_GEMINI_CHAIN_FALLBACK_CODES = new Set([
 ]);
 // 2026-07-22: claude-sonnet-4-6(이전 세대) -> claude-sonnet-5(현행). 실측에서 문체가 가장
 // 자연스러움(34초/40원). 실측·가격 근거: 세션 리포트, docs/pricing 2026-07-22.
-const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-5").trim();
+// 2026-10-13: claude-sonnet-5-5 로. 같은 가격($2/$10)의 최신 세대(ListModels·가격표 확인, 실측은 스모크 기록).
+const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-5-5").trim();
 const YERI_SERVER_GENERATION_TIMEOUT_MS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_TIMEOUT_MS || 60000);
 const YERI_SERVER_GENERATION_MAX_ATTEMPTS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
 const YERI_SERVER_GENERATION_ALLOWED_USER_IDENTIFIERS = new Set(
@@ -305,20 +307,23 @@ const USER_SECRET_PROVIDERS = {
 // 2.x 항목은 선택지에서는 내렸지만 표에는 남긴다. 과거 잡의 비용 표시가 기본값 단가로
 // 뒤바뀌지 않게 하기 위한 것이다(조회 실패 시 YUNMI_DEFAULT_AI_MODEL 단가로 대체되는 구조).
 const YUNMI_AI_MODEL_PRICES = {
-  // 단가 정본: ai.google.dev/gemini-api/docs/pricing (2026-07-22 확인).
-  "gemini-3.6-flash": { provider: "gemini", inputUsdPer1m: 1.50, outputUsdPer1m: 7.50, label: "Gemini 3.6 Flash" },
+  // 단가 정본: 각 제공자 공식 가격표 (2026-10-13 재확인). 3.6/3.8 Flash 는 2026-12-31 까지 인하가, 2027-01-01 부터 1.50/7.50.
+  "gemini-3.6-flash": { provider: "gemini", inputUsdPer1m: 0.75, outputUsdPer1m: 3.75, label: "Gemini 3.6 Flash" },
+  "gemini-3.8-flash": { provider: "gemini", inputUsdPer1m: 0.75, outputUsdPer1m: 3.75, label: "Gemini 3.8 Flash" },
   "gemini-3.5-flash": { provider: "gemini", inputUsdPer1m: 1.50, outputUsdPer1m: 9.00, label: "Gemini 3.5 Flash" },
   "gemini-3.5-flash-lite": { provider: "gemini", inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 3.5 Flash Lite" },
   "gemini-3.1-flash-lite": { provider: "gemini", inputUsdPer1m: 0.25, outputUsdPer1m: 1.50, label: "Gemini 3.1 Flash Lite" },
-  "gemini-3.1-pro-preview": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 3.1 Pro Preview" },
+  "gemini-3.1-pro-preview": { provider: "gemini", inputUsdPer1m: 2.00, outputUsdPer1m: 12.00, label: "Gemini 3.1 Pro Preview" },
   "gemini-2.5-pro": { provider: "gemini", inputUsdPer1m: 1.25, outputUsdPer1m: 10.00, label: "Gemini 2.5 Pro" },
   "gemini-2.5-flash": { provider: "gemini", inputUsdPer1m: 0.30, outputUsdPer1m: 2.50, label: "Gemini 2.5 Flash" },
-  "gpt-5.6-luna": { provider: "openai", inputUsdPer1m: 1.00, outputUsdPer1m: 6.00, label: "GPT-5.6 luna" },
-  "gpt-5.6-terra": { provider: "openai", inputUsdPer1m: 2.50, outputUsdPer1m: 15.00, label: "GPT-5.6 terra" },
+  "gpt-5.6-luna": { provider: "openai", inputUsdPer1m: 0.20, outputUsdPer1m: 1.20, label: "GPT-5.6 luna" },
+  "gpt-6-luna": { provider: "openai", inputUsdPer1m: 0.10, outputUsdPer1m: 0.50, label: "GPT-6 luna" },
+  "gpt-6-sol": { provider: "openai", inputUsdPer1m: 2.00, outputUsdPer1m: 10.00, label: "GPT-6 sol" },
+  "gpt-5.6-terra": { provider: "openai", inputUsdPer1m: 2.00, outputUsdPer1m: 12.00, label: "GPT-5.6 terra" },
   "gpt-5.4-mini": { provider: "openai", inputUsdPer1m: 0.75, outputUsdPer1m: 4.50, label: "GPT-5.4 mini" },
   "gpt-5.4-nano": { provider: "openai", inputUsdPer1m: 0.20, outputUsdPer1m: 1.25, label: "GPT-5.4 nano" },
   "gpt-5-mini": { provider: "openai", inputUsdPer1m: 0.25, outputUsdPer1m: 2.00, label: "GPT-5 mini" },
-  claude: { provider: "claude", inputUsdPer1m: 3.00, outputUsdPer1m: 15.00, label: "Claude Sonnet" },
+  claude: { provider: "claude", inputUsdPer1m: 2.00, outputUsdPer1m: 10.00, label: "Claude Sonnet 5.5" },
 };
 const IMPORTABLE_USER_SECRET_PROVIDERS = ["gemini", "apify", "openai", "claude"];
 const AGENT_COMMAND_TYPES = new Set(["open_settings", "import_local_provider_secrets", "songi_youtube_discovery", "stop_current_job"]);
@@ -2021,8 +2026,8 @@ function yeriServerGenerationProviderIssue(payload = {}, mode = yeriServerGenera
 function yeriServerGenerationTextModel(payload = {}) {
   const selected = yeriSelectedModel(payload);
   const provider = yeriAiProviderForModel(selected);
-  if (provider === "openai") return selected || "gpt-5.6-luna";
-  if (provider === "claude") return YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-4-6";
+  if (provider === "openai") return ({ "gpt-5.6-luna": "gpt-6-luna", "gpt-5.6-terra": "gpt-6-sol" })[selected] || selected || "gpt-6-luna";
+  if (provider === "claude") return YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-5-5";
   return normalizeYeriGeminiModel(selected);
 }
 
@@ -3236,6 +3241,12 @@ function yeriTransientRetryLogger(provider, job, userId) {
   };
 }
 
+// 2026-10-13 실측: gemini-3.1-pro-preview 는 1,500자 글 한 번에 60초를 넘겨 세 번 시간 초과 뒤
+// 3.6-flash 로 자동 전환됐다(5분 소요, 사용자는 pro 를 골랐는데 flash 글을 받음). 생각이 긴 pro 계열만 늘린다.
+function yeriGeminiTimeoutMs(model) {
+  return /-pro/.test(String(model || "")) ? Math.max(YERI_SERVER_GENERATION_TIMEOUT_MS, 240000) : YERI_SERVER_GENERATION_TIMEOUT_MS;
+}
+
 async function generateYeriGeminiArtifact(job, userId, signal = null) {
   throwIfYeriGenerationCancelled(signal);
   const apiKey = getUserOrStoredSecret(userId, "gemini");
@@ -3272,7 +3283,7 @@ async function generateYeriGeminiArtifact(job, userId, signal = null) {
         },
       },
     },
-    timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
+    timeoutMs: yeriGeminiTimeoutMs(targetModel),
     maxBytes: 1024 * 1024,
     signal,
     onTransientRetry: yeriTransientRetryLogger("gemini", job, userId),
@@ -3366,23 +3377,28 @@ async function generateYeriClaudeArtifact(job, userId, signal = null) {
       model,
       // 8000 → 16000: 목표 글자수 상한 6000자(한글)의 토큰 여유 확보. 비스트리밍 안전 상한(~16K) 이내.
       max_tokens: 16000,
-      // 강제 도구 호출로 JSON 구조를 API 차원에서 보장 (Gemini responseJsonSchema와 동급).
-      tools: [{
-        name: "emit_blog_post",
-        description: "작성 완료한 네이버 블로그 글을 제출한다. title과 content_markdown을 채워 정확히 한 번 호출한다.",
-        input_schema: {
-          type: "object",
-          properties: {
-            title: { type: "string", description: "블로그 글 제목" },
-            content_markdown: { type: "string", description: "'# 제목'으로 시작하는 한국어 마크다운 본문. [이미지] 줄 포함 규칙은 지시를 따른다." },
+      // 2026-10-13: claude-sonnet-5-5 는 강제 도구 호출(tool_choice tool/any)을 400 으로 거절한다.
+      // JSON 구조 보장은 정형 출력(output_config.format json_schema)으로 한다 — Gemini responseJsonSchema 와 동급.
+      // 생각(adaptive)은 이 모델에서 끌 수 없어 effort 로 깊이를 조절한다(글쓰기는 medium).
+      output_config: {
+        effort: "medium",
+        format: {
+          type: "json_schema",
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              content_markdown: { type: "string" },
+            },
+            required: ["title", "content_markdown"],
+            additionalProperties: false,
           },
-          required: ["title", "content_markdown"],
         },
-      }],
-      tool_choice: { type: "tool", name: "emit_blog_post" },
+      },
       messages: [{ role: "user", content: buildYeriGenerationPrompt(yeriPromptPayload(job)) }],
     },
-    timeoutMs: YERI_SERVER_GENERATION_TIMEOUT_MS,
+    // 생각 단계가 붙어 60초를 넘길 수 있다(실측 전 보수값).
+    timeoutMs: Math.max(YERI_SERVER_GENERATION_TIMEOUT_MS, 180000),
     maxBytes: 1024 * 1024,
     signal,
     onTransientRetry: yeriTransientRetryLogger("claude", job, userId),

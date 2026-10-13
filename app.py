@@ -361,25 +361,29 @@ _DEFAULT_IMAGE_MODEL = "gpt-image-1"
 _IMAGE_MODEL_PRICE_USD = {
     "gpt-image-1": {"provider": "openai", "label": "OpenAI GPT Image 1", "per_image": 0.042},
     "gpt-image-2": {"provider": "openai", "label": "OpenAI GPT Image 2", "per_image": 0.053},
+    "gpt-image-2.5-flare": {"provider": "openai", "label": "OpenAI GPT Image 2.5 flare", "per_image": 0.053},
     "gemini-2.5-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana", "per_image": 0.039},
     "gemini-3.1-flash-image": {"provider": "gemini", "label": "Gemini Nano Banana 2", "per_image": 0.067},
     "gemini-3-pro-image": {"provider": "gemini", "label": "Gemini Nano Banana Pro", "per_image": 0.134},
+    "gemini-3.1-flash-lite-image": {"provider": "gemini", "label": "Gemini Nano Banana 2 Lite", "per_image": 0.0336},
 }
 _GEMINI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gemini-3.1-flash-image"]["per_image"]
 _OPENAI_IMAGE_PRICE_USD = _IMAGE_MODEL_PRICE_USD["gpt-image-1"]["per_image"]
 _AI_TEXT_PRICE_USD_PER_1M = {
-    # 단가 정본: ai.google.dev/gemini-api/docs/pricing (2026-07-22 확인).
-    # gemini-3.1-pro-preview 단가는 2.5 Pro 기준 추정치 — 정확한 공식 단가 확인 후 보정 필요
-    "gemini-3.6-flash": {"input": 1.50, "output": 7.50, "label": "Gemini 3.6 Flash"},
+    # 단가 정본: 각 제공자 공식 가격표 (2026-10-13 재확인). 3.6/3.8 Flash 는 2026-12-31 까지 인하가.
+    "gemini-3.6-flash": {"input": 0.75, "output": 3.75, "label": "Gemini 3.6 Flash"},
+    "gemini-3.8-flash": {"input": 0.75, "output": 3.75, "label": "Gemini 3.8 Flash"},
     "gemini-3.5-flash": {"input": 1.50, "output": 9.00, "label": "Gemini 3.5 Flash"},
     "gemini-3.5-flash-lite": {"input": 0.30, "output": 2.50, "label": "Gemini 3.5 Flash Lite"},
     "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.50, "label": "Gemini 3.1 Flash Lite"},
-    "gemini-3.1-pro-preview": {"input": 1.25, "output": 10.00, "label": "Gemini 3.1 Pro Preview"},
+    "gemini-3.1-pro-preview": {"input": 2.00, "output": 12.00, "label": "Gemini 3.1 Pro Preview"},
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00, "label": "Gemini 2.5 Pro"},
     "gemini-2.5-flash": {"input": 0.30, "output": 2.50, "label": "Gemini 2.5 Flash"},
-    "claude": {"input": 3.00, "output": 15.00, "label": "Claude Sonnet"},
-    "gpt-5.6-luna": {"input": 1.00, "output": 6.00, "label": "GPT-5.6 luna"},
-    "gpt-5.6-terra": {"input": 2.50, "output": 15.00, "label": "GPT-5.6 terra"},
+    "claude": {"input": 2.00, "output": 10.00, "label": "Claude Sonnet 5.5"},
+    "gpt-6-luna": {"input": 0.10, "output": 0.50, "label": "GPT-6 luna"},
+    "gpt-6-sol": {"input": 2.00, "output": 10.00, "label": "GPT-6 sol"},
+    "gpt-5.6-luna": {"input": 0.20, "output": 1.20, "label": "GPT-5.6 luna"},
+    "gpt-5.6-terra": {"input": 2.00, "output": 12.00, "label": "GPT-5.6 terra"},
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50, "label": "GPT-5.4 mini"},
     "gpt-5.4-nano": {"input": 0.20, "output": 1.25, "label": "GPT-5.4 nano"},
     "gpt-5-mini": {"input": 0.25, "output": 2.00, "label": "GPT-5 mini"},
@@ -401,9 +405,12 @@ _LEGACY_AI_MODEL_MAP = {
     "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite": "gemini-3.5-flash-lite",
     # 2026-07-22: 구형/은퇴 gpt 저장값은 provider 유지하며 현행 gpt-5.6-luna로.
-    "gpt-5-mini": "gpt-5.6-luna",
-    "gpt-5.4-mini": "gpt-5.6-luna",
-    "gpt-5.4-nano": "gpt-5.6-luna",
+    "gpt-5-mini": "gpt-6-luna",
+    "gpt-5.4-mini": "gpt-6-luna",
+    "gpt-5.4-nano": "gpt-6-luna",
+    # 2026-10-13: gpt-5.6 → 같은 등급 gpt-6 (웹 선택지와 같은 매핑).
+    "gpt-5.6-luna": "gpt-6-luna",
+    "gpt-5.6-terra": "gpt-6-sol",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -428,7 +435,7 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gpt-5.6-luna", "gpt-5.6-terra"):
+    if value in ("claude", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gpt-6-luna", "gpt-6-sol"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 
@@ -4966,11 +4973,12 @@ class NaverBlogApp:
         ).grid(row=7, column=0, sticky=W, pady=(0, 8), padx=(0, 15))
         _AI_MODELS = [
             ("gemini-3.6-flash",       "Gemini 3.6 Flash  (고품질)  ★ 기본"),
+            ("gemini-3.8-flash",       "Gemini 3.8 Flash  (최신)"),
             ("gemini-3.5-flash-lite",  "Gemini 3.5 Flash Lite  (가장 빠르고 저렴/글이 짧음)"),
-            ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (~44원/글, 유료/고급)"),
-            ("gpt-5.6-luna",           "GPT-5.6 luna  (저렴/규칙 안정)"),
-            ("gpt-5.6-terra",          "GPT-5.6 terra  (고품질/정보 구체적)"),
-            ("claude",                 "Claude Sonnet 5  (~40원/글, 문체 자연스러움)"),
+            ("gemini-3.1-pro-preview", "Gemini 3.1 Pro Preview  (결제 연결 키 전용/고급)"),
+            ("gpt-6-luna",             "GPT-6 luna  (저렴)"),
+            ("gpt-6-sol",              "GPT-6 sol  (고품질)"),
+            ("claude",                 "Claude Sonnet 5.5  (문체 자연스러움)"),
         ]
         self.ai_model_var.set(_normalize_ai_model(self.ai_model_var.get()))
 
