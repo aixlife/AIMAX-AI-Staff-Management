@@ -11221,6 +11221,8 @@ function yunmiCostFromUsage(input, model, usage = {}) {
 }
 
 function buildYunmiGenerationPrompt(input, model) {
+  // 2026-10-14 QA: 구간이 0~55초로 고정돼 있어 45초를 요청해도 "40~55초"가 나왔다. 요청 길이에 맞춘다.
+  const t = yunmiTimeLabels(input);
   const promptInput = redactPayload({
     topic: input.topic,
     objective: input.objective,
@@ -11274,16 +11276,16 @@ function buildYunmiGenerationPrompt(input, model) {
     "- F. 장면 선공개형: 고객이 결제 직전에 멈추는 순간이 있습니다.",
     "",
     "스크립트 구조:",
-    "- 0~3초: 훅. 질문, 반전, 숫자, 손해, 폭로 중 하나를 자막으로도 강하게 보이게 쓴다.",
-    "- 3~10초: 훅이 과장이 아니라는 증거나 상황을 원본 자료에서 가져온다. '왜냐하면' 대신 장면이나 사실로 바로 연결한다.",
-    "- 10~25초: 핵심 메시지 1개만 설명한다. 어려운 개념은 쉬운 비유로 바꾼다.",
-    "- 25~40초: 위기, 갈등, 반전을 넣어 긴장을 유지한다. 예: '그런데 여기서 대부분 놓칩니다.'",
-    "- 40~55초: 바로 따라 할 기준이나 체크포인트 1~3개를 제시한다.",
-    "- 마무리: 먼저 공감 문장으로 연결하고, 그 다음 CTA 하나만 말한다.",
+    `- ${t[0]}: 훅. 질문, 반전, 숫자, 손해, 폭로 중 하나를 자막으로도 강하게 보이게 쓴다.`,
+    `- ${t[1]}: 훅이 과장이 아니라는 증거나 상황을 원본 자료에서 가져온다. '왜냐하면' 대신 장면이나 사실로 바로 연결한다.`,
+    `- ${t[2]}: 핵심 메시지 1개만 설명한다. 어려운 개념은 쉬운 비유로 바꾼다.`,
+    `- ${t[3]}: 위기, 갈등, 반전을 넣어 긴장을 유지한다. 예: '그런데 여기서 대부분 놓칩니다.'`,
+    `- ${t[4]}: 바로 따라 할 기준이나 체크포인트 1~3개를 제시한다.`,
+    `- ${t[5]}: 먼저 공감 문장으로 연결하고, 그 다음 CTA 하나만 말한다. 각 row 의 time 은 위 구간을 그대로 쓴다.`,
     "",
     "출력 품질 기준:",
     "- 제목 후보는 짧고 강하게 3개를 쓴다.",
-    "- script_options는 반드시 1안, 2안, 3안 총 3개를 만들고, 각 안에는 target_label, target_audience, target_strategy를 채운다.",
+    "- script_options는 반드시 1안, 2안, 3안 총 3개를 만들고(아래 스키마는 1개만 예시로 보인 것이다. 배열에 객체 3개를 모두 넣는다), 각 안에는 target_label, target_audience, target_strategy를 채운다.",
     "- 전체 대본의 각 row에는 시간, 화면/행동, 대사, 자막, 앵커, 브릿지가 모두 있어야 한다.",
     "- 촬영 가이드는 비주얼, 오디오/톤, 에너지, 표정/제스처, 컷 전환 포인트를 모두 채운다.",
     "- CTA 후보는 댓글 유도형, 팔로우 유도형, 저장 유도형을 각각 1개씩 제안한다.",
@@ -11317,15 +11319,15 @@ function buildYunmiGenerationPrompt(input, model) {
           angle: "이 안의 전략",
           hook: "첫 3초 훅",
           tone: "톤",
-          duration: "60초",
+          duration: input.duration || "60초",
           platform: "플랫폼",
           rows: [
-            { time: "0~3초", screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
-            { time: "3~10초", screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
-            { time: "10~25초", screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
-            { time: "25~40초", screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
-            { time: "40~55초", screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
-            { time: "마무리", screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
+            { time: t[0], screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
+            { time: t[1], screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
+            { time: t[2], screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
+            { time: t[3], screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
+            { time: t[4], screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
+            { time: t[5], screen: "화면/행동", dialogue: "대사", subtitles: "자막", anchor: "앵커", bridge: "브릿지" },
           ],
           anchor_bridges: [{ time: "0~3초", anchor: "앵커", bridge: "브릿지" }],
           shooting_guide: {
@@ -11464,8 +11466,15 @@ function normalizeYunmiGeneratedResult(raw, input, options = {}) {
   const variantSource = rawVariants.length
     ? [rawVariants[0] || base.variants?.[0], rawVariants[1] || base.variants?.[1], rawVariants[2] || base.variants?.[2]].filter(Boolean)
     : base.variants;
+  // 2026-10-14 QA: 저가 모델이 1안만 돌려주면 2·3안이 무료 템플릿으로 조용히 채워졌다(유료 요청인데 3안 중 2안이 [빈칸] 초안).
+  // 자동 재호출은 하지 않고(유료), 어느 안이 AI가 만들지 않았는지 화면에 드러낸다.
+  const aiOptionCount = Math.min(3, rawVariants.filter((item) => item && typeof item === "object").length);
   const variants = variantSource.slice(0, 3)
-    .map((variant, index) => yunmiNormalizeVariant(variant, base.variants?.[index], input, index));
+    .map((variant, index) => {
+      const normalized = yunmiNormalizeVariant(variant, base.variants?.[index], input, index);
+      if (index < aiOptionCount) return { ...normalized, generated_by: "ai" };
+      return { ...normalized, generated_by: "template", title: `${normalized.title} (AI 미생성 · 무료 구조 초안)` };
+    });
   const rawPatterns = Array.isArray(raw.patterns) ? raw.patterns : [];
   const patterns = (rawPatterns.length ? rawPatterns : base.patterns).slice(0, 5).map((item, index) => {
     const pattern = item && typeof item === "object" ? item : {};
@@ -11485,7 +11494,11 @@ function normalizeYunmiGeneratedResult(raw, input, options = {}) {
     ...base,
     mode: "ai_generated",
     stage: "yunmi_ai_gemini",
-    summary: compactText(raw.summary || base.summary || "윤미 AI가 입력 지침을 바탕으로 숏폼 스크립트를 생성했습니다.", 500),
+    summary: compactText([
+      raw.summary || base.summary || "윤미 AI가 입력 지침을 바탕으로 숏폼 스크립트를 생성했습니다.",
+      aiOptionCount < 3 ? `AI가 ${aiOptionCount}개 안만 만들어 나머지는 무료 구조 초안으로 채웠습니다.` : "",
+    ].filter(Boolean).join(" "), 600),
+    ai_option_count: aiOptionCount,
     hook_options: hookOptions,
     patterns,
     variants,
