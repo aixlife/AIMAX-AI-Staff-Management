@@ -2636,7 +2636,13 @@ function yeriSplitLongParagraphs(markdown, maxLen) {
       out.push(line);
       continue;
     }
-    const sentences = line.trim().split(/(?<=[.!?。])\s+/).filter(Boolean);
+    // "A. 헤드 롤러에…" 처럼 라벨 뒤 마침표에서 자르면 "A." 만 홀로 남는다(10/14 실측) — 짧은 라벨은 다음 문장에 붙인다.
+    const sentences = line.trim().split(/(?<=[.!?。])\s+/).filter(Boolean).reduce((acc, sentence) => {
+      const prev = acc[acc.length - 1];
+      if (prev !== undefined && visibleLength(prev) <= 3) acc[acc.length - 1] = `${prev} ${sentence}`;
+      else acc.push(sentence);
+      return acc;
+    }, []);
     if (sentences.length < 2) {
       out.push(line);
       continue;
@@ -2664,7 +2670,9 @@ function sanitizeYeriGeneratedArtifact(raw, payload, model, usage = {}) {
   const fallbackTitle = `${yeriPayloadFirstKeyword(payload)} 정리`;
   const title = compactText(yeriScrubToolMentions(source.title || yeriExtractTitleFromMarkdown(source.content_markdown || source.markdown || source.content) || fallbackTitle).trim() || fallbackTitle, 180);
   const markdown = cleanMultilineText(restoreEscapedNewlines(source.content_markdown || source.markdown || source.content || ""), 100000);
-  const splitMarkdown = yeriSplitLongParagraphs(yeriScrubToolMentions(markdown), yeriStylePack(payload).paragraph?.max);
+  // "- [ ] 항목" 체크박스는 네이버 에디터에 목록으로 들어가며 "[ ]" 가 글에 그대로 찍힌다(10/14 실측) — 일반 목록으로 바꾼다.
+  const uncheckedMarkdown = markdown.replace(/^(\s*[-*]\s+)\[[ xX]?\]\s+/gm, "$1");
+  const splitMarkdown = yeriSplitLongParagraphs(yeriScrubToolMentions(uncheckedMarkdown), yeriStylePack(payload).paragraph?.max);
   const normalized = yeriEnsureMarkdownTitle(title, normalizeYeriDuplicateNumberPrefixes(redistributeConsecutiveImageLines(splitMarkdown)));
   // 모델이 글자를 못 그리는데 글자 주인공 프롬프트가 나왔으면 조용히 넘기지 않는다.
   // 이미지가 깨진 채로 발행되는 것이 지금까지 아무 신호 없이 일어나던 일이다.
@@ -2921,7 +2929,7 @@ function buildYeriGenerationPrompt(payload) {
     // 읽히지 않았다(같은 사용자의 2점 글에 "AIMAX 예리입니다" 인사). 정체성을 블로그 주인의 대필로 바꾼다.
     "너는 블로그 주인을 대신해 글을 쓰는 작가다. 네이버 블로그에 입력할 수 있는 한국어 마크다운 초안을 작성한다.",
     "- 글은 블로그 주인이 직접 쓴 글로 읽혀야 한다. AIMAX, 예리, AI 같은 작성 도구나 작성자 소개를 본문·제목에 쓰지 않는다. 자기소개 인사로 시작하지 않는다.",
-    `- 오늘 날짜는 ${yeriTodayKst()}(한국 시간)이다. 지난 연도를 현재처럼 쓰지 않는다. 최신 수치·제도를 확인할 수 없으면 연도와 수치를 쓰지 않고 '최신 기준은 공식 안내에서 확인'처럼 쓴다.`,
+    `- 오늘 날짜는 ${yeriTodayKst()}(한국 시간)이다. 지난 연도를 현재처럼 쓰지 않는다. 해마다 바뀌는 수치·제도·가격을 다룰 때만, 확인할 수 없는 연도와 수치를 쓰지 않는다. '최신 기준은 공식 안내에서 확인' 같은 문장을 관계없는 곳에 끼워 넣지 않는다.`,
     "출력은 반드시 JSON 객체 하나만 작성한다. 마크다운 코드블록을 쓰지 않는다.",
     "JSON 스키마: {\"title\":\"...\",\"content_markdown\":\"# 제목\\n\\n## 소제목\\n본문\\n\\n[이미지] 이미지 프롬프트\"}",
     "",
@@ -10557,6 +10565,8 @@ function yunmiWords(text, limit = 8) {
   const counts = new Map();
   for (const word of String(text || "").toLowerCase().match(/[가-힣a-z0-9]{2,}/g) || []) {
     if (stopwords.has(word)) continue;
+    // 2026-10-14 결과물 분석: "만드는", "싶게", "좋았음" 같은 조사·어미 붙은 어절이 키워드로 잡혔다.
+    if (word.length >= 3 && /(은|는|을|를|에|에서|으로|에게|의|부터|까지|야|듯|게|음|며|면|서|고)$/.test(word) && /[가-힣]$/.test(word)) continue;
     counts.set(word, (counts.get(word) || 0) + 1);
   }
   return [...counts.entries()]
@@ -10620,18 +10630,6 @@ function yunmiPlain(value, fallback = "") {
   return compactText(String(value || fallback || "").replace(/\s+/g, " "), 160);
 }
 
-function yunmiInputSentences(input, limit = 4) {
-  const source = [input.reference_text, input.notes, input.objective, input.topic]
-    .filter(Boolean)
-    .join("\n");
-  return String(source || "")
-    .replace(/https?:\/\/\S+/gi, " ")
-    .split(/(?<=[.!?。！？])\s+|\n+/)
-    .map((line) => yunmiPlain(line, ""))
-    .filter((line) => line && !/^https?:\/\//i.test(line))
-    .slice(0, limit);
-}
-
 function yunmiSubject(input, keywords) {
   return yunmiPlain(input.topic || keywords[0] || "이 주제", "이 주제");
 }
@@ -10651,7 +10649,7 @@ function yunmiTargetOptions(input, keywords) {
       code: "B",
       label: "B 타깃",
       name: "아직 관심 없지만 불편을 겪는 사람",
-      audience: `${topic}을 아직 우선순위로 두지 않았지만 같은 불편을 겪는 사람`,
+      audience: `${yunmiJosa(topic, "을", "를")} 아직 우선순위로 두지 않았지만 같은 불편을 겪는 사람`,
       strategy: "일상적인 불편과 손해를 먼저 보여줘 내 문제라고 느끼게 만듭니다.",
       reason: "관심이 낮은 시청자는 정보보다 자기 상황을 찌르는 장면에서 멈춥니다.",
     },
@@ -10671,16 +10669,67 @@ function yunmiAudience(input, targetOption = null) {
   return yunmiPlain(input.target_audience || "이걸 고민하는 분들", "이걸 고민하는 분들");
 }
 
-function yunmiHookSample(code, input, keywords, audienceOverride = "") {
+function yunmiJosa(word, withBatchim, withoutBatchim) {
+  const text = String(word || "").trim();
+  const last = text.replace(/[^가-힣0-9a-zA-Z]+$/g, "").slice(-1);
+  if (!last) return `${text}${withoutBatchim}`;
+  const code = last.charCodeAt(0);
+  let hasBatchim;
+  if (code >= 0xac00 && code <= 0xd7a3) hasBatchim = (code - 0xac00) % 28 !== 0;
+  else hasBatchim = /[0136781lmnLMN]$/.test(last);
+  return `${text}${hasBatchim ? withBatchim : withoutBatchim}`;
+}
+
+function yunmiDurationSeconds(input) {
+  const match = String(input?.duration || "").match(/(\d+)\s*(분|초)?/);
+  if (!match) return 60;
+  const value = Number(match[1]) * (match[2] === "분" ? 60 : 1);
+  return Math.min(180, Math.max(15, value || 60));
+}
+
+// 6구간(훅·문제·핵심·오해·방법·마무리)을 영상 길이에 맞춰 나눈다. 예전에는 45초를 골라도 "40~55초"가 나왔다.
+function yunmiTimeLabels(input) {
+  const total = yunmiDurationSeconds(input);
+  const hookEnd = 3;
+  const ctaStart = Math.max(hookEnd + 8, total - Math.max(4, Math.round(total * 0.12)));
+  const body = ctaStart - hookEnd;
+  const weights = [0.18, 0.3, 0.26, 0.26];
+  const labels = [`0~${hookEnd}초`];
+  let start = hookEnd;
+  weights.forEach((weight, index) => {
+    const end = index === weights.length - 1 ? ctaStart : Math.round(start + body * weight);
+    labels.push(`${start}~${end}초`);
+    start = end;
+  });
+  labels.push(`${ctaStart}~${total}초`);
+  return labels;
+}
+
+// 사용자가 붙여 넣은 자료(reference_text·notes)에서 대사로 쓸 문장만 고른다.
+// objective 는 "~ 전달" 같은 지시문이라 대사에 넣지 않는다(10/14 실측: 지시문이 대사로 그대로 나갔다).
+function yunmiSpeakableLines(input, limit = 4) {
+  return String([input.reference_text, input.notes].filter(Boolean).join("\n"))
+    .replace(/https?:\/\/\S+/gi, " ")
+    .split(/(?<=[.!?。！？])\s+|\n+/)
+    .map((line) => yunmiPlain(line, ""))
+    .filter((line) => line.length >= 8)
+    .filter((line) => !/(작성|써\s*줘|써주세요|해\s*줘|만들어|정리해|내용으로|요청|참고해)\s*[.!]?$/.test(line))
+    .slice(0, limit);
+}
+
+function yunmiHookSample(code, input, keywords) {
   const topic = yunmiSubject(input, keywords);
-  const audience = audienceOverride || yunmiAudience(input);
+  const audience = yunmiPlain(input.target_audience || "", "");
   const samples = {
-    A: `${audience}, 혹시 ${topic} 설명부터 시작하고 계세요?`,
-    B: `${topic}, 대부분 첫 3초에서 놓칩니다.`,
-    C: `잘되는 ${topic} 콘텐츠는 설명을 늦게 시작합니다.`,
-    D: `${topic}, 이 순서로 만들면 시간만 날립니다.`,
-    E: `실제로 만들어보면 ${topic}의 답은 겉보기와 다릅니다.`,
-    F: `${topic}, 이 장면 하나가 끝까지 보게 만듭니다.`,
+    A: audience ? `${audience}, ${topic} 아직도 감으로 하고 계세요?` : `${topic}, 아직도 감으로 하고 계세요?`,
+    B: (() => {
+      const count = String(`${input.objective} ${input.reference_text}`).match(/(\d+)\s*가지/);
+      return count ? `${topic}, 딱 ${count[1]}가지만 보면 됩니다.` : `${topic}, 딱 이것만 보면 됩니다.`;
+    })(),
+    C: `${topic}, 생각하는 것과 정반대입니다.`,
+    D: `${topic}, 이거 모르고 하면 돈과 시간만 버립니다.`,
+    E: `${topic}, 겉으로 보이는 게 전부가 아닙니다.`,
+    F: `${topic}, 이 장면 하나면 바로 이해됩니다.`,
   };
   return samples[code] || samples.A;
 }
@@ -10714,109 +10763,101 @@ function yunmiCoreMessage(input, keywords) {
   return `${topic}에서 먼저 봐야 할 기준을 하나만 전달하기`;
 }
 
-function yunmiEvidenceLine(input) {
-  const source = input.reference_text || input.notes || input.objective || input.topic;
-  if (!source) return "입력 자료에서 반복되는 문제와 적용 포인트를 한 장면으로 압축합니다.";
-  const firstLine = String(source).split(/\n+/).map((line) => line.trim()).find(Boolean) || source;
-  return yunmiPlain(firstLine, "입력 자료의 핵심 근거를 짧게 보여줍니다.").slice(0, 150);
-}
-
 function yunmiCtaText(input) {
   return input.cta || "자료가 필요하면 댓글에 '자료'라고 남겨주세요.";
 }
 
 function yunmiTimeRows(input, hookOption, optionNumber, keywords, targetOption = null) {
+  // 2026-10-14 결과물 분석: 예전 대사는 주제가 아니라 "숏폼 만드는 법" 코칭이었다("설명부터 시작하면
+  // 시청자는 내 얘기인지 모릅니다", "먼저 문제를 한 문장으로 좁히세요"). 무료 모드는 주제 지식을 만들 수
+  // 없으므로, 붙여 넣은 자료 문장을 쓰고 없으면 [대괄호] 칸으로 남겨 사용자가 채우게 한다(지어내지 않는다).
   const topic = yunmiSubject(input, keywords);
-  const audience = yunmiAudience(input, targetOption);
   const core = yunmiCoreMessage(input, keywords);
-  const evidence = yunmiEvidenceLine(input);
   const cta = yunmiCtaText(input);
   const hook = hookOption.sample;
-  const sourceLines = yunmiInputSentences(input, 3);
-  const firstContext = sourceLines[0] || evidence;
-  const secondContext = sourceLines[1] || core;
+  const lines = yunmiSpeakableLines(input, 4);
+  const times = yunmiTimeLabels(input);
   const tension = optionNumber === 1
-    ? "그런데 여기서 대부분 놓칩니다."
+    ? "그런데 여기서 대부분 갈립니다."
     : optionNumber === 2
-      ? "문제는 이 다음입니다."
-      : "여기서 방향을 조금만 바꾸면 달라집니다.";
-  const solutionA = optionNumber === 1
-    ? "먼저 문제를 한 문장으로 좁히세요."
+      ? "문제는 그다음입니다."
+      : "여기서 방향만 바꾸면 달라집니다.";
+  const problem = lines[0] || `${topic}, 막상 하려고 하면 어디서부터 봐야 할지 막막하죠.`;
+  const point = lines[1] || `${topic}에서 제일 먼저 볼 건 [핵심 기준 한 가지]입니다.`;
+  const myth = lines[2] || `많이들 [흔한 실수]부터 하는데, 그러면 처음으로 다시 돌아가게 됩니다.`;
+  const method = lines[3] || `첫째, [기준 1]. 둘째, [기준 2]. 이 두 가지만 지켜도 충분합니다.`;
+  const closing = optionNumber === 1
+    ? "저장해 두고 필요할 때 다시 보세요."
     : optionNumber === 2
-      ? "처음부터 설명하지 말고 장면을 먼저 보여주세요."
-      : "핵심 장면을 먼저 보여주고, 이유는 나중에 붙이세요.";
-  const solutionB = optionNumber === 1
-    ? "그다음 기준은 세 개 이하로 줄이세요."
-    : optionNumber === 2
-      ? "그리고 바로 따라 할 기준을 하나만 주세요."
-      : "마지막에는 시청자가 바로 할 행동 하나만 남기세요.";
+      ? "오늘 하나만 바꿔 보세요."
+      : "결정하기 전에 이 기준으로 한 번만 비교해 보세요.";
   return [
     {
-      time: "0~3초",
+      time: times[0],
       screen: optionNumber === 1
         ? "정면 클로즈업, 첫 문장 자막 크게"
         : optionNumber === 2
-          ? "문제 상황을 보여주는 화면이나 빈 결과 화면"
-          : "실제 장면이나 캡처를 먼저 보여주는 빠른 컷",
+          ? "불편한 상황이 보이는 장면"
+          : "결과 장면을 먼저 보여주는 빠른 컷",
       dialogue: hook,
       subtitles: hook,
       anchor: optionNumber === 1
         ? "얼굴 클로즈업 + 굵은 한 줄 자막"
         : optionNumber === 2
-          ? "문제 장면 또는 결과가 없는 화면"
-          : "실제 장면 선공개",
-      bridge: hook,
+          ? "문제 장면"
+          : "결과 장면 선공개",
+      bridge: "왜 그런지 바로 보여드릴게요.",
     },
     {
-      time: "3~10초",
-      screen: "원본 자료의 핵심 장면, 숫자, 댓글, 캡처 중 하나",
-      dialogue: `그냥 넘기는 순간은 거의 비슷합니다. ${firstContext}`,
-      subtitles: "그냥 넘기는 순간은 비슷합니다",
-      anchor: "근거가 되는 자료 캡처",
-      bridge: `이 장면이 훅이 과장이 아니라는 근거가 됩니다.`,
+      time: times[1],
+      screen: "공감되는 상황 장면이나 자료 캡처 하나",
+      dialogue: problem,
+      subtitles: compactText(problem, 24),
+      anchor: "상황 장면 또는 자료 캡처",
+      bridge: "그래서 기준이 필요합니다.",
     },
     {
-      time: "10~25초",
-      screen: "손가락으로 1개 포인트를 짚거나 화면에 키워드 1개만 표시",
-      dialogue: `${audience}에게 필요한 건 많은 설명이 아닙니다. ${targetOption?.strategy || core} 이 메시지 하나만 남기면 됩니다.`,
-      subtitles: "핵심 메시지는 하나만",
+      time: times[2],
+      screen: `핵심 키워드 1개만 화면에 표시 (이 영상의 목표: ${compactText(core, 60)})`,
+      dialogue: point,
+      subtitles: "핵심은 하나",
       anchor: "핵심 키워드 1개",
-      bridge: targetOption?.strategy || `${core}.`,
-    },
-    {
-      time: "25~40초",
-      screen: "잘못된 흐름과 바꾼 흐름을 좌우로 비교",
-      dialogue: `${tension} ${secondContext} 그런데 설명부터 시작하면 시청자는 내 얘기인지 모릅니다.`,
-      subtitles: "설명보다 먼저 문제를 보여주세요",
-      anchor: "잘못된 순서 vs 바꾼 순서",
       bridge: tension,
     },
     {
-      time: "40~55초",
-      screen: "체크포인트 2개를 빠르게 띄우기",
-      dialogue: `순서는 이렇게 가면 됩니다. ${solutionA} ${solutionB} 마지막에는 행동 하나만 남기세요.`,
-      subtitles: "문제 1개 / 기준 1~3개 / 행동 1개",
-      anchor: "체크포인트 2개",
-      bridge: `${solutionA} ${solutionB}`,
+      time: times[3],
+      screen: "잘못된 방법과 바꾼 방법을 좌우로 비교",
+      dialogue: `${tension} ${myth}`,
+      subtitles: "흔한 실수부터 피하세요",
+      anchor: "전 vs 후 비교",
+      bridge: "그럼 어떻게 하면 될까요?",
     },
     {
-      time: "마무리",
+      time: times[4],
+      screen: "체크포인트 2개를 차례로 띄우기",
+      dialogue: method,
+      subtitles: "기준 1 / 기준 2",
+      anchor: "체크포인트 2개",
+      bridge: "정리하면 이렇습니다.",
+    },
+    {
+      time: times[5],
       screen: "카메라를 보며 한 박자 쉬고 CTA 자막 표시",
-      dialogue: `지금 막막한 게 정상입니다. 구조를 몰랐던 거니까요. ${cta}`,
+      dialogue: `${closing} ${cta}`,
       subtitles: cta,
       anchor: "CTA 한 문장",
-      bridge: "지금 막막한 게 정상입니다. 구조를 몰랐던 거니까요.",
+      bridge: closing,
     },
   ];
 }
 
 function yunmiTitleCandidates(input, hookOption, keywords, targetOption = null) {
   const topic = input.topic || keywords[0] || "숏폼";
-  const audience = targetOption?.name || input.target_audience || "처음 시작하는 사람";
+  const audience = yunmiPlain(input.target_audience || "", "");
   return [
-    `${audience}이 멈추는 ${topic}`,
-    `${topic} 전에 꼭 봐야 할 기준`,
-    `${hookOption.label.replace("형", "")}으로 여는 ${topic}`,
+    `${topic}, 이것만 보면 됩니다`,
+    `${topic} 전에 꼭 알아둘 것`,
+    audience ? `${yunmiJosa(audience, "을", "를")} 위한 ${topic}` : `처음이라면 ${topic}부터`,
   ].map((title) => compactText(title, 36));
 }
 
@@ -10831,7 +10872,7 @@ function yunmiShootingGuide(input, optionNumber) {
     audio_tone: energetic ? "속도감 있는 구어체, 문장 끝을 짧게 끊기" : "친근하지만 단정한 전문가 톤",
     energy: "평소보다 20~30% 높은 에너지로 첫 문장과 반전 문장을 강하게 말합니다.",
     expression_gesture: "첫 훅은 눈을 크게 뜨고, 체크포인트에서는 손가락으로 1, 2를 짚습니다.",
-    cut_points: "0~3초 훅 직후, 25~40초 반전 문장 직후, CTA 직전에 컷을 바꿉니다.",
+    cut_points: `${yunmiTimeLabels(input)[0]} 훅 직후, ${yunmiTimeLabels(input)[3]} 반전 문장 직후, CTA 직전에 컷을 바꿉니다.`,
   };
 }
 
@@ -10853,7 +10894,7 @@ function yunmiScriptOption(input, hookOption, optionNumber, keywords, targetOpti
   };
   const targetedHook = {
     ...sourceHook,
-    sample: yunmiHookSample(sourceHook.code, input, keywords, target.audience),
+    sample: yunmiHookSample(sourceHook.code, input, keywords),
   };
   const rows = yunmiTimeRows(input, targetedHook, optionNumber, keywords, target);
   const title = `숏폼 스크립트 ${optionNumber}안`;
@@ -10988,7 +11029,7 @@ function buildYunmiScriptResult(payload) {
   const summary = [
     `A/B/C 타깃별 ${yunmiFormatLabel(input.format)} ${input.duration || "60초"} 초안입니다.`,
     input.objective || input.content_purpose ? `목표는 ${input.objective || input.content_purpose}입니다.` : "",
-    "이번 알파는 유료 AI 호출 없이 숏폼 메타프롬프트 기준의 구조형 초안을 생성합니다.",
+    "유료 AI 호출 없이 만든 구조형 초안이라 주제 지식은 넣지 않았습니다. 대사의 [대괄호] 칸은 내 경험과 사실로 채워 주세요. 참고 자료를 붙여 넣으면 그 문장으로 대사를 채웁니다.",
   ].filter(Boolean).join(" ");
   const result = {
     ok: true,
@@ -11205,7 +11246,7 @@ function buildYunmiGenerationPrompt(input, model) {
     "",
     "후킹 방식은 아래 중 원본 자료와 각 타깃에 맞는 것을 3개 이상 제안하고, 각 스크립트에 서로 다른 1개를 적용한다:",
     "- A. 불편한 질문형: 아직도 이렇게 하고 계세요?",
-    "- B. 숫자 충격형: 10명 중 8명이 여기서 막힙니다.",
+    "- B. 숫자 충격형: 입력 자료에 숫자가 있을 때만 쓴다. 예: '(입력 수치)에서 갈립니다.' 입력에 없는 수치는 만들지 않는다.",
     "- C. 반전형: 잘 팔리는 사람들은 더 많이 올리지 않습니다.",
     "- D. 손해 회피형: 이거 모르고 계속하면 시간만 날립니다.",
     "- E. 내부자 폭로형: 사람들이 말 안 하는 진짜 이유가 있습니다.",

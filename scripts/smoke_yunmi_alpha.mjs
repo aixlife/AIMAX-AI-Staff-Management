@@ -146,8 +146,24 @@ try {
   if (/오늘은|알아보겠습니다/.test(noPaidDialogue)) {
     throw new Error("Yunmi no-paid script uses banned explanatory intro");
   }
-  if (!noPaidDialogue.includes("그냥 넘기는 순간은") || !noPaidDialogue.includes("지금 막막한 게 정상입니다")) {
-    throw new Error("Yunmi no-paid script does not use the revised spoken flow");
+  // 2026-10-14 결과물 분석: 대사는 주제 이야기여야 한다. 사용자 지시문(objective)과 "숏폼 만드는 법" 코칭 문장이
+  // 대사로 나가면 안 되고, 붙여 넣은 자료 문장은 대사에 쓰인다.
+  if (noPaidDialogue.includes("긴장감을 낮추고 오늘 들을 내용을 기대하게 만들기")) {
+    throw new Error("Yunmi no-paid script speaks the user's objective instruction verbatim");
+  }
+  if (/시청자는 내 얘기인지|문제를 한 문장으로 좁히세요|구조를 몰랐던 거니까요/.test(noPaidDialogue)) {
+    throw new Error("Yunmi no-paid script still uses content-making coaching lines as dialogue");
+  }
+  if (!noPaidDialogue.includes("처음 10초에 분위기를 풀고")) {
+    throw new Error("Yunmi no-paid script does not use the pasted reference sentence");
+  }
+  const shortPreview = __yunmiTest.buildYunmiScriptResult({ topic: "원두 고르는 법", duration: "45초" });
+  const lastRow = shortPreview.variants?.[0]?.rows?.slice(-1)?.[0];
+  if (!lastRow || !/~45초$/.test(lastRow.time)) {
+    throw new Error(`Yunmi no-paid time rows do not end at the requested duration: ${lastRow?.time}`);
+  }
+  if (!/\[[^\]]+\]/.test((shortPreview.variants?.[0]?.rows || []).map((row) => row.dialogue).join(" "))) {
+    throw new Error("Yunmi no-paid script without reference should leave [fill-in] slots instead of inventing facts");
   }
 
   await waitForServer();

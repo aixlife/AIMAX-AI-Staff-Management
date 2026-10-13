@@ -10637,8 +10637,12 @@
 
       $$("#staffGrid [data-staff-card]").forEach((card) => {
         card.addEventListener("click", () => {
-          state.selectedEmployee = card.dataset.staffCard || state.selectedEmployee;
+          const clicked = card.dataset.staffCard || state.selectedEmployee;
+          state.selectedEmployee = clicked;
           renderEmployeeProfile();
+          // renderEmployeeProfile 은 보유하지 않은 직원을 보유 직원(예리)으로 되돌린다 — 채용 화면에서
+          // 은서·미보유 직원 카드를 누르면 예리 이력서가 떴다(10/14 QA). 이력서는 누른 직원으로 연다.
+          state.selectedEmployee = clicked;
           renderStaffConsole();
           openStaffResumePrompt();
         });
@@ -13542,6 +13546,8 @@
       } else if (action === "quick-actions") {
         const jobsButton = $('[data-tab="jobs"]');
         if (jobsButton) jobsButton.click();
+        // 탭 전환은 폼을 다시 그리지 않는다 — 상수 이력서의 "직원 업무지시"가 예리 폼을 열던 것(10/14 QA).
+        renderQuickActions();
         $("#quickActions")?.scrollIntoView({ behavior: "smooth", block: "start" });
       } else if (action === "password") {
         $("#passwordPanel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -13693,7 +13699,9 @@
     }
 
     function todayDateValue() {
-      return new Date().toISOString().slice(0, 10);
+      // toISOString 은 UTC 라 한국 오전 9시 전에는 어제 날짜가 견적일로 들어갔다.
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     }
 
     function sangsuDefaultState() {
