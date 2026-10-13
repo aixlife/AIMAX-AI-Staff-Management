@@ -4468,6 +4468,7 @@
               </div>
               <label for="secretGeminiInput">Gemini API Key</label>
               <input id="secretGeminiInput" type="password" autocomplete="off" placeholder="새 키를 붙여넣으면 교체됩니다.">
+              <p class="small muted" id="secretGeminiImageNote">무료 키로도 글은 써집니다. 다만 구글은 이미지 모델에 무료 사용량을 주지 않아, 예리 글에 이미지를 넣으려면 Google AI Studio에서 결제를 연결한 키(또는 OpenAI 키)가 필요합니다.</p>
               <div class="actions">
                 <button class="btn primary" type="button" data-secret-save="gemini">저장</button>
                 <button class="btn" type="button" data-secret-delete="gemini">삭제</button>
@@ -4531,7 +4532,7 @@
           <div class="api-guide-list">
             <div class="api-guide-item">
               <strong>Gemini</strong>
-              <span class="small muted">송이 AI 분석과 예리 글 생성 기본 모델</span>
+              <span class="small muted">송이 AI 분석과 예리 글 생성 기본 모델. 무료 키는 글만, 예리 이미지는 결제 연결된 키에서만 만들어집니다.</span>
               <a class="guide-link" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio 열기</a>
             </div>
             <div class="api-guide-item">
@@ -7119,6 +7120,20 @@
         hint.style.color = "#b45309";
         hint.textContent = "이 모델은 그림 안 한글이 깨집니다. 그래서 글자가 들어가는 그림(주문서 화면, 안내판 등)은 만들지 않고 사물·장면 위주로 그립니다. 그림에 한글이 꼭 필요하면 gpt-image-2를 골라주세요.";
       }
+      // 2026-10-13: 구글은 이미지 모델에 무료 사용량을 주지 않는다(공식 가격표 "Not available").
+      // 글은 무료 키로 써지는데 이미지만 조용히 빠져 "설정을 잘못했나" 문의가 왔다.
+      if (String(normalizeImageModel(modelId)).startsWith("gemini")) {
+        const gemini = state.userSecrets?.providers?.gemini || {};
+        const openaiReady = Boolean(state.userSecrets?.providers?.openai?.web_configured);
+        if (gemini.image_capability === "free_tier_no_image") {
+          hint.style.color = "#b91c1c";
+          hint.textContent = openaiReady
+            ? "저장된 Gemini 키는 무료 키라 이미지를 못 만듭니다. 저장된 OpenAI 키로 대신 만듭니다."
+            : "저장된 Gemini 키는 무료 키라 이미지를 못 만듭니다. 이대로 실행하면 이미지 없이 임시저장됩니다. 이미지 수를 0장으로 하거나, Gemini 키에 결제를 연결하거나, OpenAI 키를 저장해주세요.";
+        } else {
+          hint.textContent += " Gemini 무료 API 키로는 이미지가 만들어지지 않습니다. Google AI Studio에서 결제를 연결한 키이거나 OpenAI 키가 있어야 이미지가 들어갑니다(모델에 따라 장당 약 60~200원).";
+        }
+      }
     }
 
     function renderYunmiModelSelect(selector, selected = DEFAULT_AI_MODEL) {
@@ -9506,9 +9521,22 @@
           : info.source === "server_global"
             ? "서버 연결됨"
             : "미연결";
-        statusEl.textContent = sourceLabel;
-        statusEl.className = `pill ${configured ? "ok" : "warn"}`;
+        const noImage = provider === "gemini" && info.image_capability === "free_tier_no_image";
+        statusEl.textContent = noImage ? `${sourceLabel} · 이미지 불가(무료 키)` : sourceLabel;
+        statusEl.className = `pill ${configured && !noImage ? "ok" : "warn"}`;
+        if (provider === "gemini") {
+          const note = $("#secretGeminiImageNote");
+          if (note) {
+            note.style.color = noImage ? "#b45309" : "";
+            note.textContent = noImage
+              ? "지금 저장된 Gemini 키는 무료 키로 확인되어 이미지가 만들어지지 않습니다. 글은 그대로 써집니다. 이미지를 넣으려면 Google AI Studio에서 이 키의 프로젝트에 결제를 연결하거나, OpenAI 키를 함께 저장해주세요(저장돼 있으면 OpenAI로 대신 만듭니다)."
+              : "무료 키로도 글은 써집니다. 다만 구글은 이미지 모델에 무료 사용량을 주지 않아, 예리 글에 이미지를 넣으려면 Google AI Studio에서 결제를 연결한 키(또는 OpenAI 키)가 필요합니다.";
+          }
+        }
       }
+      document.querySelectorAll("select").forEach((select) => {
+        if (select.dataset.koreanHintBound) renderImageModelKoreanHint(select, select.value);
+      });
     }
 
     function renderAccount() {

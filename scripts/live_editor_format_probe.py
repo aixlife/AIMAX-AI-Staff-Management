@@ -72,7 +72,7 @@ def _editor_metrics(driver):
       paragraphs: paragraphs.slice(0, 80),
       bold_tag_count: boldNodes.length,
       bold_span_count: boldBySpan.length,
-      bold_texts: boldBySpan.map(s => (s.innerText || '').trim()).slice(0, 30),
+      bold_texts: boldNodes.concat(boldBySpan).map(s => (s.innerText || '').trim()).filter(Boolean).slice(0, 40),
       quotes,
       lists: q('.se-text-paragraph-list, ol, ul').length,
       tables: q('.se-component.se-table').length,
@@ -95,12 +95,15 @@ def main():
     parser.add_argument("--markdown", default="")
     parser.add_argument("--no-save", action="store_true")
     parser.add_argument("--style", default="info", help="review | consult | info (글 유형 서식)")
+    parser.add_argument("--bold-method", default="", help="select | shortcut | button")
     parser.add_argument("--profile-session", action="store_true", help="저장 세션 파일이 만료돼도 브라우저 프로필 로그인만 확인해 진행")
     args = parser.parse_args()
     if args.bold:
         os.environ["AIMAX_EDITOR_ENABLE_BOLD"] = "1"
+    if args.bold_method:
+        os.environ["AIMAX_EDITOR_BOLD_METHOD"] = args.bold_method
     os.makedirs(args.out, exist_ok=True)
-    result = {"style": None, "started_at": time.strftime("%Y-%m-%d %H:%M:%S"), "bold_enabled": bool(args.bold), "stages": []}
+    result = {"style": None, "bold_method": None, "started_at": time.strftime("%Y-%m-%d %H:%M:%S"), "bold_enabled": bool(args.bold), "stages": []}
 
     from app import load_settings
     from browser.stealth_driver import create_stealth_driver
@@ -119,6 +122,8 @@ def main():
     if isinstance(parsed, tuple):
         title, content_list = parsed[0], parsed[1]
     result["parsed_types"] = [item[0] for item in content_list]
+    result["style"] = args.style
+    result["bold_method"] = os.environ.get("AIMAX_EDITOR_BOLD_METHOD", "select")
     prepared = {}
     if args.image and os.path.isfile(args.image):
         image_total = sum(1 for item in content_list if item[0] == "image")

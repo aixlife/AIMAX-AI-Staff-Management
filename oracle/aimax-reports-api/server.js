@@ -1628,6 +1628,8 @@ function setUserSecret(userId, provider, value) {
   row.encrypted = encryptUserSecret(userId, config.secretName, secretValue);
   row.fingerprint = userSecretFingerprint(secretValue);
   row.updated_at = now;
+  delete row.image_capability;
+  delete row.image_checked_at;
   saveUserSecrets(data);
   return { row, config };
 }
@@ -1666,7 +1668,27 @@ function publicUserSecretStatus(userId, provider, data = loadUserSecrets()) {
     source: webConfigured ? "web_user" : globalConfigured ? "server_global" : "missing",
     fingerprint: webConfigured ? row.fingerprint || "" : "",
     updated_at: webConfigured ? row.updated_at || row.created_at || "" : "",
+    // 이 키로 이미지가 실제로 만들어지는지(서버 이미지 생성에서 관찰). 모르면 "unknown".
+    image_capability: webConfigured && ["ok", "free_tier_no_image"].includes(row.image_capability) ? row.image_capability : "unknown",
   };
+}
+
+// 2026-10-13: 구글 이미지 모델은 무료 사용량이 없다. 무료 키인지는 이미지를 실제로 불러봐야
+// 알 수 있어(결제 키로 시험하면 과금), 서버 이미지 생성에서 관찰한 결과를 키에 기록해 두고
+// 키 화면·이미지 모델 선택 화면에서 안내한다. 키를 바꾸면 setUserSecret 이 기록을 지운다.
+function recordUserSecretImageCapability(userId, provider, capability) {
+  try {
+    const config = secretProviderConfig(provider);
+    if (!config || !["ok", "free_tier_no_image"].includes(capability)) return;
+    const data = loadUserSecrets();
+    const row = findUserSecretRow(data, userId, config.provider);
+    if (!row || row.image_capability === capability) return;
+    row.image_capability = capability;
+    row.image_checked_at = nowIso();
+    saveUserSecrets(data);
+  } catch (error) {
+    console.warn("[yeri-images] capability record failed", error?.code || error?.message || error);
+  }
 }
 
 function publicUserSecretStatuses(userId) {
@@ -3937,6 +3959,7 @@ async function generateYeriServerImages(artifact, job, userId, signal = null) {
           }
           const filePath = yeriServerImagePath(job.id, index + 1);
           fs.writeFileSync(filePath, buffer, { mode: 0o600 });
+          recordUserSecretImageCapability(userId, target.provider, "ok");
           Object.assign(item, {
             status: "ready",
             provider: target.provider,
@@ -3960,6 +3983,7 @@ async function generateYeriServerImages(artifact, job, userId, signal = null) {
             job_id: job.id, index: index + 1, provider: target.provider, model: target.model,
             code: classified.code, status: classified.status,
           });
+          if (classified.code === "image_paid_required") recordUserSecretImageCapability(userId, target.provider, "free_tier_no_image");
           if (classified.fatalForProvider) {
             deadProviders.set(target.provider, classified);
             break;
@@ -20743,6 +20767,8 @@ module.exports = {
     yeriServerImagePath,
     buildYeriLengthRevisionPrompt,
     setUserSecretForSmoke: setUserSecret,
+    publicUserSecretStatus,
+    recordUserSecretImageCapability,
     JOB_STATUSES,
     agentYeriArtifactPayload,
     attachYeriArtifactToJob,

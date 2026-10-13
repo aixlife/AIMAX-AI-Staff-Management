@@ -1123,6 +1123,49 @@ def input_content(driver, content_list, api_key, image_provider="gemini", fallba
     }
 
 
+def _input_bold_text(driver, text, ctrl_key):
+    """굵은 글자 입력.
+
+    2026-10-13 실측: 굵게 버튼을 스크립트로 눌러 켜고-입력-끄면 마지막 어절이 한 번 더 들어간다
+    ("가장 먼저먼저", "기후기후"). 그래서 굵게가 기본 꺼져 있었다. 방식을 고를 수 있게 둔다:
+      select  — 먼저 평범하게 입력하고, 방금 입력한 글자만 Shift+← 로 골라 Ctrl+B (기본)
+      shortcut — Ctrl+B 켜고 입력 후 Ctrl+B 끄기
+      button  — 예전 방식(버튼 클릭)
+    """
+    method = os.environ.get("AIMAX_EDITOR_BOLD_METHOD", "select").strip().lower() or "select"
+    if method == "button":
+        bold_btn = driver.find_element(By.CSS_SELECTOR, BOLD_BUTTON)
+        driver.execute_script("arguments[0].click();", bold_btn)
+        wait_short()
+        human_type(driver, text)
+        wait_short()
+        driver.execute_script("arguments[0].click();", bold_btn)
+        wait_short()
+        return
+    if method == "shortcut":
+        ActionChains(driver).key_down(ctrl_key).send_keys("b").key_up(ctrl_key).perform()
+        wait_short()
+        human_type(driver, text)
+        wait_short()
+        ActionChains(driver).key_down(ctrl_key).send_keys("b").key_up(ctrl_key).perform()
+        wait_short()
+        return
+    human_type(driver, text)
+    wait_short()
+    actions = ActionChains(driver).key_down(Keys.SHIFT)
+    for _ in range(len(text)):
+        actions.send_keys(Keys.ARROW_LEFT)
+    actions.key_up(Keys.SHIFT).perform()
+    wait_short()
+    ActionChains(driver).key_down(ctrl_key).send_keys("b").key_up(ctrl_key).perform()
+    wait_short()
+    # 선택을 풀고 커서를 굵은 글자 끝으로 — 뒤에 이어지는 글자는 굵게가 아니어야 한다.
+    ActionChains(driver).send_keys(Keys.ARROW_RIGHT).perform()
+    wait_short()
+    ActionChains(driver).key_down(ctrl_key).send_keys("b").key_up(ctrl_key).perform()
+    wait_short()
+
+
 def _input_text_block(driver, parts):
     """텍스트 블록 입력 (볼드 처리 + 링크 + 문단 구분 포함)"""
     # 붙여넣기 단축키는 OS별로 다르다 (Windows: Ctrl, macOS: Cmd/Meta)
@@ -1146,16 +1189,7 @@ def _input_text_block(driver, parts):
                 human_type(driver, part_text)
                 wait_short()
                 continue
-            # 팝업 정리는 input_content 진입 시 1회 수행됨 — 볼드 파트마다 반복하지 않는다.
-            bold_btn = driver.find_element(By.CSS_SELECTOR, BOLD_BUTTON)
-            driver.execute_script("arguments[0].click();", bold_btn)
-            wait_short()
-            # 볼드 텍스트 입력
-            human_type(driver, part_text)
-            wait_short()
-            # 볼드 버튼 OFF
-            driver.execute_script("arguments[0].click();", bold_btn)
-            wait_short()
+            _input_bold_text(driver, part_text, ctrl_key)
         elif part_type == 'link':
             # 클립보드에 URL 복사 → Selenium Ctrl+V 붙여넣기
             # (pyautogui 대신 Selenium 레벨 — 에디터가 URL 자동 감지 → 하이퍼링크)

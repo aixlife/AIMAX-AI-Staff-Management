@@ -83,6 +83,14 @@ const sanitized = t.sanitizeYeriServerImages({ status: "partial", requested: 2, 
 check("상태 유지", sanitized.status, "partial");
 check("잘못된 sha 제거", sanitized.items[1].sha256, "");
 
+console.log("[6b] 무료 키 판정은 키 상태에 남고, 키를 바꾸면 지워진다");
+t.setUserSecretForSmoke("cap-user", "gemini", "AIzaSy-test-key-free-tier-000000000000");
+check("처음엔 unknown", t.publicUserSecretStatus("cap-user", "gemini").image_capability, "unknown");
+t.recordUserSecretImageCapability("cap-user", "gemini", "free_tier_no_image");
+check("무료 키 판정 기록", t.publicUserSecretStatus("cap-user", "gemini").image_capability, "free_tier_no_image");
+t.setUserSecretForSmoke("cap-user", "gemini", "AIzaSy-test-key-paid-tier-111111111111");
+check("키 교체 시 초기화", t.publicUserSecretStatus("cap-user", "gemini").image_capability, "unknown");
+
 if (process.env.AIMAX_LIVE_IMAGE_SMOKE === "1") {
   console.log("[7] 실제 Gemini 이미지 1장 (유료)");
   const key = String(process.env.GEMINI_KEY_FOR_SMOKE || "").trim();
