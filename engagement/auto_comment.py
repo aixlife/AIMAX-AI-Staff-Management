@@ -408,7 +408,7 @@ def generate_comment(body_text, api_key, tone="friendly", custom_instruction=Non
             import anthropic
             client = anthropic.Anthropic(api_key=api_key)
             response = client.messages.create(
-                model="claude-haiku-4-5",
+                model="claude-haiku-5-5",
                 max_tokens=300,
                 messages=[{"role": "user", "content": prompt}],
             )

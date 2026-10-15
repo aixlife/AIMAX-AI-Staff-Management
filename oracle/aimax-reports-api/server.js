@@ -79,6 +79,7 @@ const YERI_GEMINI_CHAIN_FALLBACK_CODES = new Set([
 // 자연스러움(34초/40원). 실측·가격 근거: 세션 리포트, docs/pricing 2026-07-22.
 // 2026-10-13: claude-sonnet-5-5 로. 같은 가격($2/$10)의 최신 세대(ListModels·가격표 확인, 실측은 스모크 기록).
 const YERI_SERVER_GENERATION_CLAUDE_MODEL = String(process.env.AIMAX_YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-5-5").trim();
+const YERI_CLAUDE_SELECTABLE_MODELS = new Set(["claude-sonnet-5-5", "claude-haiku-5-5"]);
 const YERI_SERVER_GENERATION_TIMEOUT_MS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_TIMEOUT_MS || 60000);
 const YERI_SERVER_GENERATION_MAX_ATTEMPTS = Number(process.env.AIMAX_YERI_SERVER_GENERATION_MAX_ATTEMPTS || 3);
 const YERI_SERVER_GENERATION_ALLOWED_USER_IDENTIFIERS = new Set(
@@ -319,6 +320,9 @@ const YUNMI_AI_MODEL_PRICES = {
   "gpt-5.6-luna": { provider: "openai", inputUsdPer1m: 0.20, outputUsdPer1m: 1.20, label: "GPT-5.6 luna" },
   "gpt-6-luna": { provider: "openai", inputUsdPer1m: 0.10, outputUsdPer1m: 0.50, label: "GPT-6 luna" },
   "gpt-6-sol": { provider: "openai", inputUsdPer1m: 2.00, outputUsdPer1m: 10.00, label: "GPT-6 sol" },
+  // 2026-10-15 모델 점검(ListModels + 공식 가격표): gpt-6.1-sol 은 6-sol 후속(같은 단가), claude-haiku-5-5 는 10/07 출시.
+  "gpt-6.1-sol": { provider: "openai", inputUsdPer1m: 2.00, outputUsdPer1m: 10.00, label: "GPT-6.1 sol" },
+  "claude-haiku-5-5": { provider: "claude", inputUsdPer1m: 0.10, outputUsdPer1m: 0.50, label: "Claude Haiku 5.5" },
   "gpt-5.6-terra": { provider: "openai", inputUsdPer1m: 2.00, outputUsdPer1m: 12.00, label: "GPT-5.6 terra" },
   "gpt-5.4-mini": { provider: "openai", inputUsdPer1m: 0.75, outputUsdPer1m: 4.50, label: "GPT-5.4 mini" },
   "gpt-5.4-nano": { provider: "openai", inputUsdPer1m: 0.20, outputUsdPer1m: 1.25, label: "GPT-5.4 nano" },
@@ -2026,8 +2030,9 @@ function yeriServerGenerationProviderIssue(payload = {}, mode = yeriServerGenera
 function yeriServerGenerationTextModel(payload = {}) {
   const selected = yeriSelectedModel(payload);
   const provider = yeriAiProviderForModel(selected);
-  if (provider === "openai") return ({ "gpt-5.6-luna": "gpt-6-luna", "gpt-5.6-terra": "gpt-6-sol" })[selected] || selected || "gpt-6-luna";
-  if (provider === "claude") return YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-5-5";
+  if (provider === "openai") return ({ "gpt-5.6-luna": "gpt-6-luna", "gpt-5.6-terra": "gpt-6.1-sol" })[selected] || selected || "gpt-6-luna";
+  // "claude" 는 기본(Sonnet), 화면에서 고른 구체 모델(claude-haiku-5-5 등)은 그대로 쓴다.
+  if (provider === "claude") return YERI_CLAUDE_SELECTABLE_MODELS.has(selected) ? selected : (YERI_SERVER_GENERATION_CLAUDE_MODEL || "claude-sonnet-5-5");
   return normalizeYeriGeminiModel(selected);
 }
 

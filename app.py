@@ -382,6 +382,7 @@ _AI_TEXT_PRICE_USD_PER_1M = {
     "claude": {"input": 2.00, "output": 10.00, "label": "Claude Sonnet 5.5"},
     "gpt-6-luna": {"input": 0.10, "output": 0.50, "label": "GPT-6 luna"},
     "gpt-6-sol": {"input": 2.00, "output": 10.00, "label": "GPT-6 sol"},
+    "gpt-6.1-sol": {"input": 2.00, "output": 10.00, "label": "GPT-6.1 sol"},
     "gpt-5.6-luna": {"input": 0.20, "output": 1.20, "label": "GPT-5.6 luna"},
     "gpt-5.6-terra": {"input": 2.00, "output": 12.00, "label": "GPT-5.6 terra"},
     "gpt-5.4-mini": {"input": 0.75, "output": 4.50, "label": "GPT-5.4 mini"},
@@ -410,7 +411,10 @@ _LEGACY_AI_MODEL_MAP = {
     "gpt-5.4-nano": "gpt-6-luna",
     # 2026-10-13: gpt-5.6 → 같은 등급 gpt-6 (웹 선택지와 같은 매핑).
     "gpt-5.6-luna": "gpt-6-luna",
-    "gpt-5.6-terra": "gpt-6-sol",
+    "gpt-5.6-terra": "gpt-6.1-sol",
+    # 2026-10-15: 로컬 생성 경로의 Claude 는 한 모델(Sonnet)만 쓴다. 웹에서 고른 Haiku 는 같은 제공자로 유지.
+    "claude-haiku-5-5": "claude",
+    "claude-sonnet-5-5": "claude",
 }
 _PLACEHOLDER_SECRET_VALUES = {
     "",
@@ -435,7 +439,7 @@ _PROVIDER_SECRET_KEYS = {
 
 def _normalize_ai_model(value):
     value = (value or "").strip()
-    if value in ("claude", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gpt-6-luna", "gpt-6-sol"):
+    if value in ("claude", "gemini-3.6-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.1-pro-preview", "gpt-6-luna", "gpt-6-sol", "gpt-6.1-sol"):
         return value
     return _LEGACY_AI_MODEL_MAP.get(value, _DEFAULT_AI_MODEL)
 

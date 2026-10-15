@@ -126,7 +126,7 @@ def _call_claude(prompt: str, api_key: str) -> Optional[str]:
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-5-5",
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}],
     )
