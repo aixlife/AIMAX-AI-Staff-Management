@@ -336,11 +336,25 @@ done
 # 확인: scripts/verify_agent_catalog_consistency.py
 if [[ "$MODE" == "macos-bundle" || "$MODE" == "windows-bundle" || "$MODE" == "bundle-installers" || "$MODE" == "installers" || "$MODE" == "all" ]]; then
   BUNDLE_VERSION="$(python3 -c "import re,pathlib;print(re.search(r'APP_VERSION\s*=\s*\"([^\"]+)\"', pathlib.Path('$ROOT_DIR/aimax_compliance.py').read_text(encoding='utf-8')).group(1))" 2>/dev/null || echo "")"
+  case "$MODE" in
+    macos-bundle) STAMP_PLATFORMS="macos" ;;
+    windows-bundle) STAMP_PLATFORMS="windows" ;;
+    *) STAMP_PLATFORMS="macos windows" ;;
+  esac
   if [[ -n "$BUNDLE_VERSION" ]]; then
-    echo "[STAMP] 서빙 번들 버전 기록: $BUNDLE_VERSION"
+    echo "[STAMP] 서빙 번들 버전 기록: $BUNDLE_VERSION ($STAMP_PLATFORMS)"
     ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; cd '$REMOTE_DOWNLOAD_DIR'; python3 - <<'STAMPEOF'
 import hashlib, json, pathlib, datetime
-out = {'stamped_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'version': '$BUNDLE_VERSION', 'files': {}}
+# 2026-10-15: 이번에 올린 플랫폼만 새 버전으로 기록하고, 안 올린 플랫폼은 직전 도장 버전을 유지한다.
+try:
+    prev = json.loads(pathlib.Path('aimax-bundle-versions.json').read_text(encoding='utf-8'))
+except Exception:
+    prev = {}
+prev_versions = prev.get('platform_versions') if isinstance(prev.get('platform_versions'), dict) else {}
+platform_versions = {k: str(prev_versions.get(k) or prev.get('version') or '') for k in ('macos', 'windows')}
+for k in '$STAMP_PLATFORMS'.split():
+    platform_versions[k] = '$BUNDLE_VERSION'
+out = {'stamped_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'version': '$BUNDLE_VERSION', 'platform_versions': platform_versions, 'files': {}}
 for name in ('aimax-bundle-macos.dmg', 'aimax-bundle-windows.exe'):
     p = pathlib.Path(name)
     if not p.exists():

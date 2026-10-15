@@ -287,6 +287,14 @@ def collect_metrics(
 
     # --- M4 fleet_version_stagnation (v1.0.60/61 미배달 사고 역탐지) -----------
     stamp_version = str(stamp.get("version") or "")
+    # 2026-10-15: 플랫폼별 출시(윈도우만 먼저)를 위해 도장에 platform_versions 가 생겼다. 없으면 공통 version.
+    stamp_platform_versions = stamp.get("platform_versions") if isinstance(stamp.get("platform_versions"), dict) else {}
+
+    def stamp_version_for(platform_text: str) -> str:
+        text = str(platform_text or "").lower()
+        key = "windows" if "windows" in text else "macos" if ("darwin" in text or "mac" in text) else ""
+        return str(stamp_platform_versions.get(key) or stamp_version) if key else stamp_version
+
     stamped_at = parse_time(stamp.get("stamped_at"))
     active_cutoff = now - timedelta(days=m4_active_days)
     active_agents = [
@@ -295,7 +303,7 @@ def collect_metrics(
     ]
     on_latest = [
         row for row in active_agents
-        if str(row.get("version") or "") and compare_versions(row.get("version"), stamp_version) >= 0
+        if str(row.get("version") or "") and compare_versions(row.get("version"), stamp_version_for(row.get("platform"))) >= 0
     ] if stamp_version else []
     if (
         stamp_version
@@ -321,16 +329,17 @@ def collect_metrics(
     if stamp_version:
         for platform in PLATFORMS:
             advertised = catalog.get(platform, "")
-            if advertised and compare_versions(advertised, stamp_version) != 0:
+            platform_stamp = str(stamp_platform_versions.get(platform) or stamp_version)
+            if advertised and compare_versions(advertised, platform_stamp) != 0:
                 anomalies.append({
                     "code": "catalog_bundle_mismatch",
                     "platform": platform,
                     "detail": (
-                        f"{platform} 카탈로그는 {advertised} 광고, 실제 번들 도장은 {stamp_version}"
+                        f"{platform} 카탈로그는 {advertised} 광고, 실제 번들 도장은 {platform_stamp}"
                     ),
                     "evidence": {
                         "advertised_version": advertised,
-                        "bundle_version": stamp_version,
+                        "bundle_version": platform_stamp,
                     },
                 })
 

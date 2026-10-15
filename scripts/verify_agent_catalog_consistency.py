@@ -80,11 +80,15 @@ def main(argv: list[str]) -> int:
         )
 
     served_version = str(stamp.get("version") or "")
+    # 2026-10-15: 윈도우만 먼저 출시하는 경우가 생겨 도장에 플랫폼별 버전(platform_versions)을 둔다.
+    # 예전 도장(version 하나)은 두 플랫폼 공통 버전으로 읽는다.
+    platform_versions = stamp.get("platform_versions") if isinstance(stamp.get("platform_versions"), dict) else {}
     for platform, filename in PLATFORM_FILES.items():
         advertised = catalog.get(platform, "")
-        if advertised and served_version and advertised != served_version:
+        served_for_platform = str(platform_versions.get(platform) or served_version)
+        if advertised and served_for_platform and advertised != served_for_platform:
             problems.append(
-                f"{platform}: 카탈로그는 {advertised} 를 광고하는데 실제 올린 번들은 {served_version} 입니다. "
+                f"{platform}: 카탈로그는 {advertised} 를 광고하는데 실제 올린 번들은 {served_for_platform} 입니다. "
                 "사용자는 업데이트해도 광고된 버전에 도달할 수 없습니다."
             )
         file_path = args.download_dir / filename
@@ -104,6 +108,7 @@ def main(argv: list[str]) -> int:
         "ok": not problems,
         "catalog": catalog,
         "served_version": served_version,
+        "platform_versions": platform_versions,
         "stamped_at": stamp.get("stamped_at", ""),
         "problems": problems,
     }
