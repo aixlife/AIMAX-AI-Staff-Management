@@ -372,6 +372,15 @@ STAMPEOF"
   fi
 fi
 
+# 운영이 어느 커밋을 돌리는지 /health 의 deployment.commit 으로 확인할 수 있게 남긴다(server.js 가 .deploy-commit 을 읽음).
+# 미커밋 변경이 있으면 커밋 해시가 거짓이 되므로 -dirty 를 붙인다.
+if [[ "$MODE" == "web" || "$MODE" == "all" ]]; then
+  DEPLOY_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+  if [[ -n "$(git -C "$ROOT_DIR" status --porcelain --untracked-files=no 2>/dev/null)" ]]; then DEPLOY_COMMIT="${DEPLOY_COMMIT}-dirty"; fi
+  echo "[COMMIT] $DEPLOY_COMMIT"
+  ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; printf '%s\n' '$DEPLOY_COMMIT' > '$REMOTE_APP_DIR/.deploy-commit'"
+fi
+
 echo "[SERVICE] restarting $REMOTE_SERVICE"
 ssh -o BatchMode=yes "$REMOTE_HOST" "set -e; systemctl --user restart '$REMOTE_SERVICE'; sleep 2; systemctl --user is-active '$REMOTE_SERVICE'"
 
