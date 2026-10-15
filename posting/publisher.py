@@ -331,44 +331,55 @@ def _read_autosave_message(driver):
     return None
 
 
-def _wait_draft_saved(driver, timeout=10, baseline_count=None, baseline_autosave=None):
-    """임시저장 완료를 확인한다.
+def _toast_texts_present(driver, texts):
+    try:
+        body_text = driver.execute_script("return document.body ? document.body.innerText : ''") or ""
+    except Exception:
+        return set()
+    normalized = _normalize_text(body_text)
+    return {text for text in texts if text in normalized}
 
-    1) 완료 토스트/상태 메시지 텍스트, 또는
-    2) '임시저장된 글 보기, N개' 카운트가 baseline 대비 증가, 또는
-    3) 현재 글의 자동저장 메시지
-    중 하나라도 만족하면 성공으로 본다.
+
+_DRAFT_DONE_TEXTS = [
+    "임시저장 되었습니다",
+    "임시 저장되었습니다",
+    "임시저장되었습니다",
+    "저장되었습니다",
+    "저장 완료",
+    "임시저장 완료",
+]
+
+
+def _wait_draft_saved(driver, timeout=10, baseline_count=None, baseline_autosave=None, baseline_toasts=None):
+    """임시저장 완료를 확인하고, 무엇으로 확인했는지 돌려준다(확인 못 하면 "").
+
+    - "toast": 저장 전에는 없던 완료 문구가 새로 나타남
+    - "count": '임시저장된 글 보기, N개' 가 저장 전보다 늘어남
+    - "autosave_changed": 자동저장 메시지가 저장 전과 달라짐
+    - "unverified": 버튼은 눌렀고 자동저장 표시는 있지만 저장 전과 같아 새 저장인지 알 수 없음
+
+    2026-10-15 전수조사 #7: 글 수가 저장 전후 모두 98로 고정돼 있었고, 예전 코드는 '자동저장 표시가 있고
+    글 수가 0보다 크면' 성공으로 봐서 새로 저장되지 않아도 통과했다. 그 경우는 "unverified" 로 구분해
+    서버가 볼 수 있게 한다(작업을 실패로 바꾸지는 않는다 — 실제로 저장된 글을 실패로 돌려 중복 재시도가
+    나는 것을 막기 위해).
     """
-    done_texts = [
-        "임시저장 되었습니다",
-        "임시 저장되었습니다",
-        "임시저장되었습니다",
-        "저장되었습니다",
-        "저장 완료",
-        "임시저장 완료",
-    ]
+    baseline_toasts = set(baseline_toasts or ())
     end = datetime.now().timestamp() + timeout
+    weak = False
     while datetime.now().timestamp() < end:
-        try:
-            body_text = driver.execute_script("return document.body ? document.body.innerText : ''") or ""
-            normalized = _normalize_text(body_text)
-            if any(text in normalized for text in done_texts):
-                return True
-        except Exception:
-            pass
+        if _toast_texts_present(driver, _DRAFT_DONE_TEXTS) - baseline_toasts:
+            return "toast"
         if baseline_count is not None:
             current = _read_draft_count(driver)
             if current is not None and current > baseline_count:
-                return True
+                return "count"
         autosave = _read_autosave_message(driver)
         if autosave:
             if baseline_autosave is None or autosave != baseline_autosave:
-                return True
-            current = _read_draft_count(driver)
-            if current is not None and current > 0:
-                return True
+                return "autosave_changed"
+            weak = True
         time.sleep(0.3)
-    return False
+    return "unverified" if weak else ""
 
 
 def set_category(driver, category_name):
@@ -440,6 +451,7 @@ def save_draft(driver):
     logger.info("임시 저장 중...")
     baseline_count = _read_draft_count(driver)
     baseline_autosave = _read_autosave_message(driver)
+    baseline_toasts = _toast_texts_present(driver, _DRAFT_DONE_TEXTS)
     if baseline_count is not None:
         logger.info(f"임시저장 글 수(저장 전): {baseline_count}")
     if baseline_autosave:
@@ -450,16 +462,21 @@ def save_draft(driver):
     except Exception:
         driver.execute_script("arguments[0].click();", btn)
     wait_medium()
-    confirmed = _wait_draft_saved(
+    method = _wait_draft_saved(
         driver,
         baseline_count=baseline_count,
         baseline_autosave=baseline_autosave,
+        baseline_toasts=baseline_toasts,
     )
-    if not confirmed:
+    if not method:
         _save_publish_debug(driver, "draft_confirmation_missing")
         logger.warning("임시 저장 완료 메시지/글 수 증가/자동저장 상태를 확인하지 못했습니다. 버튼 클릭은 수행했습니다.")
-    logger.info("임시 저장 완료" if confirmed else "임시 저장 버튼 클릭 완료")
-    return confirmed
+    elif method == "unverified":
+        _save_publish_debug(driver, "draft_confirmation_unverified")
+        logger.warning("임시 저장 버튼은 눌렀지만 새로 저장됐다는 표시는 확인하지 못했습니다(자동저장 표시만 있음).")
+    logger.info(f"임시 저장 확인 방법: {method or '없음'}")
+    # 문자열("toast" 등)은 참, "" 은 거짓이라 bool(save_draft(...)) 를 쓰는 기존 호출부와 호환된다.
+    return method
 
 
 def _accept_alert_if_present(driver, context="publish", attempts=4, gap=0.6):
@@ -489,6 +506,28 @@ def _accept_alert_if_present(driver, context="publish", attempts=4, gap=0.6):
     return accepted
 
 
+_POST_URL_PATTERN = re.compile(r"https://(?:m\.)?blog\.naver\.com/(?:[A-Za-z0-9_.-]+/(\d+)|PostView\.naver\?[^#]*?logNo=(\d+))")
+
+
+def _capture_post_url(driver, timeout=10):
+    """발행 직후 네이버가 이동시키는 글 주소에서 URL·글 번호(logNo)를 읽는다. 못 읽으면 빈 값.
+
+    예약 발행은 글 화면으로 이동하지 않을 수 있어 빈 값이 정상이다.
+    """
+    end = datetime.now().timestamp() + timeout
+    while datetime.now().timestamp() < end:
+        try:
+            url = driver.current_url or ""
+        except Exception:
+            url = ""
+        match = _POST_URL_PATTERN.match(url)
+        if match:
+            log_no = match.group(1) or match.group(2) or ""
+            return {"url": match.group(0) if match.group(1) else url.split("#")[0][:300], "log_no": log_no}
+        time.sleep(0.5)
+    return {"url": "", "log_no": ""}
+
+
 def publish_now(driver, category=None):
     """즉시 발행"""
     logger.info("즉시 발행 중...")
@@ -510,7 +549,9 @@ def publish_now(driver, category=None):
     # 발행 confirm 후 리다이렉트 시 뜰 수 있는 beforeunload/이동확인 다이얼로그 자동 수락.
     _accept_alert_if_present(driver, context="publish_now")
     wait_medium()
-    logger.info("즉시 발행 완료")
+    post = _capture_post_url(driver)
+    logger.info(f"즉시 발행 완료{(' — ' + post['url']) if post['url'] else ''}")
+    return post
 
 
 def schedule_publish(driver, target_date=None, hour=None, category=None):
@@ -607,4 +648,6 @@ def schedule_publish(driver, target_date=None, hour=None, category=None):
     _accept_alert_if_present(driver, context="schedule_publish")
     wait_medium()
 
+    post = _capture_post_url(driver, timeout=5)
     logger.info(f"예약 발행 완료: {target_date.strftime('%Y-%m-%d')} {hour_str}:{minute_val}")
+    return post

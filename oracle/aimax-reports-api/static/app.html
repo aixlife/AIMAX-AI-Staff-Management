@@ -6591,6 +6591,7 @@
         image_prompt_empty: "이미지 프롬프트",
         image_completion: "이미지 첨부 확인",
         init: "실행 준비",
+        runner_not_available: "실행기 연결 대기",
       }[key] || key || "작업 처리";
     }
 
@@ -7056,6 +7057,10 @@
     }
 
     function jobCancelButtonHtml(job) {
+      // 실행기가 꺼져 있어 멈춘 예리 글은 만든 글 그대로 다시 올릴 수 있다(서버 재시도 = 글 생성 비용 없음).
+      if (job?.id && job.status === "failed" && job.kind === "yeri_write" && job.failed_stage === "runner_not_available") {
+        return `<button class="btn small-btn" type="button" data-retry-ready-job="${escapeHtml(job.id)}">만든 글로 다시 올리기</button>`;
+      }
       if (!job?.id || !isLiveJobStatus(job.status) || job.kind === "songi_research") return "";
       return `<button class="btn danger small-btn" type="button" data-cancel-job="${escapeHtml(job.id)}">중단</button>`;
     }
@@ -12194,6 +12199,9 @@
       $$("[data-cancel-job]").forEach((button) => {
         button.addEventListener("click", () => cancelJob(button.dataset.cancelJob));
       });
+      $$("[data-retry-ready-job]").forEach((button) => {
+        button.addEventListener("click", () => retryReadyJob(button.dataset.retryReadyJob, button));
+      });
     }
 
     function renderFeedbackEmployeeOptions() {
@@ -12558,7 +12566,9 @@
       await loadResearchIntegrations();
       renderAll();
       const verification = response.verification;
-      if (verification?.verified) {
+      if (verification?.invalid) {
+        showToast(verification.message || `저장은 했지만 ${field.label}가 맞지 않는 것 같아요. 키 전체를 다시 복사해 붙여 넣어주세요.`);
+      } else if (verification?.verified) {
         const detail = [verification.username, verification.plan ? `${verification.plan} 플랜` : ""].filter(Boolean).join(" · ");
         showToast(`${field.label} 키 인증 완료${detail ? ` (${detail})` : ""}. 저장했습니다.`);
       } else if (verification && verification.verified === false) {
@@ -13772,6 +13782,27 @@
         console.error("createJob failed", { kind, status, error });
         showToast(message);
         return null;
+      }
+    }
+
+    async function retryReadyJob(jobId, button) {
+      const id = String(jobId || "").trim();
+      if (!id) return;
+      if (button) button.disabled = true;
+      try {
+        const response = await api(`/api/jobs/${encodeURIComponent(id)}/retry`, { method: "POST", body: "{}" });
+        showToast(response?.reused_artifact
+          ? "만든 글을 그대로 다시 올리도록 대기시켰어요. 실행기를 켜 두면 이어서 진행합니다."
+          : "작업을 다시 시작했어요.");
+        await refreshAll();
+      } catch (error) {
+        if (button) button.disabled = false;
+        const code = error?.body?.error || "";
+        showToast(code === "runner_update_required"
+          ? "실행기를 최신 버전으로 업데이트한 뒤 다시 눌러주세요."
+          : code === "retry_limit_reached"
+            ? "다시 시도 횟수를 다 썼어요. 같은 키워드로 새로 맡겨주세요."
+            : error?.body?.message || error?.message || "다시 올리지 못했어요. 잠시 후 다시 눌러주세요.");
       }
     }
 

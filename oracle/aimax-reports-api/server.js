@@ -44,6 +44,10 @@ const YERI_GENERATING_STALE_MS = Number(process.env.AIMAX_YERI_GENERATING_STALE_
 // updated_at(모든 로그/상태 갱신 시 전진) 기준 무진행 한계 + 러너 하트비트 끊김 유예.
 const YERI_RUNNING_STALE_MS = Number(process.env.AIMAX_YERI_RUNNING_STALE_MS || 45 * 60 * 1000);
 const YERI_RUNNER_HEARTBEAT_GRACE_MS = Number(process.env.AIMAX_YERI_RUNNER_HEARTBEAT_GRACE_MS || 10 * 60 * 1000);
+// 2026-10-15 전수조사 #8: 서버가 글을 다 써 둔(ready_for_publish) 작업을 받을 실행기가 오지 않으면
+// 작업이 무기한 대기했다(맥 대상 6건 57일). 이 시간 동안 아무도 가져가지 않으면 실패로 돌리고 안내한다.
+// 만든 글(artifact)은 지우지 않는다 — '다시 시도'가 그 글로 네이버 입력만 이어 간다.
+const YERI_READY_UNCLAIMED_MS = Math.max(1, safeInt(process.env.AIMAX_YERI_READY_UNCLAIMED_HOURS || "72", 1, 24 * 60)) * 60 * 60 * 1000;
 // 좀비보호 2차: 러너 하트비트는 살아있지만 워커 스레드가 행 걸려 진행 단계(progress_stage)가
 // 멈춘 사각지대를 정리하기 위한 임계. progress_stage 는 v1.0.56+ 러너만 전송한다(미전송 러너는 불변).
 // 기본 45분: 러너는 작업 중간에 update_job 을 보내지 않아, 안전 속도로 오래 걸리는 정상 작업
@@ -2901,12 +2905,19 @@ function buildYeriLengthRevisionPrompt(payload) {
   const report = yeriLengthReport(revision.markdown || "", yeriPayloadWordCount(payload));
   const delta = report.target - report.count;
   const direction = report.count > report.max ? "줄인다" : "보강한다";
-  const adjustment = delta < 0
-    ? `현재보다 약 ${Math.abs(delta)}자 줄이고, 반복되는 문장부터 정리한다.`
-    : `현재보다 약 ${Math.abs(delta)}자 늘리고, 실제 예시나 확인 항목을 한 단락 이상 추가한다.`;
+  const adjustment = report.in_range
+    ? "현재 분량을 유지한다. 구조를 고치느라 글을 크게 늘리거나 줄이지 않는다."
+    : delta < 0
+      ? `현재보다 약 ${Math.abs(delta)}자 줄이고, 반복되는 문장부터 정리한다.`
+      : `현재보다 약 ${Math.abs(delta)}자 늘리고, 실제 예시나 확인 항목을 한 단락 이상 추가한다.`;
+  const structureIssues = Array.isArray(revision.structure_issues) ? revision.structure_issues.filter(Boolean).slice(0, 5) : [];
+  const problem = [report.in_range ? "" : "요청 분량을 벗어났다", structureIssues.length ? "글 구조에 고칠 점이 있다" : ""].filter(Boolean).join("고, ");
   return [
-    "너는 블로그 주인을 대신해 글을 쓰는 작가다. 아래 원고는 요청 분량을 벗어났다.",
-    "내용의 핵심과 검색 의도, 소제목 구성은 유지하고 분량만 맞춰 최종 원고를 다시 작성한다.",
+    `너는 블로그 주인을 대신해 글을 쓰는 작가다. 아래 원고는 ${problem || "요청 분량을 벗어났다"}.`,
+    structureIssues.length
+      ? "내용의 핵심과 검색 의도는 유지하고, 아래 구조 문제와 분량을 함께 고쳐 최종 원고를 다시 작성한다."
+      : "내용의 핵심과 검색 의도, 소제목 구성은 유지하고 분량만 맞춰 최종 원고를 다시 작성한다.",
+    ...(structureIssues.length ? ["", "구조 보정:", ...structureIssues.map((item) => `- ${item}`)] : []),
     "출력은 반드시 JSON 객체 하나만 작성한다. 마크다운 코드블록을 쓰지 않는다.",
     "JSON 스키마: {\"title\":\"...\",\"content_markdown\":\"# 제목\\n\\n## 소제목\\n본문\\n\\n[이미지] 이미지 프롬프트\"}",
     "",
@@ -2917,7 +2928,7 @@ function buildYeriLengthRevisionPrompt(payload) {
     "- 제목과 본문을 합산하되 마크다운 기호(#, ##, **)와 [이미지] 줄은 세지 않는다.",
     "",
     "수정 기준:",
-    `- 문단 수와 설명 밀도를 조절해 ${direction}.`,
+    report.in_range ? "" : `- 문단 수와 설명 밀도를 조절해 ${direction}.`,
     `- ${adjustment}`,
     `- 최종 결과는 반드시 ${report.min}자 이상 ${report.max}자 이하로 끝낸다. 이 범위를 벗어난 원고는 실패다.`,
     `- [이미지] 줄은 정확히 ${imageCount}개만 유지하고 위치도 그대로 둔다.`,
@@ -3542,19 +3553,45 @@ async function generateYeriSelectedModelArtifact(job, userId, signal = null) {
 // 생성된 원고가 요청 분량을 벗어나면 같은 모델로 다시 다듬는다.
 // 재작성도 사용자 키로 과금되므로 상한을 둔다. 상한 안에서 못 맞추면 마지막 결과를 그대로 쓰되
 // 로그를 남겨 사용자와 운영이 "분량이 안 맞았다"는 사실을 볼 수 있게 한다.
+// 2026-10-15 결과물 분석 Y5: 평점 1점 글은 '## ' 소제목이 0개였고, 3개 미만인 글이 12편, 표 칸에
+// "A타입/B타입" 같은 자리표시가 그대로 나간 글도 있었다. 분량 보정과 같은 경로로 구조를 한 번 고친다.
+// 'B형 간염'·'Google'·'1,000원' 같은 정상 표기에 걸리지 않게 좁게 잡는다.
+const YERI_TABLE_PLACEHOLDER_PATTERN = /(^|[^A-Za-z])[A-D]\s?(타입|안|제품|업체|옵션)(?![가-힣])|(옵션|제품|업체)\s?[A-D](?![A-Za-z])|(^|[^A-Za-z])(OO|XX)(?![A-Za-z])|[○◯]{2,}|\?\?|(^|[^0-9,])00원/;
+function yeriStructureIssues(markdown) {
+  const text = String(markdown || "");
+  const issues = [];
+  const h2Count = (text.match(/^##\s+\S/gm) || []).length;
+  if (h2Count < 3) issues.push(`'## ' 소제목이 ${h2Count}개뿐이다. 내용 흐름에 맞춰 4~6개로 나눈다.`);
+  const tableRows = text.split("\n").filter((line) => /^\s*\|.*\|\s*$/.test(line) && !/^\s*\|[\s:|-]+\|\s*$/.test(line));
+  const cells = tableRows.flatMap((line) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()));
+  if (cells.some((cell) => YERI_TABLE_PLACEHOLDER_PATTERN.test(cell))) {
+    issues.push("표에 'A타입/B타입', 'OO' 같은 자리표시가 있다. 실제로 확인된 내용이 없으면 표를 지우고 '무엇에 따라 달라지는지'를 목록으로 쓴다.");
+  }
+  if (cells.some((cell) => cell.replace(/\*\*/g, "").length > 40)) {
+    issues.push("표 칸 하나가 40자를 넘는다. 표 칸은 짧은 단어로 줄이고, 설명은 표 아래 문단으로 옮긴다.");
+  }
+  return issues;
+}
+
 async function enforceYeriArtifactLength(artifact, job, userId, signal = null) {
   throwIfYeriGenerationCancelled(signal);
   const payload = job?.payload || {};
   const target = yeriPayloadWordCount(payload);
   let current = artifact;
   let report = yeriLengthReport(current?.content_markdown || "", target);
-  if (report.in_range) return current;
+  let issues = yeriStructureIssues(current?.content_markdown || "");
+  if (report.in_range && !issues.length) return current;
+  // 분량은 맞고 구조만 어긋나면 한 번만 고친다(추가 호출 1회).
+  const maxAttempts = report.in_range ? 1 : YERI_LENGTH_MAX_REWRITES;
+  if (issues.length) {
+    appendJobLogById(job?.id, userId, "info", `글 구조 보정이 필요합니다: ${issues.map((item) => item.split(".")[0]).join(" / ")}`);
+  }
 
-  for (let attempt = 1; attempt <= YERI_LENGTH_MAX_REWRITES; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     throwIfYeriGenerationCancelled(signal);
     const revisionJob = {
       ...job,
-      payload: { ...payload, __length_revision: { markdown: current.content_markdown, attempt } },
+      payload: { ...payload, __length_revision: { markdown: current.content_markdown, attempt, structure_issues: issues } },
     };
     let revised;
     try {
@@ -3567,11 +3604,17 @@ async function enforceYeriArtifactLength(artifact, job, userId, signal = null) {
       return current;
     }
     const revisedReport = yeriLengthReport(revised?.content_markdown || "", target);
-    // 재작성이 오히려 더 벗어나면 채택하지 않는다.
-    const better = Math.abs(revisedReport.count - target) < Math.abs(report.count - target);
+    const revisedIssues = yeriStructureIssues(revised?.content_markdown || "");
+    // 재작성이 오히려 더 벗어나면 채택하지 않는다. 구조를 고쳤으면 분량이 범위 안이거나 나빠지지 않을 때 채택한다.
+    const closer = Math.abs(revisedReport.count - target) < Math.abs(report.count - target);
+    const notFarther = Math.abs(revisedReport.count - target) <= Math.abs(report.count - target);
+    const better = revisedIssues.length < issues.length
+      ? (revisedReport.in_range || notFarther)
+      : (revisedIssues.length === issues.length && closer);
     if (better) {
       current = { ...revised, usage: mergeYeriUsage(current.usage, revised.usage) };
       report = revisedReport;
+      issues = revisedIssues;
     } else {
       current = { ...current, usage: mergeYeriUsage(current.usage, revised.usage) };
     }
@@ -3579,9 +3622,13 @@ async function enforceYeriArtifactLength(artifact, job, userId, signal = null) {
       job?.id,
       userId,
       "info",
-      `분량 보정 ${attempt}회차: ${revisedReport.count}자 (목표 ${report.target}자, 허용 ${report.min}~${report.max}자)`,
+      `분량·구조 보정 ${attempt}회차: ${revisedReport.count}자 (목표 ${report.target}자, 허용 ${report.min}~${report.max}자), 구조 문제 ${revisedIssues.length}건`,
     );
-    if (report.in_range) return current;
+    if (report.in_range && !issues.length) return current;
+  }
+  if (report.in_range) {
+    if (issues.length) appendJobLogById(job?.id, userId, "warn", `글 구조를 다 고치지 못했습니다: ${issues.map((item) => item.split(".")[0]).join(" / ")}`);
+    return current;
   }
 
   appendJobLogById(
@@ -3797,6 +3844,14 @@ function buildFailureDiagnostic(input = {}) {
       "이미지 생성은 유료 키 필요",
       "Gemini 이미지 모델은 무료 티어에서 사용할 수 없어 이미지 생성이 건너뛰어졌습니다.",
       ["이미지 없이 다시 시도", "AI/API 연결 열기", "오류 보고 보내기"],
+    );
+  }
+  if (/runner_not_available|ready_job_not_claimed/.test(text)) {
+    return user(
+      "runner_not_available",
+      "실행기 연결 필요",
+      "글은 만들어 두었지만 네이버에 올릴 실행기가 오래 연결되지 않아 작업을 멈췄습니다. 실행기를 켠 뒤 '만든 글로 다시 올리기'를 누르면 비용 없이 이어집니다.",
+      ["실행기 받기·업데이트", "오류 보고 보내기"],
     );
   }
   if (/update_required|runner_stopped|old.*runner|version|업데이트|구버전/.test(text)) {
@@ -4311,11 +4366,85 @@ async function generateYeriArtifactForJob(jobId, userId, mode = yeriServerGenera
 function scheduleYeriArtifactGeneration(job, user, mode = yeriServerGenerationMode()) {
   if (!mode || !job || job.kind !== "yeri_write" || !user?.id) return;
   const timer = setImmediate(() => {
-    generateYeriArtifactForJob(job.id, user.id, mode).catch((error) => {
-      console.error("[yeri-hybrid] artifact generation crashed", error?.message || error);
-    });
+    generateYeriArtifactForJob(job.id, user.id, mode)
+      .then((outcome) => {
+        if (job.batch_id && Number(job.batch_index) === 0) continueYeriBatchAfterHead(job, user, mode, outcome);
+      })
+      .catch((error) => {
+        console.error("[yeri-hybrid] artifact generation crashed", error?.message || error);
+        if (job.batch_id && Number(job.batch_index) === 0) continueYeriBatchAfterHead(job, user, mode, { ok: false, error: "crashed" });
+      });
   });
   if (typeof timer.unref === "function") timer.unref();
+}
+
+// 2026-10-15 전수조사 #5: 키워드 여러 개를 한 번에 맡기면 같은 순간 7편이 함께 생성돼, 키 한도·크레딧이
+// 막힌 사용자는 7편이 같은 이유로 연달아 실패했다(25건/7명). 첫 편만 먼저 쓰고, 첫 편이 키·결제 문제로
+// 실패하면 나머지는 호출 없이(비용 0) 같은 사유로 멈춘다. 일시 오류·성공·사용자 취소면 나머지를 이어 쓴다.
+const YERI_BATCH_BLOCKING_SIGNATURES = new Set(["ai_key_invalid", "billing_quota"]);
+
+function yeriBatchFollowers(jobs, batchId, userId) {
+  return (jobs.jobs || []).filter((item) => item.batch_id === batchId
+    && item.user_id === userId
+    && Number(item.batch_index) > 0
+    && item.status === "generating");
+}
+
+function continueYeriBatchAfterHead(headJob, user, mode, outcome) {
+  try {
+    const batchId = headJob.batch_id;
+    const head = loadJobs().jobs.find((item) => item.id === headJob.id && item.user_id === user.id) || null;
+    const signature = outcome && outcome.ok === false && !outcome.cancelled && head?.status === "failed"
+      ? jobFailureSignatureClass(head)
+      : "";
+    if (YERI_BATCH_BLOCKING_SIGNATURES.has(signature)) {
+      const stopped = mutateJobsWithLock((lockedJobs) => {
+        const followers = yeriBatchFollowers(lockedJobs, batchId, user.id);
+        const now = nowIso();
+        for (const target of followers) {
+          target.status = "failed";
+          target.failed_stage = head.failed_stage || YERI_CONTENT_GENERATION_STAGE;
+          target.failed_reason = head.failed_reason || "";
+          if (head.diagnostic) target.diagnostic = head.diagnostic;
+          target.result = {
+            ok: false,
+            stage: target.failed_stage,
+            error: head.result?.error || head.failed_reason || "",
+            visible_error: head.result?.visible_error || "",
+            provider: head.result?.provider || "",
+            model: head.result?.model || "",
+            batch_stopped_by: head.id,
+            diagnostic: target.diagnostic,
+          };
+          target.finished_at = now;
+          target.updated_at = now;
+          appendJobLog(target, "error", "같이 맡긴 첫 글이 AI 키·결제 문제로 실패해 이 글은 시작하지 않았습니다(요금 0원). 키나 결제 상태를 확인한 뒤 '다시 시도'를 눌러주세요.", now);
+        }
+        return { save: followers.length > 0, count: followers.length };
+      });
+      if (stopped?.count) console.log(`[yeri-batch] ${batchId} head failed (${signature}) — stopped ${stopped.count} followers`);
+      return;
+    }
+    const followers = yeriBatchFollowers(loadJobs(), batchId, user.id);
+    for (const follower of followers) scheduleYeriArtifactGeneration(follower, user, mode);
+  } catch (error) {
+    console.error("[yeri-batch] continue failed", error?.message || error);
+  }
+}
+
+// 서버가 첫 편 생성 도중 재시작되면 기다리던 나머지가 영영 시작되지 않는다 → 부팅 때 이어 쓴다.
+function resumeYeriBatchFollowersOnBoot() {
+  const mode = yeriServerGenerationMode();
+  if (!mode) return 0;
+  const jobs = loadJobs();
+  let resumed = 0;
+  for (const follower of jobs.jobs || []) {
+    if (follower.kind !== "yeri_write" || follower.status !== "generating") continue;
+    if (!follower.batch_id || Number(follower.batch_index) <= 0) continue;
+    scheduleYeriArtifactGeneration(follower, { id: follower.user_id }, follower.server_generation || mode);
+    resumed += 1;
+  }
+  return resumed;
 }
 
 function appendJobLog(job, level, message, at = nowIso()) {
@@ -10468,7 +10597,17 @@ function sanitizePostResult(raw) {
     target_char_count: safeInt(post.target_char_count, 0, 100000),
     recovery_markdown_path: String(post.recovery_markdown_path || "").slice(0, 260),
     recovery_manifest_path: String(post.recovery_manifest_path || "").slice(0, 260),
+    // 2026-10-15 전수조사: 발행 주소가 없어 공개 글을 제목 검색으로 찾아야 했다. 네이버 블로그 주소만 받는다.
+    url: sanitizeNaverPostUrl(post.url || post.post_url || ""),
+    log_no: String(post.log_no || "").replace(/\D/g, "").slice(0, 20),
+    ...(post.draft_save_confirmed === undefined ? {} : { draft_save_confirmed: Boolean(post.draft_save_confirmed) }),
+    draft_confirm_method: String(post.draft_confirm_method || "").replace(/[^a-z_]/g, "").slice(0, 40),
   };
+}
+
+function sanitizeNaverPostUrl(value) {
+  const text = String(value || "").trim();
+  return /^https:\/\/(m\.)?blog\.naver\.com\/([A-Za-z0-9_.-]+\/[0-9]+|PostView\.naver\?[A-Za-z0-9_=&.-]+)$/.test(text) ? text.slice(0, 300) : "";
 }
 
 function sanitizeJobResult(raw) {
@@ -16371,6 +16510,37 @@ function handleUserSecrets(req, res) {
   });
 }
 
+const AI_KEY_VERIFY_REQUESTS = {
+  gemini: (key) => ["https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", { "x-goog-api-key": key }],
+  openai: (key) => ["https://api.openai.com/v1/models", { authorization: `Bearer ${key}` }],
+  claude: (key) => ["https://api.anthropic.com/v1/models?limit=1", { "x-api-key": key, "anthropic-version": "2023-06-01" }],
+};
+const AI_KEY_INVALID_MESSAGES = {
+  gemini: "저장은 했지만 Gemini 키가 맞지 않아 글을 쓸 수 없어요. Google AI Studio의 'API 키 가져오기'에서 키 전체를 다시 복사해 붙여 넣어주세요.",
+  openai: "저장은 했지만 OpenAI 키가 맞지 않아 글을 쓸 수 없어요. OpenAI 플랫폼의 API keys 화면에서 새 키를 만들어 전체를 붙여 넣어주세요.",
+  claude: "저장은 했지만 Claude 키가 맞지 않아 글을 쓸 수 없어요. Anthropic 콘솔의 API Keys 화면에서 새 키를 만들어 전체를 붙여 넣어주세요.",
+};
+
+// 모델 목록 조회는 과금되지 않는다. 키가 틀렸다고 확실할 때(401/403, Gemini 400 키 오류)만 저장을 막고,
+// 네트워크·일시 오류면 저장은 하되 확인을 건너뛴다(조회 실패가 저장을 막지 않게).
+async function verifyAiProviderKey(provider, key) {
+  const build = AI_KEY_VERIFY_REQUESTS[provider];
+  if (!build) return { verification: null };
+  const [verifyUrl, headers] = build(key);
+  try {
+    await requestExternalJson(verifyUrl, { method: "GET", headers, timeoutMs: 8000, maxBytes: 512 * 1024 });
+    return { verification: { verified: true } };
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    const detail = String(error?.detail || "");
+    const invalid = status === 401 || status === 403
+      || (provider === "gemini" && status === 400 && /API_KEY_INVALID|API key not valid|INVALID_ARGUMENT/i.test(detail));
+    if (invalid) return { invalid: true, message: AI_KEY_INVALID_MESSAGES[provider] };
+    if (status === 429) return { verification: { verified: true, rate_limited: true } };
+    return { verification: { verified: false, reason: "network_unreachable" } };
+  }
+}
+
 async function handlePutUserSecret(req, res, provider) {
   const auth = requireSession(req, res);
   if (!auth) return;
@@ -16403,6 +16573,15 @@ async function handlePutUserSecret(req, res, provider) {
       }
       verification = { verified: false, reason: "network_unreachable" };
     }
+  }
+  // 2026-10-15 전수조사 #5: AI 키를 잘못 붙여 넣어도 아무 말 없이 저장되고, 글을 맡긴 뒤에야 줄줄이 실패했다.
+  // 저장할 때 무료 조회(모델 목록)로 키가 진짜인지만 확인한다. 크레딧·한도는 무료로 알 수 없어 보지 않는다.
+  if (!verification && ["gemini", "openai", "claude"].includes(providerConfig?.provider) && String(value || "").trim()) {
+    const checked = await verifyAiProviderKey(providerConfig.provider, String(value).trim());
+    // 저장은 막지 않는다(제공자 응답이 이상할 때 맞는 키까지 막지 않게). 화면에 바로 경고만 띄운다.
+    verification = checked.invalid
+      ? { verified: false, invalid: true, message: checked.message }
+      : checked.verification;
   }
   const result = setUserSecret(auth.user.id, provider, value);
   if (result.error) {
@@ -19101,7 +19280,8 @@ async function handleAgentHeartbeat(req, res) {
     deviceLabel,
     agents,
   });
-  if (timedOut || stale || progressChanged) saveJobs(jobs);
+  const expired = expireUnclaimedReadyJobs(jobs, { userId: auth.user.id, agents });
+  if (timedOut || stale || expired || progressChanged) saveJobs(jobs);
   json(req, res, 200, { ok: true, agent: publicAgent(agent) });
 }
 
@@ -19392,6 +19572,7 @@ async function handleCreateJob(req, res) {
     const total = yeriSplitKeywords.length;
     const intervalHours = Math.max(1, Math.min(72, Number(jobPayload.schedule_interval) || 1));
     const createdJobs = [];
+    const batchId = crypto.randomUUID();
     for (let i = 0; i < total; i += 1) {
       const kw = yeriSplitKeywords[i];
       // redactPayload 적용 전에 이 잡의 키워드/예약을 확정한다.
@@ -19407,6 +19588,9 @@ async function handleCreateJob(req, res) {
         target_platform: targetPlatform,
         target_device_label: targetDeviceLabel,
         payload: redactPayload(splitPayload),
+        batch_id: batchId,
+        batch_index: i,
+        batch_total: total,
         logs: [
           {
             at: now,
@@ -19420,6 +19604,11 @@ async function handleCreateJob(req, res) {
             level: "info",
             message: `키워드 ${i + 1}/${total} '${kw}' 작업으로 분리되었습니다 (전체 키워드 ${total}개 → 글 ${total}편).`,
           },
+          ...(yeriGenerationMode && i > 0 ? [{
+            at: now,
+            level: "info",
+            message: "첫 글이 AI 키로 정상 작성되는지 확인한 뒤 이어서 씁니다.",
+          }] : []),
         ],
         created_at: now,
         updated_at: now,
@@ -19430,10 +19619,9 @@ async function handleCreateJob(req, res) {
     saveJobs(jobs);
     // 서버 글 생성 트리거: 잡마다 fire-and-forget(각 job.id 로 키잉되어 충돌 없음).
     // 유료 호출을 병렬로 몰지 않도록 기존 단일 패턴과 동일하게 잡별로 순차 발화한다.
+    // 첫 편만 먼저 발화한다. 나머지는 continueYeriBatchAfterHead 가 첫 편 결과를 보고 이어 쓰거나 멈춘다.
     if (yeriGenerationMode) {
-      for (const splitJob of createdJobs) {
-        scheduleYeriArtifactGeneration(splitJob, auth.user, yeriGenerationMode);
-      }
+      scheduleYeriArtifactGeneration(createdJobs[0], auth.user, yeriGenerationMode);
     }
     json(req, res, 201, {
       ok: true,
@@ -19477,7 +19665,8 @@ function handleListJobs(req, res) {
   const jobs = loadJobs();
   const timedOut = markRunnerStartTimeouts(jobs, { userId: auth.user.id });
   const stale = failStaleRunningJobs(jobs, { userId: auth.user.id });
-  if (timedOut || stale) saveJobs(jobs);
+  const expired = expireUnclaimedReadyJobs(jobs, { userId: auth.user.id });
+  if (timedOut || stale || expired) saveJobs(jobs);
   const rows = jobs.jobs
     .filter((job) => job.user_id === auth.user.id)
     .filter((job) => jobVisibleToUser(job, auth.user))
@@ -20832,6 +21021,48 @@ function dispatchApiRequest(req, res) {
   });
 }
 
+// 전수조사 #8: 오래 아무도 가져가지 않은 ready_for_publish 를 실패로 돌린다.
+// 연속 실패 가드는 건드리지 않는다(사용자 키·네이버 문제가 아니라 실행기가 꺼져 있던 것).
+function expireUnclaimedReadyJobs(jobs, options = {}) {
+  const nowMs = options.referenceMs || Date.now();
+  const now = new Date(nowMs).toISOString();
+  let agents = null;
+  let expired = 0;
+  for (const job of jobs.jobs || []) {
+    if (job.status !== "ready_for_publish") continue;
+    if (options.userId && job.user_id !== options.userId) continue;
+    const waitingSinceMs = Date.parse(job.updated_at || job.created_at || "");
+    if (!Number.isFinite(waitingSinceMs) || nowMs - waitingSinceMs < YERI_READY_UNCLAIMED_MS) continue;
+    if (!agents) agents = options.agents || loadAgents();
+    const agent = findHeartbeatAgent(agents, job.user_id, job.target_platform || "", job.target_device_label || "");
+    const agentSeenMs = agent ? Date.parse(agent.last_seen_at || agent.updated_at || "") : NaN;
+    const runnerRecentlySeen = Number.isFinite(agentSeenMs) && nowMs - agentSeenMs < YERI_READY_UNCLAIMED_MS;
+    const waitedHours = Math.round((nowMs - waitingSinceMs) / 3600000);
+    const waitedLabel = waitedHours >= 48 ? `${Math.round(waitedHours / 24)}일` : `${waitedHours}시간`;
+    const platformLabel = { macos: "맥", windows: "윈도우" }[normalizePlatform(job.target_platform || "")] || "";
+    const target = String(job.target_device_label || platformLabel || "").trim();
+    job.status = "failed";
+    job.failed_stage = "runner_not_available";
+    job.failed_reason = runnerRecentlySeen ? "ready_job_not_claimed" : "runner_not_available_for_target";
+    job.finished_at = now;
+    job.updated_at = now;
+    delete job.claim_expires_at;
+    job.result = {
+      ...(job.result || {}),
+      ok: false,
+      stage: "runner_not_available",
+      error: job.failed_reason,
+      waited_hours: waitedHours,
+    };
+    const where = target ? `대상 기기(${target})의 ` : "";
+    appendJobLog(job, "error", runnerRecentlySeen
+      ? `${where}실행기가 연결돼 있었지만 ${waitedLabel} 동안 이 작업을 가져가지 않아 멈췄습니다. 실행기를 최신으로 업데이트한 뒤 작업 목록의 '만든 글로 다시 올리기'를 누르면 글 생성 비용 없이 이어서 진행합니다.`
+      : `${where}실행기가 ${waitedLabel} 동안 켜지지 않아 작업을 멈췄습니다. 그 기기에서 실행기를 켠 뒤 작업 목록의 '만든 글로 다시 올리기'를 누르면 글 생성 비용 없이 이어서 진행합니다.`, now);
+    expired += 1;
+  }
+  return expired;
+}
+
 function runStartupJobRecovery() {
   try {
     recoverStaleGeneratingJobs();
@@ -20839,10 +21070,18 @@ function runStartupJobRecovery() {
     // A retained lock is inspected through health; it must not keep the HTTP API offline.
     console.error("recoverStaleGeneratingJobs boot sweep failed", error);
   }
+  try {
+    const resumed = resumeYeriBatchFollowersOnBoot();
+    if (resumed) console.log(`[yeri-batch] resumed ${resumed} waiting batch jobs on boot`);
+  } catch (error) {
+    console.error("resumeYeriBatchFollowersOnBoot failed", error);
+  }
   // 기존 running/ready_for_publish 좀비(러너 중단)도 부팅 시 1회 정리
   try {
     const bootJobs = loadJobs();
-    if (failStaleRunningJobs(bootJobs)) saveJobs(bootJobs);
+    const bootStale = failStaleRunningJobs(bootJobs);
+    const bootExpired = expireUnclaimedReadyJobs(bootJobs);
+    if (bootStale || bootExpired) saveJobs(bootJobs);
   } catch (error) {
     console.error("failStaleRunningJobs boot sweep failed", error);
   }
@@ -20988,6 +21227,14 @@ module.exports = {
     renderYeriStructureInstruction,
     buildFailureDiagnostic,
     enforceYeriArtifactLength,
+    // 2026-10-15 전수조사 잔여(#5·#7·#8·Y5·발행 주소)
+    expireUnclaimedReadyJobs,
+    continueYeriBatchAfterHead,
+    yeriStructureIssues,
+    sanitizePostResult,
+    sanitizeNaverPostUrl,
+    verifyAiProviderKey,
+    saveAgentsForSmoke: saveAgents,
     generateYeriArtifactForJob,
     generateYeriGeminiArtifact,
     jobFailureDiagnostic,

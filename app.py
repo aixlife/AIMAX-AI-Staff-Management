@@ -6830,6 +6830,8 @@ class NaverBlogApp:
                 local_image_paths = []
                 image_items = []
                 draft_save_confirmed = None
+                draft_confirm_method = ""
+                published_post = {}
                 saved_md_path = None
                 recovery_manifest_path = None
                 image_soft_failed = False
@@ -7062,8 +7064,11 @@ class NaverBlogApp:
                                 post_stage = "smart_editor_save"
                                 stage = post_stage
                                 self._log("임시 저장 중...")
-                                draft_save_confirmed = bool(save_draft(self.driver))
-                                if draft_save_confirmed:
+                                draft_confirm_method = save_draft(self.driver) or ""
+                                draft_save_confirmed = bool(draft_confirm_method)
+                                if draft_confirm_method == "unverified":
+                                    self._log("[주의] 임시 저장 버튼은 눌렀지만 새로 저장됐다는 표시는 확인하지 못했습니다. 네이버 임시저장 목록에서 확인해주세요.")
+                                elif draft_save_confirmed:
                                     self._log("임시 저장 확인 완료")
                                 else:
                                     self._log("[주의] 임시 저장 버튼은 눌렀지만 완료 메시지는 확인하지 못했습니다.")
@@ -7086,12 +7091,14 @@ class NaverBlogApp:
                                     hour = target_dt.hour
                                     self._log(f"예약 시간: {target_dt.strftime('%Y-%m-%d %H:%M')}")
                                 self._log("예약 발행 설정 중...")
-                                schedule_publish(self.driver, target_date=target_date, hour=hour, category=category)
+                                published_post = schedule_publish(self.driver, target_date=target_date, hour=hour, category=category) or {}
                             else:
                                 post_stage = "smart_editor_publish"
                                 stage = post_stage
                                 self._log("즉시 발행 중...")
-                                publish_now(self.driver, category=category)
+                                published_post = publish_now(self.driver, category=category) or {}
+                                if published_post.get("url"):
+                                    self._log(f"발행 주소: {published_post['url']}")
                             break
                         except Exception as publish_error:
                             recoverable_stage = post_stage in {"smart_editor_open", "smart_editor_title", "smart_editor_font"}
@@ -7127,6 +7134,9 @@ class NaverBlogApp:
                             "soft_failure_accepted": bool(image_soft_failed),
                         },
                         "draft_save_confirmed": draft_save_confirmed,
+                        "draft_confirm_method": draft_confirm_method,
+                        "url": published_post.get("url", ""),
+                        "log_no": published_post.get("log_no", ""),
                         "char_count": visible_char_count,
                         "target_char_count": word_count,
                         "input_verification": {
